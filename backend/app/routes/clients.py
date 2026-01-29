@@ -5,10 +5,7 @@ from flask import Blueprint, request, jsonify, send_from_directory, abort
 
 clients_bp = Blueprint("clients", __name__)
 
-# Pasta base onde os arquivos ficam salvos
 BASE_STORAGE = os.path.join(os.getcwd(), "storage", "clients")
-
-# Tipos de documentos permitidos
 ALLOWED_EXTENSIONS = {"pdf", "jpg", "jpeg", "png"}
 
 
@@ -19,8 +16,11 @@ def allowed_file(filename):
 # ======================================================
 # 📤 UPLOAD DE DOCUMENTOS
 # ======================================================
-@clients_bp.route("/api/clients/upload", methods=["POST"])
-def upload_documents():
+@clients_bp.route("/clients/upload", methods=["POST", "OPTIONS"])
+def upload_document():
+    if request.method == "OPTIONS":
+        return "", 200
+
     client_id = request.form.get("client_id")
 
     if not client_id:
@@ -50,8 +50,11 @@ def upload_documents():
 # ======================================================
 # 📃 LISTAGEM DE DOCUMENTOS DO CLIENTE
 # ======================================================
-@clients_bp.route("/api/clients/<int:client_id>/documents", methods=["GET"])
+@clients_bp.route("/api/clients/<int:client_id>/documents", methods=["GET", "OPTIONS"])
 def list_documents(client_id):
+    if request.method == "OPTIONS":
+        return "", 200
+
     client_folder = os.path.join(BASE_STORAGE, str(client_id))
 
     if not os.path.exists(client_folder):
@@ -80,15 +83,17 @@ def list_documents(client_id):
 
 
 # ======================================================
-# 📥 DOWNLOAD SEGURO DE DOCUMENTO
+# 📥 DOWNLOAD DE DOCUMENTO
 # ======================================================
 @clients_bp.route(
     "/api/clients/<int:client_id>/documents/<filename>",
-    methods=["GET"]
+    methods=["GET", "OPTIONS"]
 )
 def download_document(client_id, filename):
-    client_folder = os.path.join(BASE_STORAGE, str(client_id))
+    if request.method == "OPTIONS":
+        return "", 200
 
+    client_folder = os.path.join(BASE_STORAGE, str(client_id))
     file_path = os.path.join(client_folder, filename)
 
     if not os.path.exists(file_path):
@@ -100,14 +105,18 @@ def download_document(client_id, filename):
         as_attachment=True
     )
 
+
 # ======================================================
 # 🗑️ EXCLUSÃO DE DOCUMENTO
 # ======================================================
 @clients_bp.route(
     "/api/clients/<int:client_id>/documents/<filename>",
-    methods=["DELETE"]
+    methods=["DELETE", "OPTIONS"]
 )
 def delete_document(client_id, filename):
+    if request.method == "OPTIONS":
+        return "", 200
+
     client_folder = os.path.join(BASE_STORAGE, str(client_id))
     file_path = os.path.join(client_folder, filename)
 
