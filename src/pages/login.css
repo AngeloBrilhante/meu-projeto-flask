@@ -1,0 +1,155 @@
+.loginPage {
+  min-height: 100vh;
+  background: #e5e5e5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.loginCard {
+  width: 900px;
+  height: 520px;
+  background: #fff;
+  border-radius: 16px;
+  display: flex;
+  overflow: hidden;
+  box-shadow: 0 20px 40px rgba(0,0,0,0.15);
+}
+
+/* ===== LADO ESQUERDO ===== */
+.loginLeft {
+  width: 45%;
+  background: linear-gradient(180deg, #0f2a44, #005cb8);
+  color: white;
+  padding: 40px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  position: relative;
+}
+
+.loginLeft::after {
+  content: "";
+  position: absolute;
+  right: -30px;
+  top: 0;
+  width: 60px;
+  height: 100%;
+  background: white;
+  border-radius: 40px 0 0 40px;
+}
+
+.brand {
+  margin-bottom: 20px;
+}
+
+.logo {
+  font-size: 40px;
+  margin-bottom: 10px;
+}
+
+.loginLeft h1 {
+  font-size: 36px;
+  margin: 0;
+}
+
+.loginLeft h2 {
+  font-size: 18px;
+  font-weight: 400;
+  margin: 0;
+}
+
+.loginLeft p {
+  font-size: 14px;
+  opacity: 0.9;
+  margin-top: 20px;
+}
+
+/* ===== LADO DIREITO ===== */
+.loginRight {
+  width: 55%;
+  padding: 50px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.loginRight h2 {
+  margin-bottom: 20px;
+}
+
+.inputGroup {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 14px;
+}
+
+.inputGroup label {
+  font-size: 13px;
+  margin-bottom: 4px;
+  color: #555;
+}
+
+.inputGroup input {
+  padding: 10px;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+}
+
+.terms {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  margin: 10px 0 20px;
+}
+
+.buttons {
+  display: flex;
+  gap: 10px;
+}
+
+.btnPrimary {
+  flex: 1;
+  background: #1976d2;
+  color: white;
+  border: none;
+  padding: 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: bold;
+}
+
+.btnPrimary:hover {
+  background: #125ea9;
+}
+
+.btnSecondary {
+  flex: 1;
+  background: #f1f1f1;
+  border: none;
+  padding: 12px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+/* ===== RESPONSIVO ===== */
+@media (max-width: 768px) {
+  .loginCard {
+    flex-direction: column;
+    width: 90%;
+    height: auto;
+  }
+
+  .loginLeft {
+    width: 100%;
+  }
+
+  .loginLeft::after {
+    display: none;
+  }
+
+  .loginRight {
+    width: 100%;
+  }
+}

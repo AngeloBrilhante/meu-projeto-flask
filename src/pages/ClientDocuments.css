@@ -1,0 +1,86 @@
+.documentsPage {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* UPLOAD */
+.uploadBox {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.uploadBox select,
+.uploadBox input {
+  padding: 6px;
+}
+
+.uploadBox button {
+  padding: 6px 14px;
+  background: #2563eb;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.message {
+  margin-left: 10px;
+  color: green;
+}
+
+/* ===== TABELA ===== */
+.documentsTableContainer {
+  max-height: 300px;        /* SCROLL AQUI */
+  overflow-y: auto;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+}
+
+.documentsTable {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.documentsTable th,
+.documentsTable td {
+  padding: 10px;
+  border-bottom: 1px solid #e5e7eb;
+  text-align: left;
+}
+
+.documentsTable th {
+  background: #f3f4f6;
+  position: sticky;
+  top: 0;
+}
+
+.emptyRow {
+  text-align: center;
+  color: #6b7280;
+}
+
+/* ===== AÇÕES ===== */
+.actions {
+  display: flex;
+  gap: 10px;
+}
+
+.btnDownload {
+  background: #2563eb;
+  color: #fff;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.btnDelete {
+  background: #fee2e2;
+  color: #b91c1c;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+}

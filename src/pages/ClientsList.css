@@ -1,0 +1,201 @@
+.clientsPage {
+  padding: 40px;
+  background: #f4f6f9;
+  height: 100vh;        /* em vez de min-height */
+  overflow: hidden;    /* impede scroll da página */
+  box-sizing: border-box;
+}
+
+
+/* CARD */
+.clientsCard {
+  background: #fff;
+  border-radius: 16px;
+  padding: 28px;
+  max-width: 1000px;
+  margin: auto;
+  height: calc(100vh - 80px); /* considera o padding da page */
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08);
+}
+.clientsList {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  overflow-y: auto;
+  flex: 1; /* ocupa o espaço restante do card */
+}
+
+/* scrollbar opcional */
+.clientsList::-webkit-scrollbar {
+  width: 6px;
+}
+
+.clientsList::-webkit-scrollbar-thumb {
+  background-color: #cbd5e1;
+  border-radius: 6px;
+}
+.clientsList {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  overflow-y: auto;
+  flex: 1; /* ocupa o espaço restante do card */
+}
+
+/* scrollbar opcional */
+.clientsList::-webkit-scrollbar {
+  width: 6px;
+}
+
+.clientsList::-webkit-scrollbar-thumb {
+  background-color: #cbd5e1;
+  border-radius: 6px;
+}
+
+
+.clientsCard h2 {
+  margin-bottom: 20px;
+  color: #1f2937;
+}
+
+/* ===== FILTRO ===== */
+.filterBar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.searchBox {
+  display: flex;
+  align-items: center;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 6px 10px;
+  width: 260px;
+}
+
+.searchIcon {
+  margin-right: 6px;
+  color: #6b7280;
+}
+
+.searchBox input {
+  border: none;
+  outline: none;
+  background: transparent;
+  width: 100%;
+  font-size: 14px;
+}
+
+.filterWrapper {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.filterBtn {
+  background: #e5e7eb;
+  border: none;
+  padding: 6px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.filterWrapper select {
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 14px;
+  background: #fff;
+}
+
+/* ===== CABEÇALHO TABELA ===== */
+.tableHeader {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr;
+  padding: 12px 16px;
+  background: #e0e7ff;
+  border-radius: 8px;
+  font-weight: 600;
+  color: #1f2937;
+  margin-bottom: 8px;
+}
+
+/* ===== LISTA ===== */
+.clientsList {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.clientRow {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr;
+  align-items: center;
+  padding: 14px 16px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.clientRow:last-child {
+  border-bottom: none;
+}
+
+/* ===== AÇÕES ===== */
+.actions {
+  display: flex;
+  gap: 10px;
+}
+
+/* ===== AÇÕES (BOTÕES LADO A LADO) ===== */
+.actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.btnDocs,
+.btnDelete {
+  width: auto;
+  white-space: nowrap;
+}
+
+.btnDocs {
+  background: #2563eb;
+  color: #fff;
+  border: none;
+  padding: 8px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.btnDocs:hover {
+  background: #1e40af;
+}
+
+.btnDelete {
+  background: #fee2e2;
+  color: #b91c1c;
+  border: none;
+  padding: 8px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.btnDelete:hover {
+  background: #fecaca;
+}
+
+/* ===== VAZIO ===== */
+.emptyText {
+  text-align: center;
+  margin-top: 20px;
+  color: #6b7280;
+}
