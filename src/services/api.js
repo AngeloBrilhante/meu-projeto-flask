@@ -1,5 +1,4 @@
-const API_URL = "https://consignado-backend1.onrender.com";
-
+const API_URL = "https://consignado-backend1.onrender.com/api";
 
 /* =======================
    HEALTH CHECK

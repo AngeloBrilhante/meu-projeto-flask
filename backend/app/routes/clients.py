@@ -19,7 +19,8 @@ def allowed_file(filename):
 @clients_bp.route("/clients/upload", methods=["POST", "OPTIONS"])
 def upload_document():
     if request.method == "OPTIONS":
-        return "", 200
+        return "", 204
+
 
     client_id = request.form.get("client_id")
 
@@ -53,7 +54,7 @@ def upload_document():
 @clients_bp.route("/api/clients/<int:client_id>/documents", methods=["GET", "OPTIONS"])
 def list_documents(client_id):
     if request.method == "OPTIONS":
-        return "", 200
+        return "", 204
 
     client_folder = os.path.join(BASE_STORAGE, str(client_id))
 
