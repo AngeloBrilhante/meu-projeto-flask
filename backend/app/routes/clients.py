@@ -51,10 +51,10 @@ def upload_document():
 # ======================================================
 # 📃 LISTAGEM DE DOCUMENTOS DO CLIENTE
 # ======================================================
-@clients_bp.route("/api/clients/<int:client_id>/documents", methods=["GET", "OPTIONS"])
+@clients_bp.route("/clients/<int:client_id>/documents", methods=["GET", "OPTIONS"])
 def list_documents(client_id):
     if request.method == "OPTIONS":
-        return "", 204
+        return "", 200
 
     client_folder = os.path.join(BASE_STORAGE, str(client_id))
 
@@ -83,11 +83,12 @@ def list_documents(client_id):
     }), 200
 
 
+
 # ======================================================
 # 📥 DOWNLOAD DE DOCUMENTO
 # ======================================================
 @clients_bp.route(
-    "/api/clients/<int:client_id>/documents/<filename>",
+    "/clients/<int:client_id>/documents/<filename>",
     methods=["GET", "OPTIONS"]
 )
 def download_document(client_id, filename):
@@ -107,11 +108,12 @@ def download_document(client_id, filename):
     )
 
 
+
 # ======================================================
 # 🗑️ EXCLUSÃO DE DOCUMENTO
 # ======================================================
 @clients_bp.route(
-    "/api/clients/<int:client_id>/documents/<filename>",
+    "/clients/<int:client_id>/documents/<filename>",
     methods=["DELETE", "OPTIONS"]
 )
 def delete_document(client_id, filename):
@@ -130,3 +132,4 @@ def delete_document(client_id, filename):
         "message": "Documento excluído com sucesso",
         "filename": filename
     }), 200
+
