@@ -1,10 +1,15 @@
 .clientsPage {
   padding: 40px;
   background: #f4f6f9;
-  height: 100vh;        /* em vez de min-height */
-  overflow: hidden;    /* impede scroll da página */
-  box-sizing: border-box;
+
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+
+  min-height: 0;
 }
+
+
 
 
 /* CARD */
@@ -14,18 +19,26 @@
   padding: 28px;
   max-width: 1000px;
   margin: auto;
-  height: calc(100vh - 80px); /* considera o padding da page */
+
+  flex: 1;
   display: flex;
   flex-direction: column;
+  min-height: 0;
+
   box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08);
 }
+
+
 .clientsList {
   list-style: none;
   padding: 0;
   margin: 0;
+
+  flex: 1;
   overflow-y: auto;
-  flex: 1; /* ocupa o espaço restante do card */
 }
+
+
 
 /* scrollbar opcional */
 .clientsList::-webkit-scrollbar {

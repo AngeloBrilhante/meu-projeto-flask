@@ -1,14 +1,10 @@
-:root {
-  --primary: #1e3a8a;
-  --secondary: #0f172a;
-  --accent: #2563eb;
-  --background: #f1f5f9;
-  --card: #ffffff;
-  --text: #0f172a;
-  --muted: #64748b;
-  --success: #16a34a;
-  --warning: #f59e0b;
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
 }
+
 
 * {
   box-sizing: border-box;
