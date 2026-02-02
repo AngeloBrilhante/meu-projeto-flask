@@ -16,16 +16,15 @@ def allowed_file(filename):
 # ======================================================
 # 📤 UPLOAD DE DOCUMENTOS
 # ======================================================
-@clients_bp.route("/clients/upload", methods=["POST", "OPTIONS"])
+@clients_bp.route("/clients/upload", methods=["POST"])
 def upload_document():
-    if request.method == "OPTIONS":
-        return "", 204
-
-
     client_id = request.form.get("client_id")
 
     if not client_id:
         return jsonify({"error": "client_id é obrigatório"}), 400
+
+    if not request.files:
+        return jsonify({"error": "Nenhum arquivo enviado"}), 400
 
     client_folder = os.path.join(BASE_STORAGE, str(client_id))
     os.makedirs(client_folder, exist_ok=True)
@@ -35,9 +34,9 @@ def upload_document():
     for field_name, file in request.files.items():
         if file and allowed_file(file.filename):
             ext = file.filename.rsplit(".", 1)[1].lower()
-            secure_name = f"{field_name}_{uuid.uuid4().hex}.{ext}"
-            file.save(os.path.join(client_folder, secure_name))
-            saved_files[field_name] = secure_name
+            filename = f"{field_name}_{uuid.uuid4().hex}.{ext}"
+            file.save(os.path.join(client_folder, filename))
+            saved_files[field_name] = filename
 
     if not saved_files:
         return jsonify({"error": "Nenhum arquivo válido enviado"}), 400
@@ -51,11 +50,8 @@ def upload_document():
 # ======================================================
 # 📃 LISTAGEM DE DOCUMENTOS DO CLIENTE
 # ======================================================
-@clients_bp.route("/clients/<int:client_id>/documents", methods=["GET", "OPTIONS"])
+@clients_bp.route("/clients/<int:client_id>/documents", methods=["GET"])
 def list_documents(client_id):
-    if request.method == "OPTIONS":
-        return "", 200
-
     client_folder = os.path.join(BASE_STORAGE, str(client_id))
 
     if not os.path.exists(client_folder):
@@ -83,18 +79,14 @@ def list_documents(client_id):
     }), 200
 
 
-
 # ======================================================
 # 📥 DOWNLOAD DE DOCUMENTO
 # ======================================================
 @clients_bp.route(
     "/clients/<int:client_id>/documents/<filename>",
-    methods=["GET", "OPTIONS"]
+    methods=["GET"]
 )
 def download_document(client_id, filename):
-    if request.method == "OPTIONS":
-        return "", 200
-
     client_folder = os.path.join(BASE_STORAGE, str(client_id))
     file_path = os.path.join(client_folder, filename)
 
@@ -108,18 +100,14 @@ def download_document(client_id, filename):
     )
 
 
-
 # ======================================================
 # 🗑️ EXCLUSÃO DE DOCUMENTO
 # ======================================================
 @clients_bp.route(
     "/clients/<int:client_id>/documents/<filename>",
-    methods=["DELETE", "OPTIONS"]
+    methods=["DELETE"]
 )
 def delete_document(client_id, filename):
-    if request.method == "OPTIONS":
-        return "", 200
-
     client_folder = os.path.join(BASE_STORAGE, str(client_id))
     file_path = os.path.join(client_folder, filename)
 
@@ -132,6 +120,3 @@ def delete_document(client_id, filename):
         "message": "Documento excluído com sucesso",
         "filename": filename
     }), 200
-
-    
-
