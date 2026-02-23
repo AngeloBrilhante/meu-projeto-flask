@@ -1,146 +1,198 @@
 import { useEffect, useMemo, useState } from "react";
-import { useOutletContext, useParams } from "react-router-dom";
+import { useOutletContext, useSearchParams, useParams } from "react-router-dom";
+import { getApiUrl } from "../../config/api";
 import {
-  listClientOperations,
   createOperation,
+  listClientDocuments,
+  listClientOperations,
   sendOperationToPipeline,
   updateOperation,
 } from "../../services/api";
 
-const PORTABILITY_PRODUCTS = new Set(["PORTABILIDADE", "PORTABILIDADE_REFIN"]);
+const API_URL = getApiUrl();
 
-const EMPTY_PORTABILITY_FORM = {
-  vendedor_nome: "",
-  banco_nome: "",
-  cliente_negativo: "",
-  cliente_nome: "",
-  especie: "",
-  uf_beneficio: "",
-  numero_beneficio: "",
-  data_nascimento: "",
-  cpf: "",
-  rg: "",
-  data_emissao: "",
-  nome_mae: "",
-  telefone: "",
-  email: "",
-  cep: "",
-  endereco: "",
-  bairro: "",
-  conta: "",
-  agencia: "",
-  banco: "",
-  tipo_conta: "CORRENTE",
-  banco_portado: "",
-  contrato_portado: "",
-  total_parcelas: "",
-  parcelas_pagas: "",
-  parcelas_restantes: "",
-  saldo_quitacao: "",
-  valor_parcela: "",
-};
-
-const PORTABILITY_FIELD_GROUPS = [
-  {
-    title: "Dados gerais",
-    fields: [
-      { name: "vendedor_nome", label: "Nome do vendedor", required: true },
-      { name: "banco_nome", label: "Nome do banco", required: true },
-      { name: "cliente_negativo", label: "Negativo do cliente (se tiver)" },
-    ],
-  },
-  {
-    title: "Dados do cliente",
-    fields: [
-      { name: "cliente_nome", label: "Nome", required: true },
-      { name: "especie", label: "Especie", required: true },
-      { name: "uf_beneficio", label: "UF do beneficio", required: true },
-      { name: "numero_beneficio", label: "Numero do beneficio", required: true },
+const SCHEMAS = {
+  PORTABILIDADE: {
+    title: "Ficha para Portabilidade",
+    groups: [
       {
-        name: "data_nascimento",
-        label: "Data de nascimento",
-        type: "date",
-        required: true,
+        title: "Dados gerais",
+        fields: [
+          { name: "vendedor_nome", label: "Nome do vendedor", required: true },
+          { name: "banco_nome", label: "Nome do banco", required: true },
+          { name: "cliente_negativo", label: "Negativo do cliente (se tiver)" },
+        ],
       },
-      { name: "cpf", label: "CPF", required: true },
-      { name: "rg", label: "RG", required: true },
       {
-        name: "data_emissao",
-        label: "Data de emissao",
-        type: "date",
-        required: true,
+        title: "Dados do beneficiario",
+        fields: [
+          { name: "cliente_nome", label: "Nome", required: true },
+          { name: "especie", label: "Especie", required: true },
+          { name: "uf_beneficio", label: "UF do beneficio", required: true },
+          { name: "numero_beneficio", label: "Numero do beneficio", required: true },
+          { name: "data_nascimento", label: "Data de nascimento", type: "date", required: true },
+          { name: "cpf", label: "CPF", required: true },
+          { name: "rg", label: "RG", required: true },
+          { name: "data_emissao", label: "Data emissao", type: "date" },
+          { name: "nome_mae", label: "Nome da mae", required: true },
+          { name: "telefone", label: "Telefone", required: true },
+          { name: "email", label: "Email", type: "email" },
+          { name: "cep", label: "CEP", required: true },
+          { name: "endereco", label: "Endereco", required: true },
+          { name: "bairro", label: "Bairro", required: true },
+        ],
       },
-      { name: "nome_mae", label: "Nome da mae", required: true },
-      { name: "telefone", label: "Telefone", required: true },
-      { name: "email", label: "Email", type: "email" },
-      { name: "cep", label: "CEP", required: true },
-      { name: "endereco", label: "Endereco", required: true },
-      { name: "bairro", label: "Bairro", required: true },
-    ],
-  },
-  {
-    title: "Dados bancarios",
-    fields: [
-      { name: "conta", label: "Conta", required: true },
-      { name: "agencia", label: "Agencia", required: true },
-      { name: "banco", label: "Banco", required: true },
       {
-        name: "tipo_conta",
-        label: "Tipo de conta",
-        required: true,
-        options: [
-          { value: "CORRENTE", label: "Corrente" },
-          { value: "POUPANCA", label: "Poupanca" },
-          { value: "SALARIO", label: "Salario" },
+        title: "Dados bancarios",
+        fields: [
+          { name: "conta", label: "Conta", required: true },
+          { name: "agencia", label: "Agencia", required: true },
+          { name: "banco", label: "Banco", required: true },
+          {
+            name: "tipo_conta",
+            label: "Tipo de conta",
+            required: true,
+            options: [
+              { value: "CORRENTE", label: "Corrente" },
+              { value: "POUPANCA", label: "Poupanca" },
+              { value: "SALARIO", label: "Salario" },
+            ],
+          },
+        ],
+      },
+      {
+        title: "Dados para portar",
+        fields: [
+          { name: "banco_portado", label: "Banco portado", required: true },
+          { name: "contrato_portado", label: "Contrato portado", required: true },
+          { name: "total_parcelas", label: "Total de parcelas", type: "number", min: 0, required: true },
+          { name: "parcelas_pagas", label: "Parcelas pagas", type: "number", min: 0, required: true },
+          { name: "parcelas_restantes", label: "Parcelas restantes", type: "number", min: 0, required: true },
+          { name: "saldo_quitacao", label: "Saldo de quitacao", type: "number", min: 0, step: "0.01", required: true },
+          { name: "valor_parcela", label: "Valor da parcela", type: "number", min: 0, step: "0.01", required: true },
         ],
       },
     ],
   },
-  {
-    title: "Dados para portar",
-    fields: [
-      { name: "banco_portado", label: "Banco portado", required: true },
-      { name: "contrato_portado", label: "Contrato portado", required: true },
+  NOVO: {
+    title: "Ficha para Novo",
+    groups: [
       {
-        name: "total_parcelas",
-        label: "Total de parcelas",
-        type: "number",
-        min: 0,
-        required: true,
+        title: "Dados gerais",
+        fields: [
+          { name: "banco_para_digitar", label: "Banco pra digitar", required: true },
+          { name: "vendedor_nome", label: "Nome do vendedor", required: true },
+        ],
       },
       {
-        name: "parcelas_pagas",
-        label: "Parcelas pagas",
-        type: "number",
-        min: 0,
-        required: true,
+        title: "Dados do beneficiario",
+        fields: [
+          { name: "especie", label: "Especie", required: true },
+          { name: "uf_beneficio", label: "UF do beneficio", required: true },
+          { name: "cliente_nome", label: "Nome", required: true },
+          { name: "cpf", label: "CPF", required: true },
+          { name: "data_nascimento", label: "Data de nascimento", type: "date", required: true },
+          { name: "numero_beneficio", label: "Numero do beneficio", required: true },
+          { name: "telefone", label: "Telefone", required: true },
+          { name: "nome_mae", label: "Nome da mae", required: true },
+          { name: "rg", label: "Numero do RG", required: true },
+          { name: "naturalidade", label: "Naturalidade", required: true },
+          { name: "rg_uf", label: "UF", required: true },
+          { name: "rg_orgao_exp", label: "Orgao exp", required: true },
+          { name: "data_emissao_rg", label: "Data emissao RG", type: "date", required: true },
+          { name: "salario", label: "Salario", type: "number", min: 0, step: "0.01", required: true },
+        ],
       },
       {
-        name: "parcelas_restantes",
-        label: "Parcelas restantes",
-        type: "number",
-        min: 0,
-        required: true,
+        title: "Dados bancarios",
+        fields: [
+          { name: "banco_codigo", label: "Cod banco", required: true },
+          { name: "agencia", label: "Agencia", required: true },
+          { name: "conta", label: "Conta", required: true },
+          {
+            name: "tipo_conta",
+            label: "Tipo de conta",
+            required: true,
+            options: [
+              { value: "CORRENTE", label: "Corrente" },
+              { value: "POUPANCA", label: "Poupanca" },
+              { value: "SALARIO", label: "Salario" },
+            ],
+          },
+        ],
       },
       {
-        name: "saldo_quitacao",
-        label: "Saldo de quitacao",
-        type: "number",
-        min: 0,
-        step: "0.01",
-        required: true,
-      },
-      {
-        name: "valor_parcela",
-        label: "Valor da parcela",
-        type: "number",
-        min: 0,
-        step: "0.01",
-        required: true,
+        title: "Endereco",
+        fields: [
+          { name: "cep", label: "CEP", required: true },
+          { name: "rua", label: "Rua", required: true },
+          { name: "numero", label: "N", required: true },
+          { name: "bairro", label: "Bairro", required: true },
+        ],
       },
     ],
   },
-];
+  CARTAO: {
+    title: "Ficha para Cartao",
+    groups: [
+      {
+        title: "Dados gerais",
+        fields: [
+          { name: "titulo_produto", label: "Produto", required: true },
+          { name: "vendedor_nome", label: "Nome do vendedor", required: true },
+        ],
+      },
+      {
+        title: "Dados do beneficiario",
+        fields: [
+          { name: "especie", label: "Especie", required: true },
+          { name: "uf_beneficio", label: "UF do beneficio", required: true },
+          { name: "cliente_nome", label: "Nome", required: true },
+          { name: "cpf", label: "CPF", required: true },
+          { name: "data_nascimento", label: "Data de nascimento", type: "date", required: true },
+          { name: "numero_beneficio", label: "Numero do beneficio", required: true },
+          { name: "telefone", label: "Telefone", required: true },
+          { name: "nome_mae", label: "Nome da mae", required: true },
+          { name: "rg", label: "Numero do RG", required: true },
+          { name: "naturalidade", label: "Naturalidade", required: true },
+          { name: "rg_uf", label: "UF", required: true },
+          { name: "rg_orgao_exp", label: "Orgao exp", required: true },
+          { name: "data_emissao_rg", label: "Data emissao RG", type: "date", required: true },
+          { name: "salario", label: "Salario", type: "number", min: 0, step: "0.01", required: true },
+        ],
+      },
+      {
+        title: "Dados bancarios",
+        fields: [
+          { name: "banco_codigo", label: "Cod banco", required: true },
+          { name: "agencia", label: "Agencia", required: true },
+          { name: "conta", label: "Conta", required: true },
+          {
+            name: "tipo_conta",
+            label: "Tipo de conta",
+            required: true,
+            options: [
+              { value: "CORRENTE", label: "Corrente" },
+              { value: "POUPANCA", label: "Poupanca" },
+              { value: "SALARIO", label: "Salario" },
+            ],
+          },
+        ],
+      },
+      {
+        title: "Endereco",
+        fields: [
+          { name: "cep", label: "CEP", required: true },
+          { name: "rua", label: "Rua", required: true },
+          { name: "numero", label: "N", required: true },
+          { name: "bairro", label: "Bairro", required: true },
+        ],
+      },
+    ],
+  },
+};
+
+SCHEMAS.PORTABILIDADE_REFIN = SCHEMAS.PORTABILIDADE;
 
 const EMPTY_FORM = {
   produto: "NOVO",
@@ -149,56 +201,53 @@ const EMPTY_FORM = {
   prazo: "",
   margem: "",
   parcela_solicitada: "",
-  ficha_portabilidade: { ...EMPTY_PORTABILITY_FORM },
+  ficha_portabilidade: {},
 };
 
-function getStoredUser() {
-  try {
-    const raw = localStorage.getItem("usuario");
-    return raw ? JSON.parse(raw) : null;
-  } catch {
-    return null;
+function getSchema(product) {
+  return SCHEMAS[String(product || "").toUpperCase()] || null;
+}
+
+function parseFicha(payload) {
+  if (!payload) return {};
+  if (typeof payload === "string") {
+    try {
+      return JSON.parse(payload) || {};
+    } catch {
+      return {};
+    }
   }
+  return typeof payload === "object" ? payload : {};
 }
 
 function toInputDate(value) {
   if (!value) return "";
-
-  const text = String(value).trim();
-  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
-
-  const date = new Date(text);
+  const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
-
   return date.toISOString().slice(0, 10);
 }
 
-function parsePortabilityForm(payload) {
-  if (!payload) return null;
+function getFieldNames(schema) {
+  const fields = [];
+  schema?.groups?.forEach((group) => group.fields.forEach((field) => fields.push(field.name)));
+  return fields;
+}
 
-  if (typeof payload === "string") {
+function getDefaults(product, client, base) {
+  const user = (() => {
     try {
-      return JSON.parse(payload);
+      return JSON.parse(localStorage.getItem("usuario") || "null");
     } catch {
       return null;
     }
-  }
+  })();
 
-  if (typeof payload === "object") return payload;
-  return null;
-}
-
-function isPortabilityProduct(product) {
-  return PORTABILITY_PRODUCTS.has(String(product || "").toUpperCase());
-}
-
-function buildPortabilityForm(client, currentPayload = null) {
-  const user = getStoredUser();
-  const current = parsePortabilityForm(currentPayload) || {};
-
-  const base = {
-    ...EMPTY_PORTABILITY_FORM,
+  const p = String(product || "").toUpperCase();
+  return {
     vendedor_nome: user?.nome || "",
+    banco_nome: base.banco_digitacao || "",
+    banco_para_digitar: base.banco_digitacao || "",
+    titulo_produto: p === "CARTAO" ? "CARTAO RCC AMIGOZ" : "",
     cliente_nome: client?.nome || "",
     especie: client?.especie || "",
     uf_beneficio: client?.uf_beneficio || "",
@@ -207,143 +256,189 @@ function buildPortabilityForm(client, currentPayload = null) {
     cpf: client?.cpf || "",
     rg: client?.rg_numero || "",
     data_emissao: toInputDate(client?.rg_data_emissao),
+    data_emissao_rg: toInputDate(client?.rg_data_emissao),
     nome_mae: client?.nome_mae || "",
     telefone: client?.telefone || "",
     email: user?.email || "",
+    naturalidade: client?.naturalidade || "",
+    rg_uf: client?.rg_uf || "",
+    rg_orgao_exp: client?.rg_orgao_exp || "",
+    salario: client?.salario == null ? "" : String(client.salario),
     cep: client?.cep || "",
     endereco: [client?.rua, client?.numero].filter(Boolean).join(", "),
+    rua: client?.rua || "",
+    numero: client?.numero || "",
     bairro: client?.bairro || "",
-  };
-
-  for (const [key, value] of Object.entries(current)) {
-    if (!(key in base)) continue;
-    if (value === null || value === undefined) continue;
-
-    const text = String(value);
-    if (!text.trim()) continue;
-
-    base[key] = text;
-  }
-
-  return base;
-}
-
-function toOperationForm(operation, client) {
-  return {
-    produto: operation.produto ?? "NOVO",
-    banco_digitacao: operation.banco_digitacao ?? "",
-    valor_solicitado: operation.valor_solicitado ?? "",
-    prazo: operation.prazo ?? "",
-    margem: operation.margem ?? "",
-    parcela_solicitada: operation.parcela_solicitada ?? "",
-    ficha_portabilidade: buildPortabilityForm(
-      client,
-      operation.ficha_portabilidade
-    ),
+    tipo_conta: "CORRENTE",
+    margem: base.margem || "",
+    prazo: base.prazo || "",
   };
 }
 
-function getOperationDate(operation) {
-  return operation.criado_em || operation.created_at || operation.createdAt;
+function mergeFicha(product, client, current, base) {
+  const schema = getSchema(product);
+  if (!schema) return {};
+  const defaults = getDefaults(product, client, base);
+  const parsed = parseFicha(current);
+  const merged = {};
+  getFieldNames(schema).forEach((name) => {
+    merged[name] = parsed[name] ?? defaults[name] ?? "";
+  });
+  return merged;
+}
+
+function sanitizeFicha(product, payload) {
+  const schema = getSchema(product);
+  if (!schema) return null;
+  const parsed = parseFicha(payload);
+  const clean = {};
+  let has = false;
+  getFieldNames(schema).forEach((name) => {
+    const value = parsed[name];
+    const text = value == null ? "" : String(value).trim();
+    clean[name] = text;
+    if (text) has = true;
+  });
+  return has ? clean : null;
 }
 
 function formatCurrency(value) {
   const number = Number(value);
   if (Number.isNaN(number)) return "-";
-  return number.toLocaleString("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-  });
+  return number.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
-function getStatusClass(status) {
-  return status || "PENDENTE";
+function formatDate(value) {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return date.toLocaleDateString("pt-BR");
 }
 
-function getStatusLabel(status) {
-  return String(status || "PENDENTE").replaceAll("_", " ");
-}
-
-function hasPortabilityData(payload) {
-  const parsed = parsePortabilityForm(payload);
-  if (!parsed) return false;
-  return Object.values(parsed).some((value) => String(value || "").trim() !== "");
+function formatValue(value, type) {
+  if (!value) return "-";
+  if (type === "date") return formatDate(value);
+  return String(value);
 }
 
 export default function ClientOperations() {
   const { id } = useParams();
-  const outletContext = useOutletContext();
-  const client = outletContext?.client || null;
+  const { client } = useOutletContext() || {};
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const [operations, setOperations] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [filter, setFilter] = useState("");
-  const [sortOrder, setSortOrder] = useState("desc");
   const [editingOperationId, setEditingOperationId] = useState(null);
-  const [form, setForm] = useState(() => ({
-    ...EMPTY_FORM,
-    ficha_portabilidade: buildPortabilityForm(client),
-  }));
+  const [selectedOperationId, setSelectedOperationId] = useState(null);
+  const [viewerDocuments, setViewerDocuments] = useState([]);
+  const [viewerDocsLoading, setViewerDocsLoading] = useState(false);
+  const [form, setForm] = useState(() => ({ ...EMPTY_FORM, ficha_portabilidade: mergeFicha("NOVO", client, null, EMPTY_FORM) }));
 
-  const isEditing = editingOperationId !== null;
+  const selectedOperation = useMemo(() => operations.find((op) => op.id === selectedOperationId) || null, [operations, selectedOperationId]);
+  const formSchema = getSchema(form.produto);
+  const selectedSchema = getSchema(selectedOperation?.produto);
+  const selectedFicha = sanitizeFicha(selectedOperation?.produto, selectedOperation?.ficha_portabilidade);
 
   async function loadOperations() {
     try {
       const data = await listClientOperations(id);
       setOperations(Array.isArray(data) ? data : []);
-    } catch (error) {
-      console.error("Erro ao carregar operacoes:", error);
+    } catch {
       setOperations([]);
     }
   }
 
   useEffect(() => {
-    if (id) {
-      loadOperations();
-    }
+    if (id) loadOperations();
   }, [id]);
 
   useEffect(() => {
-    if (editingOperationId !== null) return;
+    const opId = Number(searchParams.get("operation"));
+    const view = String(searchParams.get("view") || "").toLowerCase();
+    if (opId && view === "ficha" && operations.some((op) => op.id === opId)) setSelectedOperationId(opId);
+  }, [operations, searchParams]);
 
-    setForm((prev) => ({
-      ...prev,
-      ficha_portabilidade: buildPortabilityForm(client, prev.ficha_portabilidade),
-    }));
-  }, [client, editingOperationId]);
+  useEffect(() => {
+    if (!selectedOperationId) return;
+    let cancelled = false;
+    async function loadDocs() {
+      try {
+        setViewerDocsLoading(true);
+        const data = await listClientDocuments(id);
+        if (!cancelled) setViewerDocuments(Array.isArray(data?.documents) ? data.documents : []);
+      } finally {
+        if (!cancelled) setViewerDocsLoading(false);
+      }
+    }
+    loadDocs();
+    return () => {
+      cancelled = true;
+    };
+  }, [id, selectedOperationId]);
 
-  function resetForm() {
-    setForm({
-      ...EMPTY_FORM,
-      ficha_portabilidade: buildPortabilityForm(client),
+  function setFichaByProduct(nextProduct, prevForm, currentPayload) {
+    return mergeFicha(nextProduct, client, currentPayload, prevForm);
+  }
+
+  function handleChange(event) {
+    const { name, value } = event.target;
+    if (name === "produto") {
+      setForm((prev) => {
+        const next = { ...prev, produto: value };
+        next.ficha_portabilidade = setFichaByProduct(value, next, prev.ficha_portabilidade);
+        return next;
+      });
+      return;
+    }
+
+    if (name === "banco_digitacao") {
+      setForm((prev) => {
+        const next = { ...prev, banco_digitacao: value };
+        next.ficha_portabilidade = setFichaByProduct(prev.produto, next, prev.ficha_portabilidade);
+        return next;
+      });
+      return;
+    }
+
+    setForm((prev) => ({ ...prev, [name]: value }));
+  }
+
+  function handleFichaChange(event) {
+    const { name, value } = event.target;
+    setForm((prev) => {
+      const ficha = { ...prev.ficha_portabilidade, [name]: value };
+      const next = { ...prev, ficha_portabilidade: ficha };
+      if (name === "margem") next.margem = value;
+      if (name === "prazo") next.prazo = value;
+      return next;
     });
-    setEditingOperationId(null);
   }
 
   async function handleSubmit(event) {
     event.preventDefault();
     setLoading(true);
-
     try {
+      const ficha = sanitizeFicha(form.produto, form.ficha_portabilidade);
       const payload = {
-        ...form,
-        ficha_portabilidade: isPortabilityProduct(form.produto)
-          ? buildPortabilityForm(client, form.ficha_portabilidade)
-          : null,
+        produto: form.produto,
+        banco_digitacao: form.banco_digitacao,
+        valor_solicitado: form.valor_solicitado,
+        prazo: form.prazo || ficha?.prazo || null,
+        margem: form.margem || ficha?.margem || null,
+        parcela_solicitada: form.parcela_solicitada,
+        ficha_portabilidade: ficha,
       };
 
-      if (isEditing) {
+      if (editingOperationId) {
         await updateOperation(editingOperationId, payload);
-        alert("Operacao editada com sucesso");
       } else {
         await createOperation(id, payload);
-        alert("Operacao criada com sucesso");
       }
 
-      resetForm();
+      setEditingOperationId(null);
+      setForm({ ...EMPTY_FORM, ficha_portabilidade: mergeFicha("NOVO", client, null, EMPTY_FORM) });
       await loadOperations();
     } catch (error) {
-      console.error("Erro ao salvar operacao:", error);
       alert(error.message || "Nao foi possivel salvar a operacao");
     } finally {
       setLoading(false);
@@ -353,83 +448,49 @@ export default function ClientOperations() {
   async function handleSend(operationId) {
     try {
       await sendOperationToPipeline(operationId);
-      window.dispatchEvent(new Event("pipeline:changed"));
       await loadOperations();
-      alert("Operacao enviada para esteira");
+      window.dispatchEvent(new Event("pipeline:changed"));
     } catch (error) {
-      console.error("Erro ao enviar para esteira:", error);
       alert(error.message || "Nao foi possivel enviar para esteira");
     }
   }
 
   function handleEdit(operation) {
     setEditingOperationId(operation.id);
-    setForm(toOperationForm(operation, client));
+    const next = {
+      produto: operation.produto ?? "NOVO",
+      banco_digitacao: operation.banco_digitacao ?? "",
+      valor_solicitado: operation.valor_solicitado ?? "",
+      prazo: operation.prazo ?? "",
+      margem: operation.margem ?? "",
+      parcela_solicitada: operation.parcela_solicitada ?? "",
+    };
+    setForm({ ...next, ficha_portabilidade: mergeFicha(next.produto, client, operation.ficha_portabilidade, next) });
   }
 
-  function handleChange(event) {
-    const { name, value } = event.target;
-
-    if (name === "produto") {
-      setForm((prev) => ({
-        ...prev,
-        produto: value,
-        ficha_portabilidade: isPortabilityProduct(value)
-          ? buildPortabilityForm(client, prev.ficha_portabilidade)
-          : prev.ficha_portabilidade,
-      }));
-      return;
-    }
-
-    setForm((prev) => ({ ...prev, [name]: value }));
+  function openFicha(operationId) {
+    setSelectedOperationId(operationId);
+    const next = new URLSearchParams(searchParams);
+    next.set("operation", String(operationId));
+    next.set("view", "ficha");
+    setSearchParams(next);
   }
 
-  function handlePortabilityChange(event) {
-    const { name, value } = event.target;
+  function closeFicha() {
+    setSelectedOperationId(null);
+    const next = new URLSearchParams(searchParams);
+    next.delete("operation");
+    next.delete("view");
+    setSearchParams(next);
+  }
 
-    setForm((prev) => {
-      const nextPortability = {
-        ...buildPortabilityForm(client, prev.ficha_portabilidade),
-        [name]: value,
-      };
-
-      if (name === "total_parcelas" || name === "parcelas_pagas") {
-        const total = Number(nextPortability.total_parcelas);
-        const paid = Number(nextPortability.parcelas_pagas);
-
-        if (!Number.isNaN(total) && !Number.isNaN(paid) && total >= paid) {
-          nextPortability.parcelas_restantes = String(total - paid);
-        }
-      }
-
-      return {
-        ...prev,
-        ficha_portabilidade: nextPortability,
-      };
+  const visibleOperations = useMemo(() => {
+    return [...operations].sort((a, b) => {
+      const da = new Date(a.criado_em || 0).getTime();
+      const db = new Date(b.criado_em || 0).getTime();
+      return db - da;
     });
-  }
-
-  const filteredOperations = useMemo(
-    () =>
-      operations
-        .filter((op) =>
-          Object.values(op)
-            .join(" ")
-            .toLowerCase()
-            .includes(filter.toLowerCase())
-        )
-        .sort((a, b) => {
-          const dateA = getOperationDate(a);
-          const dateB = getOperationDate(b);
-
-          if (!dateA || !dateB) return 0;
-
-          return sortOrder === "desc"
-            ? new Date(dateB) - new Date(dateA)
-            : new Date(dateA) - new Date(dateB);
-        }),
-    [operations, filter, sortOrder]
-  );
+  }, [operations]);
 
   return (
     <div className="clientSection">
@@ -437,117 +498,35 @@ export default function ClientOperations() {
       <p className="clientSectionText">Cadastro, edicao e envio para a esteira.</p>
 
       <form onSubmit={handleSubmit} className="operationsFormCard">
-        <h3>{isEditing ? "Editar operacao" : "Nova operacao"}</h3>
+        <h3>{editingOperationId ? "Editar operacao" : "Nova operacao"}</h3>
 
         <div className="operationsGrid">
-          <label className="operationsField">
-            <span>Produto</span>
-            <select
-              name="produto"
-              value={form.produto}
-              onChange={handleChange}
-              required
-            >
-              <option value="NOVO">Novo</option>
-              <option value="PORTABILIDADE">Portabilidade</option>
-              <option value="REFINANCIAMENTO">Refinanciamento</option>
-              <option value="PORTABILIDADE_REFIN">Port + Refin</option>
-              <option value="CARTAO">Cartao</option>
-            </select>
-          </label>
-
-          <label className="operationsField">
-            <span>Banco digitacao</span>
-            <input
-              type="text"
-              name="banco_digitacao"
-              value={form.banco_digitacao}
-              onChange={handleChange}
-              required
-            />
-          </label>
-
-          <label className="operationsField">
-            <span>Valor solicitado</span>
-            <input
-              type="number"
-              name="valor_solicitado"
-              value={form.valor_solicitado}
-              onChange={handleChange}
-              required
-            />
-          </label>
-
-          <label className="operationsField">
-            <span>Prazo (meses)</span>
-            <input
-              type="number"
-              name="prazo"
-              value={form.prazo}
-              onChange={handleChange}
-              required
-            />
-          </label>
-
-          <label className="operationsField">
-            <span>Margem</span>
-            <input
-              type="number"
-              name="margem"
-              value={form.margem}
-              onChange={handleChange}
-            />
-          </label>
-
-          <label className="operationsField">
-            <span>Parcela solicitada</span>
-            <input
-              type="number"
-              name="parcela_solicitada"
-              value={form.parcela_solicitada}
-              onChange={handleChange}
-            />
-          </label>
+          <label className="operationsField"><span>Produto</span><select name="produto" value={form.produto} onChange={handleChange} required><option value="NOVO">Novo</option><option value="PORTABILIDADE">Portabilidade</option><option value="REFINANCIAMENTO">Refinanciamento</option><option value="PORTABILIDADE_REFIN">Port + Refin</option><option value="CARTAO">Cartao</option></select></label>
+          <label className="operationsField"><span>Banco digitacao</span><input type="text" name="banco_digitacao" value={form.banco_digitacao} onChange={handleChange} required /></label>
+          <label className="operationsField"><span>Valor solicitado</span><input type="number" name="valor_solicitado" value={form.valor_solicitado} onChange={handleChange} required /></label>
+          <label className="operationsField"><span>Prazo (meses)</span><input type="number" name="prazo" value={form.prazo} onChange={handleChange} /></label>
+          <label className="operationsField"><span>Margem</span><input type="number" name="margem" value={form.margem} onChange={handleChange} /></label>
+          <label className="operationsField"><span>Parcela solicitada</span><input type="number" name="parcela_solicitada" value={form.parcela_solicitada} onChange={handleChange} /></label>
         </div>
 
-        {isPortabilityProduct(form.produto) && (
+        {formSchema && (
           <section className="operationFichaCard">
-            <h4>Ficha de Portabilidade</h4>
-
-            {PORTABILITY_FIELD_GROUPS.map((group) => (
+            <h4>{formSchema.title}</h4>
+            {formSchema.groups.map((group) => (
               <div key={group.title} className="operationFichaGroup">
                 <h5>{group.title}</h5>
                 <div className="operationFichaGrid">
                   {group.fields.map((field) => {
                     const value = form.ficha_portabilidade?.[field.name] ?? "";
-
                     return (
                       <label className="operationsField" key={field.name}>
                         <span>{field.label}</span>
-
                         {Array.isArray(field.options) ? (
-                          <select
-                            name={field.name}
-                            value={value}
-                            onChange={handlePortabilityChange}
-                            required={field.required}
-                          >
-                            {field.options.map((option) => (
-                              <option key={option.value} value={option.value}>
-                                {option.label}
-                              </option>
-                            ))}
+                          <select name={field.name} value={value} onChange={handleFichaChange} required={field.required}>
+                            {field.options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                           </select>
                         ) : (
-                          <input
-                            type={field.type || "text"}
-                            name={field.name}
-                            value={value}
-                            min={field.min}
-                            step={field.step}
-                            onChange={handlePortabilityChange}
-                            required={field.required}
-                          />
+                          <input type={field.type || "text"} name={field.name} value={value} min={field.min} step={field.step} onChange={handleFichaChange} required={field.required} />
                         )}
                       </label>
                     );
@@ -559,132 +538,89 @@ export default function ClientOperations() {
         )}
 
         <div className="operationsActions">
-          <button type="submit" className="clientPrimaryButton" disabled={loading}>
-            {loading
-              ? "Salvando..."
-              : isEditing
-              ? "Salvar edicao"
-              : "Criar operacao"}
-          </button>
-
-          {isEditing && (
-            <button
-              type="button"
-              className="clientGhostButton"
-              onClick={resetForm}
-            >
-              Cancelar edicao
-            </button>
-          )}
+          <button type="submit" className="clientPrimaryButton" disabled={loading}>{loading ? "Salvando..." : editingOperationId ? "Salvar edicao" : "Criar operacao"}</button>
+          {editingOperationId && <button type="button" className="clientGhostButton" onClick={() => { setEditingOperationId(null); setForm({ ...EMPTY_FORM, ficha_portabilidade: mergeFicha("NOVO", client, null, EMPTY_FORM) }); }}>Cancelar edicao</button>}
         </div>
       </form>
 
-      <div className="operationsToolbar">
-        <label className="operationsSearch">
-          <input
-            type="text"
-            placeholder="Buscar operacao..."
-            value={filter}
-            onChange={(event) => setFilter(event.target.value)}
-          />
-        </label>
-
-        <button
-          type="button"
-          className="clientGhostButton"
-          onClick={() => setSortOrder(sortOrder === "desc" ? "asc" : "desc")}
-        >
-          Ordenar por data
-        </button>
-      </div>
-
       <h3>Operacoes cadastradas</h3>
-
-      {filteredOperations.length === 0 ? (
+      {visibleOperations.length === 0 ? (
         <p className="clientSectionText">Nenhuma operacao cadastrada.</p>
       ) : (
         <div className="operationsTableWrap">
           <table className="operationsTable">
-            <thead>
-              <tr>
-                <th>Produto</th>
-                <th>Banco</th>
-                <th>Valor</th>
-                <th>Prazo</th>
-                <th>Ficha</th>
-                <th>Formalizacao</th>
-                <th>Status</th>
-                <th>Acao</th>
-              </tr>
-            </thead>
+            <thead><tr><th>Produto</th><th>Banco</th><th>Valor</th><th>Prazo</th><th>Ficha</th><th>Status</th><th>Acao</th></tr></thead>
             <tbody>
-              {filteredOperations.map((operation) => (
+              {visibleOperations.map((operation) => (
                 <tr key={operation.id}>
                   <td>{operation.produto}</td>
                   <td>{operation.banco_digitacao}</td>
                   <td>{formatCurrency(operation.valor_solicitado)}</td>
-                  <td>{operation.prazo}</td>
+                  <td>{operation.prazo || "-"}</td>
+                  <td><button type="button" className="clientGhostButton" onClick={() => openFicha(operation.id)}>{sanitizeFicha(operation.produto, operation.ficha_portabilidade) ? "Ver ficha" : "Sem ficha"}</button></td>
+                  <td><span className={`operationStatusBadge ${operation.status || "PENDENTE"}`}>{String(operation.status || "PENDENTE").replaceAll("_", " ")}</span></td>
                   <td>
-                    {hasPortabilityData(operation.ficha_portabilidade) ? (
-                      <span className="operationFichaReady">Preenchida</span>
-                    ) : (
-                      <span className="operationTextMuted">Sem ficha</span>
-                    )}
-                  </td>
-                  <td>
-                    {operation.link_formalizacao ? (
-                      <a
-                        className="clientLinkButton"
-                        href={operation.link_formalizacao}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        Abrir link
-                      </a>
-                    ) : (
-                      <span className="operationTextMuted">Sem link</span>
-                    )}
-                  </td>
-                  <td>
-                    <span
-                      className={`operationStatusBadge ${getStatusClass(operation.status)}`}
-                    >
-                      {getStatusLabel(operation.status)}
-                    </span>
-                  </td>
-                  <td>
-                    {(operation.status === "PENDENTE" ||
-                      operation.status === "DEVOLVIDA") && (
-                      <div className="operationTableActions">
-                        <button
-                          type="button"
-                          className="clientGhostButton"
-                          onClick={() => handleEdit(operation)}
-                        >
-                          {editingOperationId === operation.id ? "Editando" : "Editar"}
-                        </button>
-
-                        <button
-                          type="button"
-                          className="clientPrimaryButton"
-                          onClick={() => handleSend(operation.id)}
-                        >
-                          {operation.status === "DEVOLVIDA"
-                            ? "Reenviar para esteira"
-                            : "Enviar para esteira"}
-                        </button>
-                      </div>
-                    )}
-
-                    {operation.status === "EM_ANALISE" && (
-                      <span className="operationTextMuted">Em analise</span>
-                    )}
+                    <div className="operationTableActions">
+                      {(operation.status === "PENDENTE" || operation.status === "DEVOLVIDA") && (
+                        <>
+                          <button type="button" className="clientGhostButton" onClick={() => handleEdit(operation)}>{editingOperationId === operation.id ? "Editando" : "Editar"}</button>
+                          <button type="button" className="clientPrimaryButton" onClick={() => handleSend(operation.id)}>{operation.status === "DEVOLVIDA" ? "Reenviar" : "Enviar"}</button>
+                        </>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
+      )}
+
+      {selectedOperation && (
+        <section className="operationViewerCard">
+          <div className="operationViewerHeader">
+            <div>
+              <h3>Ficha da operacao #{selectedOperation.id} - {selectedOperation.produto}</h3>
+              <p>Cliente: {client?.nome || "-"} | CPF: {client?.cpf || "-"}</p>
+            </div>
+            <button type="button" className="clientGhostButton" onClick={closeFicha}>Fechar ficha</button>
+          </div>
+
+          {selectedSchema && selectedFicha ? (
+            <div className="operationViewerFicha">
+              {selectedSchema.groups.map((group) => (
+                <div key={group.title} className="operationViewerGroup">
+                  <h4>{group.title}</h4>
+                  <div className="operationViewerGrid">
+                    {group.fields.map((field) => (
+                      <article key={field.name}><span>{field.label}</span><strong>{formatValue(selectedFicha[field.name], field.type)}</strong></article>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="clientSectionText">Esta operacao nao possui ficha cadastrada.</p>
+          )}
+
+          <div className="operationViewerDocuments">
+            <h4>Documentos do cliente</h4>
+            {viewerDocsLoading ? (
+              <p className="clientSectionText">Carregando documentos...</p>
+            ) : viewerDocuments.length === 0 ? (
+              <p className="clientSectionText">Nenhum documento enviado.</p>
+            ) : (
+              <ul className="operationViewerDocsList">
+                {viewerDocuments.map((doc) => (
+                  <li key={doc.filename} className="operationViewerDocItem">
+                    <div><strong>{doc.type || "ARQUIVO"}</strong><span>{doc.filename}</span><small>{doc.uploaded_at || "-"}</small></div>
+                    <a className="clientLinkButton" href={`${API_URL}/clients/${id}/documents/${encodeURIComponent(doc.filename)}`} target="_blank" rel="noreferrer">Abrir</a>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </section>
       )}
     </div>
   );

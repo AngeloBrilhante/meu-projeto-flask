@@ -413,6 +413,124 @@
   border: 1px solid rgba(28, 168, 110, 0.32);
 }
 
+.operationViewerCard {
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  background: var(--surface-strong);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.operationViewerHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.operationViewerHeader h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.operationViewerHeader p {
+  margin: 6px 0 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.operationViewerFicha {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.operationViewerGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.operationViewerGroup h4 {
+  margin: 0;
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.operationViewerGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.operationViewerGrid article {
+  background: var(--surface);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 10px;
+}
+
+.operationViewerGrid span {
+  display: block;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.operationViewerGrid strong {
+  display: block;
+  margin-top: 4px;
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.operationViewerDocuments {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.operationViewerDocuments h4 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.operationViewerDocsList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.operationViewerDocItem {
+  background: var(--surface);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 10px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+.operationViewerDocItem strong {
+  display: block;
+}
+
+.operationViewerDocItem span {
+  display: block;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.operationViewerDocItem small {
+  display: block;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
 .statusPanel {
   display: flex;
   align-items: center;
@@ -555,7 +673,8 @@
   .clientInfoGrid,
   .documentsUploadGrid,
   .operationsGrid,
-  .operationFichaGrid {
+  .operationFichaGrid,
+  .operationViewerGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -568,7 +687,8 @@
   .clientInfoGrid,
   .documentsUploadGrid,
   .operationsGrid,
-  .operationFichaGrid {
+  .operationFichaGrid,
+  .operationViewerGrid {
     grid-template-columns: 1fr;
   }
 
@@ -583,5 +703,15 @@
 
   .operationsSearch {
     max-width: none;
+  }
+
+  .operationViewerHeader {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .operationViewerDocItem {
+    flex-direction: column;
+    align-items: flex-start;
   }
 }
