@@ -1,72 +1,112 @@
-import "./Login.css";
+import "./login.css";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { buildApiUrl } from "../config/api";
 
 export default function Login() {
   const navigate = useNavigate();
 
-  function goToDashboard() {
-    navigate("/dashboard");
+  const [email, setEmail] = useState("");
+  const [senha, setSenha] = useState("");
+  const [erro, setErro] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  async function handleLogin() {
+    if (!email || !senha) {
+      setErro("Informe email e senha");
+      return;
+    }
+
+    setErro("");
+    setLoading(true);
+
+    try {
+      const response = await fetch(buildApiUrl("/login"), {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email: email.trim(),
+          senha: senha.trim(),
+        }),
+      });
+
+      let data;
+      try {
+        data = await response.json();
+      } catch {
+        throw new Error("Resposta inválida do servidor");
+      }
+
+      if (!response.ok) {
+        setErro(data.message || "Erro ao realizar login");
+        return;
+      }
+
+      // salva usuário logado
+      localStorage.setItem("usuario", JSON.stringify(data.user))
+
+      // salva token JWT
+      localStorage.setItem("token", data.token)
+
+
+      // redireciona
+      navigate("/dashboard");
+
+    } catch (error) {
+      setErro("Erro de conexão com o servidor");
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
     <div className="loginPage">
       <div className="loginCard">
-        {/* Lado esquerdo */}
         <div className="loginLeft">
           <div className="brand">
             <div className="logo">🪙</div>
             <h2>Bem-Vindo a</h2>
             <h1>JR Cred</h1>
           </div>
-
-          <p>
-            A solução para o seu bolso.
-          </p>
+          <p>A solução para o seu bolso.</p>
         </div>
 
-        {/* Lado direito */}
         <div className="loginRight">
           <h2>Seja bem-vindo</h2>
 
-          <form>
-            <div className="inputGroup">
-              <label>Usúario</label>
-              <input type="text" placeholder="Digite seu usúario" />
-            </div>
+          <div className="inputGroup">
+            <label>Email</label>
+            <input
+              type="email"
+              placeholder="Insira seu e-mail"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+          </div>
 
-            <div className="inputGroup">
-              <label>Endereço de E-mail</label>
-              <input type="email" placeholder="Insira seu e-mail" />
-            </div>
+          <div className="inputGroup">
+            <label>Senha</label>
+            <input
+              type="password"
+              placeholder="Insira sua senha"
+              value={senha}
+              onChange={(e) => setSenha(e.target.value)}
+            />
+          </div>
 
-            <div className="inputGroup">
-              <label>Senha</label>
-              <input type="password" placeholder="Insira sua senha" />
-            </div>
+          {erro && <p className="error">{erro}</p>}
 
-            <div className="terms">
-              <input type="checkbox" />
-              <span>Concordo com os Termos e Condições.</span>
-            </div>
-
-            <div className="buttons">
-              <button
-                type="button"
-                className="btnPrimary"
-                onClick={goToDashboard}
-              >
-                Sign Up
-              </button>
-
-              <button
-                type="button"
-                className="btnSecondary"
-                onClick={goToDashboard}
-              >
-                Sign In
-              </button>
-            </div>
-          </form>
+          <div className="buttons">
+            <button
+              className="btnPrimary"
+              onClick={handleLogin}
+              disabled={loading}
+            >
+              {loading ? "Entrando..." : "Entrar"}
+            </button>
+          </div>
         </div>
       </div>
     </div>
