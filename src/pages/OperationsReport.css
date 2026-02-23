@@ -1,0 +1,191 @@
+.reportContainer {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.reportHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+}
+
+.reportHeader h2 {
+  margin: 0;
+  font-size: 28px;
+}
+
+.reportHeader p {
+  margin: 6px 0 0;
+  color: var(--text-secondary);
+}
+
+.filtersForm {
+  display: grid;
+  grid-template-columns: 2fr repeat(4, minmax(0, 1fr)) auto auto;
+  gap: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  padding: 12px;
+  box-shadow: var(--shadow);
+}
+
+.filtersForm input,
+.filtersForm select,
+.filtersForm button {
+  height: 38px;
+  border-radius: 10px;
+  font-size: 14px;
+}
+
+.filtersForm input,
+.filtersForm select {
+  border: 1px solid var(--border-color);
+  background: var(--surface-strong);
+  color: var(--text-primary);
+  padding: 0 10px;
+}
+
+.filtersForm input:focus,
+.filtersForm select:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.primaryButton,
+.ghostButton,
+.exportButton {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.primaryButton {
+  border: none;
+  background: var(--accent);
+  color: #fff;
+}
+
+.ghostButton {
+  border: 1px solid var(--border-color);
+  background: var(--surface-strong);
+  color: var(--text-primary);
+}
+
+.exportButton {
+  border: none;
+  border-radius: 10px;
+  height: 38px;
+  padding: 0 14px;
+  background: #1ca86e;
+  color: #fff;
+}
+
+.primaryButton:disabled,
+.ghostButton:disabled,
+.exportButton:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.reportStats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.statCard {
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  background: var(--surface);
+  padding: 10px 12px;
+  font-weight: 700;
+  color: var(--text-primary);
+  box-shadow: var(--shadow);
+}
+
+.statCard.approved {
+  border-color: rgba(62, 213, 152, 0.35);
+}
+
+.statCard.rejected {
+  border-color: rgba(255, 126, 137, 0.35);
+}
+
+.errorText {
+  margin: 0;
+  color: var(--danger);
+  background: rgba(214, 66, 66, 0.12);
+  border: 1px solid rgba(214, 66, 66, 0.3);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
+.reportTableWrapper {
+  overflow-x: auto;
+  border-radius: 14px;
+  border: 1px solid var(--border-color);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.reportTable {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.reportTable th {
+  background: var(--surface-strong);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+  text-align: left;
+  padding: 12px;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.reportTable td {
+  border-bottom: 1px solid var(--border-color);
+  padding: 10px 12px;
+  white-space: nowrap;
+  color: var(--text-primary);
+}
+
+.reportTable tbody tr:hover {
+  background: var(--surface-strong);
+}
+
+.reportTable .statusBadge {
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.reportTable .statusBadge.approved {
+  background: #1ca86e;
+}
+
+.reportTable .statusBadge.rejected {
+  background: #d25353;
+}
+
+@media (max-width: 1260px) {
+  .filtersForm {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .reportHeader {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .reportStats {
+    grid-template-columns: 1fr;
+  }
+}

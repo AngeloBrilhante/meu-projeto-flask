@@ -1,71 +1,107 @@
 .createClientPage {
-  padding: 32px;
-  background: #f4f6f9;
-  min-height: 100vh;
+  display: flex;
+  justify-content: center;
 }
 
 .createClientCard {
-  max-width: 700px;
-  margin: 0 auto;
-  background: #ffffff;
-  border-radius: 14px;
-  padding: 32px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+  width: min(1080px, 100%);
+  background: var(--surface);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  box-shadow: var(--shadow);
+  padding: 20px;
 }
 
-.createClientCard h2 {
-  margin-bottom: 24px;
-  color: #1f2937;
+.createClientHeader h1 {
+  margin: 0;
+  font-size: 28px;
 }
 
-.formGrid {
+.createClientHeader p {
+  margin: 6px 0 0;
+  color: var(--text-secondary);
+}
+
+.createClientForm {
+  margin-top: 18px;
+}
+
+.createClientGrid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 20px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
 }
 
-.inputGroup {
+.createField {
   display: flex;
   flex-direction: column;
+  gap: 6px;
 }
 
-.inputGroup label {
-  font-size: 14px;
-  color: #6b7280;
-  margin-bottom: 6px;
+.createField span {
+  font-size: 12px;
+  color: var(--text-secondary);
 }
 
-.inputGroup input,
-.inputGroup select {
-  padding: 12px 14px;
+.createField input,
+.createField select {
+  height: 40px;
+  border: 1px solid var(--border-color);
   border-radius: 10px;
-  border: 1px solid #d1d5db;
-  font-size: 15px;
+  background: var(--surface-strong);
+  color: var(--text-primary);
+  padding: 0 10px;
+}
+
+.createField input:focus,
+.createField select:focus {
   outline: none;
+  border-color: var(--accent);
 }
 
-.inputGroup input:focus,
-.inputGroup select:focus {
-  border-color: #2563eb;
+.createField.span2 {
+  grid-column: span 2;
 }
 
-.formActions {
-  margin-top: 28px;
+.createActions {
+  margin-top: 16px;
   display: flex;
   justify-content: flex-end;
+  gap: 10px;
 }
 
-.formActions button {
-  background: #2563eb;
-  color: #fff;
-  padding: 12px 24px;
+.createGhostButton,
+.createPrimaryButton {
   border-radius: 10px;
-  border: none;
-  font-size: 15px;
+  padding: 10px 14px;
+  font-weight: 600;
   cursor: pointer;
-  transition: 0.2s;
 }
 
-.formActions button:hover {
-  background: #1e40af;
+.createGhostButton {
+  background: var(--surface-strong);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+}
+
+.createPrimaryButton {
+  border: none;
+  background: var(--accent);
+  color: #fff;
+}
+
+.createGhostButton:disabled,
+.createPrimaryButton:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+@media (max-width: 900px) {
+  .createField.span2 {
+    grid-column: span 1;
+  }
+
+  .createClientGrid {
+    grid-template-columns: 1fr;
+  }
 }

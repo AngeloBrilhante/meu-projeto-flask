@@ -1,0 +1,154 @@
+.pipelineContainer {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.pipelineHeader h2 {
+  margin: 0;
+  font-size: 28px;
+}
+
+.pipelineHeader p {
+  margin: 6px 0 0;
+  color: var(--text-secondary);
+}
+
+.pipelineMessage {
+  margin: 0;
+  background: var(--surface);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 10px 12px;
+  color: var(--text-secondary);
+}
+
+.tableWrapper {
+  overflow-x: auto;
+  border-radius: 14px;
+  border: 1px solid var(--border-color);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.pipelineTable {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.pipelineTable th {
+  background: var(--surface-strong);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+  padding: 11px;
+  text-align: left;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.pipelineTable td {
+  padding: 10px 11px;
+  border-bottom: 1px solid var(--border-color);
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+.pipelineTable tbody tr:hover {
+  background: var(--surface-strong);
+}
+
+.pipelineTable tbody tr.clickableRow {
+  cursor: pointer;
+}
+
+.pipelineTable .statusBadge {
+  padding: 5px 10px;
+  border-radius: 999px;
+  color: #fff;
+  font-weight: 700;
+  font-size: 11px;
+}
+
+.pipelineTable .statusBadge.green {
+  background: #1ca86e;
+}
+
+.pipelineTable .statusBadge.red {
+  background: #d25353;
+}
+
+.pipelineTable .statusBadge.yellow {
+  background: #4f75ff;
+}
+
+.pipelineTable .statusBadge.blue {
+  background: #2f53cc;
+}
+
+.pipelineTable .statusBadge.gray {
+  background: #7f8ba5;
+}
+
+.proposalInput {
+  width: 128px;
+  height: 34px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 0 8px;
+  background: var(--surface-strong);
+  color: var(--text-primary);
+}
+
+.proposalInput:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.proposalLinkInput {
+  width: 190px;
+}
+
+.saveBtn,
+.returnBtn,
+.approveBtn,
+.rejectBtn {
+  border: none;
+  border-radius: 8px;
+  height: 32px;
+  padding: 0 10px;
+  cursor: pointer;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.saveBtn {
+  background: var(--accent);
+}
+
+.returnBtn {
+  background: #2f53cc;
+}
+
+.approveBtn {
+  background: #1ca86e;
+}
+
+.rejectBtn {
+  background: #d25353;
+}
+
+.pipelineActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.saveBtn:disabled,
+.returnBtn:disabled,
+.approveBtn:disabled,
+.rejectBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}

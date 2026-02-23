@@ -1,6 +1,6 @@
 import { useParams } from "react-router-dom";
 import { useEffect, useState } from "react";
-import ClientDocuments from "./ClientDocuments";
+import ClientDocuments from "./clients/ClientDocuments";
 import "./ClientDetails.css";
 
 export default function ClientDetails() {

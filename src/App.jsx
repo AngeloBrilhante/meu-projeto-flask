@@ -1,12 +1,20 @@
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 
+import ProtectedRoute from "./routes/ProtectedRoute";
 import Login from "./pages/login";
 import Dashboard from "./pages/Dashboard";
 import Clients from "./pages/Clients";
 import CreateClient from "./pages/CreateClient";
-import ClientDetails from "./pages/ClientDetails";
+
+import ClientLayout from "./pages/clients/ClientLayout";
+import ClientDocuments from "./pages/clients/ClientDocuments";
+import ClientOperations from "./pages/clients/ClientOperations";
+import ClientComments from "./pages/clients/ClientComments";
 
 import DashboardLayout from "./components/DashboardLayout";
+import Pipeline from "./pages/Pipeline";
+import OperationsReport from "./pages/OperationsReport";
+
 
 export default function App() {
   return (
@@ -16,11 +24,33 @@ export default function App() {
         <Route path="/" element={<Login />} />
 
         {/* ROTAS COM SIDEBAR */}
-        <Route element={<DashboardLayout />}>
+        <Route
+          element={
+            <ProtectedRoute>
+              <DashboardLayout />
+            </ProtectedRoute>
+          }
+        >
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/clients" element={<Clients />} />
           <Route path="/clients/new" element={<CreateClient />} />
-          <Route path="/clients/:id" element={<ClientDetails />} />
+          <Route path="/pipeline" element={<Pipeline />} />
+          <Route path="/operations-report" element={<OperationsReport />} />
+
+
+          {/* CLIENTE COM SUB-ROTAS */}
+          <Route path="/clients/:id" element={<ClientLayout />}>
+
+            {/* Aba padrão */}
+            <Route index element={<ClientDocuments />} />
+
+            <Route path="documentos" element={<ClientDocuments />} />
+            <Route path="operacoes" element={<ClientOperations />} />
+            <Route path="comentarios" element={<ClientComments />} />
+            <Route path="status" element={<Navigate to="../comentarios" replace />} />
+
+          </Route>
+
         </Route>
       </Routes>
     </BrowserRouter>
