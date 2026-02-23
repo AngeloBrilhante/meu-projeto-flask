@@ -1,11 +1,12 @@
 import mysql.connector
 from contextlib import contextmanager
+
 from app.config.settings import DB_CONFIG
 
 
 def get_db():
     """
-    Cria e retorna uma conexão com o banco MySQL
+    Creates and returns a MySQL connection.
     """
     return mysql.connector.connect(
         host=DB_CONFIG["host"],
@@ -13,14 +14,17 @@ def get_db():
         password=DB_CONFIG["password"],
         database=DB_CONFIG["database"],
         port=DB_CONFIG.get("port", 3306),
-        autocommit=False  # Controle manual de transação
+        charset="utf8mb4",
+        collation="utf8mb4_unicode_ci",
+        use_unicode=True,
+        autocommit=False,
     )
 
 
 @contextmanager
 def db_cursor(dictionary=False):
     """
-    Gerencia conexão, commit, rollback e fechamento automático.
+    Manages connection lifecycle with automatic commit/rollback.
     """
     db = get_db()
     cursor = db.cursor(dictionary=dictionary)
@@ -34,3 +38,4 @@ def db_cursor(dictionary=False):
     finally:
         cursor.close()
         db.close()
+
