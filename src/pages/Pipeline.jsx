@@ -155,16 +155,14 @@ export default function Pipeline() {
 
     if (interactive) return;
 
-    navigate(
-      `/clients/${operation.cliente_id}/operacoes?operation=${operation.id}&view=ficha`
-    );
+    navigate(`/operations/${operation.id}/ficha`);
   }
 
   return (
     <div className="pipelineContainer">
       <div className="pipelineHeader">
         <h2>Esteira de Operacoes</h2>
-        <p>Clique na operacao para abrir a aba com a ficha completa.</p>
+        <p>Clique na operacao para abrir somente a ficha e os documentos.</p>
       </div>
 
       {loading && <p className="pipelineMessage">Carregando...</p>}

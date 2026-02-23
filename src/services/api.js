@@ -139,6 +139,20 @@ export async function listClientOperations(clientId) {
   return response.json();
 }
 
+export async function getOperationDossier(operationId) {
+  const response = await fetch(`${API_URL}/operations/${operationId}/dossier`, {
+    headers: getAuthHeaders(),
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.error || "Erro ao carregar ficha da operacao");
+  }
+
+  return data;
+}
+
 /* =======================
    BUSCAR STATUS DO CLIENTE
 ======================= */

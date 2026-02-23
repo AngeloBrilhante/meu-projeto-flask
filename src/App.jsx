@@ -14,6 +14,7 @@ import ClientComments from "./pages/clients/ClientComments";
 import DashboardLayout from "./components/DashboardLayout";
 import Pipeline from "./pages/Pipeline";
 import OperationsReport from "./pages/OperationsReport";
+import OperationDossier from "./pages/OperationDossier";
 
 
 export default function App() {
@@ -36,6 +37,7 @@ export default function App() {
           <Route path="/clients/new" element={<CreateClient />} />
           <Route path="/pipeline" element={<Pipeline />} />
           <Route path="/operations-report" element={<OperationsReport />} />
+          <Route path="/operations/:operationId/ficha" element={<OperationDossier />} />
 
 
           {/* CLIENTE COM SUB-ROTAS */}

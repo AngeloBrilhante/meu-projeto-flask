@@ -35,8 +35,9 @@
 }
 
 .appShell {
-  min-height: 100vh;
+  height: 100vh;
   display: flex;
+  overflow: hidden;
   background: radial-gradient(
       circle at top right,
       var(--surface-soft) 0%,
@@ -51,6 +52,7 @@
   display: flex;
   flex-direction: column;
   justify-content: space-between;
+  overflow-y: auto;
   background: linear-gradient(180deg, var(--sidebar-bg-start), var(--sidebar-bg-end));
   padding: 26px 20px;
   border-right: 1px solid rgba(255, 255, 255, 0.08);
@@ -130,6 +132,7 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
+  min-height: 0;
 }
 
 .topBar {
@@ -138,6 +141,7 @@
   justify-content: space-between;
   gap: 20px;
   padding: 18px 26px;
+  flex-shrink: 0;
   border-bottom: 1px solid var(--border-color);
 }
 
@@ -260,6 +264,7 @@
 
 .pageContent {
   flex: 1;
+  min-height: 0;
   overflow: auto;
   padding: 26px;
 }
@@ -550,6 +555,9 @@
 
 @media (max-width: 860px) {
   .appShell {
+    height: auto;
+    min-height: 100vh;
+    overflow: visible;
     flex-direction: column;
   }
 

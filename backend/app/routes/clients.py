@@ -539,7 +539,72 @@ def list_operations(client_id):
 
 
 # ======================================================
-# 💬 COMENTARIOS DA OPERACAO
+# FICHA DA OPERACAO
+# ======================================================
+@clients_bp.route("/operations/<int:operation_id>/dossier", methods=["GET"])
+@jwt_required()
+def get_operation_dossier(operation_id):
+    role = normalize_role(current_user_role())
+    user_id = current_user_id()
+
+    if role not in {"ADMIN", "VENDEDOR"}:
+        return jsonify({"error": "Acesso nao autorizado"}), 403
+
+    db = get_db()
+    cursor = db.cursor(dictionary=True)
+    ensure_operations_extra_columns(cursor, db)
+
+    cursor.execute(
+        """
+        SELECT
+            o.*,
+            c.id AS cliente_id,
+            c.vendedor_id,
+            COALESCE(u.nome, '-') AS vendedor_nome
+        FROM operacoes o
+        JOIN clientes c ON c.id = o.cliente_id
+        LEFT JOIN usuarios u ON u.id = c.vendedor_id
+        WHERE o.id = %s
+        LIMIT 1
+        """,
+        (operation_id,),
+    )
+    operation = cursor.fetchone()
+
+    cursor.close()
+    db.close()
+
+    if not operation:
+        return jsonify({"error": "Operacao nao encontrada"}), 404
+
+    if role != "ADMIN" and operation.get("vendedor_id") != user_id:
+        return jsonify({"error": "Acesso nao autorizado"}), 403
+
+    operation = hydrate_operation_payload(operation)
+
+    client_folder = os.path.join(BASE_STORAGE, str(operation.get("cliente_id")))
+    documents = []
+
+    if os.path.exists(client_folder):
+        for filename in os.listdir(client_folder):
+            file_path = os.path.join(client_folder, filename)
+            documents.append(
+                {
+                    "filename": filename,
+                    "type": filename.split("_")[0].upper(),
+                    "uploaded_at": datetime.fromtimestamp(
+                        os.path.getctime(file_path)
+                    ).strftime("%Y-%m-%d %H:%M:%S"),
+                }
+            )
+
+        documents.sort(key=lambda item: item.get("uploaded_at", ""), reverse=True)
+
+    return jsonify({"operation": operation, "documents": documents}), 200
+
+
+# ======================================================
+# COMENTARIOS DA OPERACAO
 # ======================================================
 @clients_bp.route("/operations/<int:operation_id>/comments", methods=["GET"])
 @jwt_required()
