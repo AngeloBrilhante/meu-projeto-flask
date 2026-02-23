@@ -1,3 +1,4 @@
+import json
 import os
 import uuid
 from datetime import datetime
@@ -47,6 +48,7 @@ PENDING_OPERATION_FIELDS = {
     "prazo",
     "valor_solicitado",
     "parcela_solicitada",
+    "ficha_portabilidade",
 }
 
 PIPELINE_OPERATION_FIELDS = PENDING_OPERATION_FIELDS | {
@@ -57,6 +59,37 @@ PIPELINE_OPERATION_FIELDS = PENDING_OPERATION_FIELDS | {
     "link_formalizacao",
     "devolvida_em",
 }
+
+PORTABILITY_FORM_FIELDS = (
+    "vendedor_nome",
+    "banco_nome",
+    "cliente_negativo",
+    "cliente_nome",
+    "especie",
+    "uf_beneficio",
+    "numero_beneficio",
+    "data_nascimento",
+    "cpf",
+    "rg",
+    "data_emissao",
+    "nome_mae",
+    "telefone",
+    "email",
+    "cep",
+    "endereco",
+    "bairro",
+    "conta",
+    "agencia",
+    "banco",
+    "tipo_conta",
+    "banco_portado",
+    "contrato_portado",
+    "total_parcelas",
+    "parcelas_pagas",
+    "parcelas_restantes",
+    "saldo_quitacao",
+    "valor_parcela",
+)
 
 
 def build_operation_update(data, allowed_fields):
@@ -69,6 +102,60 @@ def build_operation_update(data, allowed_fields):
             params.append(data.get(field))
 
     return updates, params
+
+
+def normalize_portability_form(payload):
+    if payload is None:
+        return None
+
+    if isinstance(payload, str):
+        text = payload.strip()
+        if not text:
+            return None
+
+        try:
+            payload = json.loads(text)
+        except json.JSONDecodeError:
+            return None
+
+    if not isinstance(payload, dict):
+        return None
+
+    normalized = {}
+
+    for field in PORTABILITY_FORM_FIELDS:
+        value = payload.get(field, "")
+
+        if value is None:
+            normalized[field] = ""
+        elif isinstance(value, (int, float)):
+            normalized[field] = value
+        else:
+            normalized[field] = str(value).strip()
+
+    return normalized
+
+
+def serialize_portability_form(payload):
+    normalized = normalize_portability_form(payload)
+
+    if not normalized:
+        return None
+
+    if not any(str(value).strip() for value in normalized.values()):
+        return None
+
+    return json.dumps(normalized, ensure_ascii=False)
+
+
+def hydrate_operation_payload(operation):
+    if not isinstance(operation, dict):
+        return operation
+
+    operation["ficha_portabilidade"] = normalize_portability_form(
+        operation.get("ficha_portabilidade")
+    )
+    return operation
 
 
 def normalize_role(role):
@@ -117,7 +204,7 @@ def ensure_operations_extra_columns(cursor, db):
         FROM INFORMATION_SCHEMA.COLUMNS
         WHERE TABLE_SCHEMA = DATABASE()
           AND TABLE_NAME = 'operacoes'
-          AND COLUMN_NAME IN ('link_formalizacao', 'devolvida_em')
+          AND COLUMN_NAME IN ('link_formalizacao', 'devolvida_em', 'ficha_portabilidade')
         """
     )
 
@@ -133,6 +220,12 @@ def ensure_operations_extra_columns(cursor, db):
     if "devolvida_em" not in existing:
         cursor.execute(
             "ALTER TABLE operacoes ADD COLUMN devolvida_em DATETIME NULL"
+        )
+        changed = True
+
+    if "ficha_portabilidade" not in existing:
+        cursor.execute(
+            "ALTER TABLE operacoes ADD COLUMN ficha_portabilidade LONGTEXT NULL"
         )
         changed = True
 
@@ -307,9 +400,15 @@ def create_operation(client_id):
         return jsonify({"error": "Acesso não autorizado"}), 403
 
     data = request.get_json() or {}
+    produto = (data.get("produto") or "").strip().upper()
+    ficha_portabilidade = None
+
+    if produto in {"PORTABILIDADE", "PORTABILIDADE_REFIN"} or "ficha_portabilidade" in data:
+        ficha_portabilidade = serialize_portability_form(data.get("ficha_portabilidade"))
 
     db = get_db()
-    cursor = db.cursor()
+    cursor = db.cursor(dictionary=True)
+    ensure_operations_extra_columns(cursor, db)
 
     cursor.execute("""
         INSERT INTO operacoes (
@@ -320,17 +419,19 @@ def create_operation(client_id):
             prazo,
             valor_solicitado,
             parcela_solicitada,
+            ficha_portabilidade,
             status,
             criado_em
-        ) VALUES (%s,%s,%s,%s,%s,%s,%s,'PENDENTE', NOW())
+        ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,'PENDENTE', NOW())
     """, (
         client_id,
-        data.get("produto"),
+        produto,
         data.get("banco_digitacao"),
         data.get("margem"),
         data.get("prazo"),
         data.get("valor_solicitado"),
-        data.get("parcela_solicitada")
+        data.get("parcela_solicitada"),
+        ficha_portabilidade,
     ))
 
     db.commit()
@@ -413,7 +514,10 @@ def list_operations(client_id):
         ORDER BY criado_em DESC
     """, (client_id,))
 
-    operations = cursor.fetchall()
+    operations = [
+        hydrate_operation_payload(operation)
+        for operation in cursor.fetchall()
+    ]
 
     cursor.close()
     db.close()
@@ -749,6 +853,11 @@ def update_operation(operation_id):
     cursor = db.cursor(dictionary=True)
     ensure_operations_extra_columns(cursor, db)
 
+    if "ficha_portabilidade" in data:
+        data["ficha_portabilidade"] = serialize_portability_form(
+            data.get("ficha_portabilidade")
+        )
+
     cursor.execute(
         """
         SELECT
@@ -853,7 +962,7 @@ def update_operation(operation_id):
         "SELECT * FROM operacoes WHERE id=%s",
         (operation_id,)
     )
-    updated_operation = cursor.fetchone()
+    updated_operation = hydrate_operation_payload(cursor.fetchone())
 
     cursor.close()
     db.close()
@@ -1010,6 +1119,7 @@ def get_pipeline():
             o.parcela_liberada,
             o.link_formalizacao,
             o.devolvida_em,
+            o.ficha_portabilidade,
             o.prazo,
             o.status,
             o.criado_em,
@@ -1025,7 +1135,10 @@ def get_pipeline():
         ORDER BY o.criado_em ASC
     """)
 
-    operations = cursor.fetchall()
+    operations = [
+        hydrate_operation_payload(operation)
+        for operation in cursor.fetchall()
+    ]
 
     cursor.close()
     db.close()

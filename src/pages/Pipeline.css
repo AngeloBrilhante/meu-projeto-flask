@@ -23,6 +23,16 @@
   color: var(--text-secondary);
 }
 
+.pipelineInlineMessage {
+  margin-top: 8px;
+}
+
+.pipelineHint {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
 .tableWrapper {
   overflow-x: auto;
   border-radius: 14px;
@@ -60,6 +70,10 @@
 
 .pipelineTable tbody tr.clickableRow {
   cursor: pointer;
+}
+
+.pipelineTable tbody tr.selectedRow {
+  background: rgba(79, 117, 255, 0.14);
 }
 
 .pipelineTable .statusBadge {
@@ -112,7 +126,8 @@
 .saveBtn,
 .returnBtn,
 .approveBtn,
-.rejectBtn {
+.rejectBtn,
+.pipelineDownloadBtn {
   border: none;
   border-radius: 8px;
   height: 32px;
@@ -139,6 +154,12 @@
   background: #d25353;
 }
 
+.pipelineDownloadBtn {
+  background: transparent;
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+}
+
 .pipelineActions {
   display: flex;
   flex-wrap: wrap;
@@ -148,7 +169,212 @@
 .saveBtn:disabled,
 .returnBtn:disabled,
 .approveBtn:disabled,
-.rejectBtn:disabled {
+.rejectBtn:disabled,
+.pipelineDownloadBtn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+.pipelineDetailsCard {
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.pipelineDetailsHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.pipelineDetailsHeader h3 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.pipelineDetailsHeader p {
+  margin: 6px 0 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.pipelineDetailsGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.pipelineDetailsGrid article {
+  background: var(--surface-strong);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.pipelineDetailsGrid article.full {
+  grid-column: span 3;
+}
+
+.pipelineDetailsGrid span {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.pipelineDetailsGrid strong {
+  font-size: 14px;
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+.pipelineDetailsGrid strong a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.pipelineDetailsGrid strong a:hover {
+  text-decoration: underline;
+}
+
+.pipelineFichaSection {
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  background: var(--surface-strong);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.pipelineFichaSection h4 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.pipelineFichaGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pipelineFichaGroup h5 {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.pipelineFichaGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.pipelineFichaGrid article {
+  background: var(--surface);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.pipelineFichaGrid span {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.pipelineFichaGrid strong {
+  color: var(--text-primary);
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+.pipelineDocumentsBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pipelineDocumentsBlock h4 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.pipelineDocumentsList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.pipelineDocumentItem {
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: var(--surface-strong);
+  padding: 10px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+.pipelineDocumentItem strong {
+  display: block;
+  font-size: 13px;
+}
+
+.pipelineDocumentItem span {
+  display: block;
+  margin-top: 3px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.pipelineDocumentItem small {
+  display: block;
+  margin-top: 2px;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+@media (max-width: 1100px) {
+  .pipelineDetailsGrid,
+  .pipelineFichaGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .pipelineDetailsGrid article.full {
+    grid-column: span 2;
+  }
+}
+
+@media (max-width: 760px) {
+  .pipelineDetailsHeader {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .pipelineDetailsGrid,
+  .pipelineFichaGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .pipelineDetailsGrid article.full {
+    grid-column: span 1;
+  }
+
+  .pipelineDocumentItem {
+    flex-direction: column;
+    align-items: flex-start;
+  }
 }
