@@ -19,7 +19,7 @@ def create_user():
     claims = get_jwt()
 
     # 🔐 somente ADM pode criar usuários
-    if claims.get("role") != "ADM":
+    if (claims.get("role") or "").upper() != "ADMIN":
         return jsonify({"error": "Acesso não autorizado"}), 403
 
     data = request.get_json(force=True)
@@ -44,7 +44,7 @@ def create_user():
     try:
         cursor.execute(
             """
-            INSERT INTO usuarios (nome, email, senha, role)
+            INSERT INTO usuarios (nome, email, senha_hash, role)
             VALUES (%s, %s, %s, %s)
             """,
             (nome, email, senha_hash, role)
@@ -72,7 +72,7 @@ def create_user():
 # ======================================================
 # 🔐 LOGIN (GERA TOKEN)
 # ======================================================
-@users_bp.route("/login", methods=["POST"])
+@users_bp.route("/users/login", methods=["POST"])
 def login():
     data = request.get_json()
 
@@ -90,7 +90,7 @@ def login():
 
     cursor.execute(
         """
-        SELECT id, nome, email, senha, role
+        SELECT id, nome, email, senha_hash, role
         FROM usuarios
         WHERE email = %s
         """,
@@ -102,7 +102,7 @@ def login():
     cursor.close()
     db.close()
 
-    if not user or not check_password_hash(user["senha"], senha):
+    if not user or not check_password_hash(user["senha_hash"], senha):
         return jsonify({"error": "Credenciais inválidas"}), 401
 
     # ✅ identity precisa ser STRING
