@@ -27,22 +27,26 @@ const PRODUCT_OPTIONS = [
 ];
 
 const STATUS_LABELS = {
-  PENDENTE: "Pendente",
-  ENVIADA_ESTEIRA: "Enviada para esteira",
-  EM_DIGITACAO: "Em digitação",
-  AGUARDANDO_FORMALIZACAO: "Aguardando formalização",
-  FORMALIZADA: "Formalizada",
-  EM_ANALISE_BANCO: "Em análise banco",
-  PENDENTE_BANCO: "Pendente banco",
-  EM_TRATATIVA_VENDEDOR: "Em tratativa vendedor",
-  REENVIADA_BANCO: "Reenviada ao banco",
+  PRONTA_DIGITAR: "Pronta para digitar",
+  EM_DIGITACAO: "Em digitacao",
+  AGUARDANDO_FORMALIZACAO: "Aguardando formalizacao",
+  ANALISE_BANCO: "Analise do banco",
+  PENDENCIA: "Pendencia",
+  DEVOLVIDA_VENDEDOR: "Devolvida para vendedor",
   APROVADO: "Aprovada",
   REPROVADO: "Reprovada",
 };
 
 const LEGACY_STATUS_MAP = {
-  EM_ANALISE: "EM_ANALISE_BANCO",
-  DEVOLVIDA: "AGUARDANDO_FORMALIZACAO",
+  PENDENTE: "PRONTA_DIGITAR",
+  ENVIADA_ESTEIRA: "PRONTA_DIGITAR",
+  FORMALIZADA: "ANALISE_BANCO",
+  EM_ANALISE_BANCO: "ANALISE_BANCO",
+  PENDENTE_BANCO: "PENDENCIA",
+  EM_TRATATIVA_VENDEDOR: "DEVOLVIDA_VENDEDOR",
+  REENVIADA_BANCO: "ANALISE_BANCO",
+  EM_ANALISE: "ANALISE_BANCO",
+  DEVOLVIDA: "DEVOLVIDA_VENDEDOR",
 };
 
 function normalizeStatus(status) {
@@ -93,7 +97,6 @@ export default function ClientOperations() {
   const [form, setForm] = useState(EMPTY_FORM);
 
   const user = useMemo(() => getStoredUser(), []);
-  const isVendor = String(user?.role || "").toUpperCase() === "VENDEDOR";
   const formSchema = getOperationSchema(form.produto);
 
   async function loadOperations() {
@@ -227,33 +230,6 @@ export default function ClientOperations() {
       alert("Operação enviada para esteira");
     } catch (error) {
       alert(error.message || "Não foi possível enviar para esteira");
-    }
-  }
-
-  async function handlePendingResponse(operation) {
-    const initial = String(operation.pendencia_resposta_vendedor || "");
-    const response = window.prompt(
-      "Descreva a resposta da pendência para o banco:",
-      initial
-    );
-
-    if (response === null) return;
-
-    const text = String(response || "").trim();
-    if (!text) {
-      alert("Informe a resposta para continuar.");
-      return;
-    }
-
-    try {
-      await updateOperation(operation.id, {
-        pendencia_resposta_vendedor: text,
-        status: "EM_TRATATIVA_VENDEDOR",
-      });
-      await loadOperations();
-      alert("Resposta registrada. Agora você pode reenviar ao banco.");
-    } catch (error) {
-      alert(error.message || "Não foi possível registrar a resposta.");
     }
   }
 
@@ -408,20 +384,21 @@ export default function ClientOperations() {
                 <th>Ficha</th>
                 <th>Status</th>
                 <th>Pendência banco</th>
-                <th>Resposta vendedor</th>
                 <th>Ação</th>
               </tr>
             </thead>
             <tbody>
               {sortedOperations.map((operation) => {
                 const normalizedStatus = normalizeStatus(operation.status);
-                const canEdit = normalizedStatus === "PENDENTE";
+                const isReadyToSend =
+                  normalizedStatus === "PRONTA_DIGITAR" &&
+                  !operation.enviada_esteira_em;
+                const canEdit =
+                  isReadyToSend || normalizedStatus === "DEVOLVIDA_VENDEDOR";
                 const canSend =
-                  normalizedStatus === "PENDENTE" ||
-                  normalizedStatus === "PENDENTE_BANCO" ||
-                  normalizedStatus === "EM_TRATATIVA_VENDEDOR";
-                const canRespondPending =
-                  isVendor && normalizedStatus === "PENDENTE_BANCO";
+                  isReadyToSend ||
+                  normalizedStatus === "AGUARDANDO_FORMALIZACAO" ||
+                  normalizedStatus === "DEVOLVIDA_VENDEDOR";
 
                 return (
                   <tr key={operation.id}>
@@ -446,7 +423,6 @@ export default function ClientOperations() {
                       </span>
                     </td>
                     <td>{operation.pendencia_motivo || "-"}</td>
-                    <td>{operation.pendencia_resposta_vendedor || "-"}</td>
                     <td>
                       <div className="operationTableActions">
                         {canEdit && (
@@ -459,23 +435,17 @@ export default function ClientOperations() {
                           </button>
                         )}
 
-                        {canRespondPending && (
-                          <button
-                            type="button"
-                            className="clientGhostButton"
-                            onClick={() => handlePendingResponse(operation)}
-                          >
-                            Responder pendência
-                          </button>
-                        )}
-
                         {canSend && (
                           <button
                             type="button"
                             className="clientPrimaryButton"
                             onClick={() => handleSend(operation.id)}
                           >
-                            {normalizedStatus === "PENDENTE" ? "Enviar" : "Reenviar"}
+                            {isReadyToSend
+                              ? "Enviar para esteira"
+                              : normalizedStatus === "AGUARDANDO_FORMALIZACAO"
+                              ? "Enviar para analise do banco"
+                              : "Reenviar para analise"}
                           </button>
                         )}
                       </div>
@@ -490,3 +460,6 @@ export default function ClientOperations() {
     </div>
   );
 }
+
+
+

@@ -389,12 +389,8 @@
   font-weight: 700;
 }
 
-.operationStatusBadge.PENDENTE {
+.operationStatusBadge.PRONTA_DIGITAR {
   background: #7f8ba5;
-}
-
-.operationStatusBadge.EM_ANALISE {
-  background: #4f75ff;
 }
 
 .operationStatusBadge.APROVADO {
@@ -405,24 +401,17 @@
   background: #d25353;
 }
 
-.operationStatusBadge.DEVOLVIDA {
-  background: #2f53cc;
-}
-
-.operationStatusBadge.ENVIADA_ESTEIRA,
 .operationStatusBadge.EM_DIGITACAO,
 .operationStatusBadge.AGUARDANDO_FORMALIZACAO,
-.operationStatusBadge.FORMALIZADA,
-.operationStatusBadge.EM_ANALISE_BANCO,
-.operationStatusBadge.REENVIADA_BANCO {
+.operationStatusBadge.ANALISE_BANCO {
   background: #4f75ff;
 }
 
-.operationStatusBadge.PENDENTE_BANCO {
+.operationStatusBadge.PENDENCIA {
   background: #2f53cc;
 }
 
-.operationStatusBadge.EM_TRATATIVA_VENDEDOR {
+.operationStatusBadge.DEVOLVIDA_VENDEDOR {
   background: #6b55d8;
 }
 

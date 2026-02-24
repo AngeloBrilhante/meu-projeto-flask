@@ -160,12 +160,22 @@
   color: #fff;
 }
 
-.clientsStatusBadge.PENDENTE {
+.clientsStatusBadge.PRONTA_DIGITAR {
   background: #7f8ba5;
 }
 
-.clientsStatusBadge.EM_ANALISE {
+.clientsStatusBadge.EM_DIGITACAO,
+.clientsStatusBadge.AGUARDANDO_FORMALIZACAO,
+.clientsStatusBadge.ANALISE_BANCO {
   background: #4f75ff;
+}
+
+.clientsStatusBadge.PENDENCIA {
+  background: #2f53cc;
+}
+
+.clientsStatusBadge.DEVOLVIDA_VENDEDOR {
+  background: #6b55d8;
 }
 
 .clientsStatusBadge.APROVADO {

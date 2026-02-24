@@ -3,9 +3,38 @@ import { useNavigate } from "react-router-dom";
 import { listClients, getOperationStats } from "../services/api";
 import "./Clients.css";
 
+const LEGACY_STATUS_MAP = {
+  PENDENTE: "PRONTA_DIGITAR",
+  ENVIADA_ESTEIRA: "PRONTA_DIGITAR",
+  FORMALIZADA: "ANALISE_BANCO",
+  EM_ANALISE_BANCO: "ANALISE_BANCO",
+  PENDENTE_BANCO: "PENDENCIA",
+  EM_TRATATIVA_VENDEDOR: "DEVOLVIDA_VENDEDOR",
+  REENVIADA_BANCO: "ANALISE_BANCO",
+  EM_ANALISE: "ANALISE_BANCO",
+  DEVOLVIDA: "DEVOLVIDA_VENDEDOR",
+};
+
+const STATUS_LABELS = {
+  PRONTA_DIGITAR: "Pronta para digitar",
+  EM_DIGITACAO: "Em digitacao",
+  AGUARDANDO_FORMALIZACAO: "Aguardando formalizacao",
+  ANALISE_BANCO: "Analise do banco",
+  PENDENCIA: "Pendencia",
+  DEVOLVIDA_VENDEDOR: "Devolvida para vendedor",
+  APROVADO: "Aprovada",
+  REPROVADO: "Reprovada",
+};
+
+function normalizeStatus(value) {
+  const normalized = String(value || "").trim().toUpperCase();
+  return LEGACY_STATUS_MAP[normalized] || normalized;
+}
+
 function statusLabel(value) {
-  if (!value) return "SEM OPERACAO";
-  return value.replaceAll("_", " ");
+  if (!value) return "Sem operacao";
+  const normalized = normalizeStatus(value);
+  return STATUS_LABELS[normalized] || normalized.replaceAll("_", " ");
 }
 
 export default function Clients() {
@@ -41,7 +70,7 @@ export default function Clients() {
     try {
       const data = await getOperationStats(selectedPeriod);
       setStats(data);
-    } catch (err) {
+    } catch {
       setStats({
         aprovados: 0,
         em_analise: 0,
@@ -77,7 +106,7 @@ export default function Clients() {
       <div className="clientsStats">
         <label className="clientsPeriodFilter">
           Periodo
-          <select value={period} onChange={(e) => setPeriod(e.target.value)}>
+          <select value={period} onChange={(event) => setPeriod(event.target.value)}>
             <option value="day">Hoje</option>
             <option value="week">Semana</option>
             <option value="month">Mes</option>
@@ -107,7 +136,7 @@ export default function Clients() {
               type="text"
               placeholder="Buscar por nome, CPF, beneficio..."
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(event) => setSearch(event.target.value)}
             />
           </label>
         </div>
@@ -124,7 +153,7 @@ export default function Clients() {
             </thead>
             <tbody>
               {filteredClients.map((client) => {
-                const status = client.last_operation_status || "SEM_OPERACAO";
+                const status = normalizeStatus(client.last_operation_status || "SEM_OPERACAO");
 
                 return (
                   <tr

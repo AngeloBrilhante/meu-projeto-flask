@@ -67,27 +67,25 @@ PIPELINE_OPERATION_FIELDS = PENDING_OPERATION_FIELDS | {
     "motivo_reprovacao",
 }
 
-PENDING_BANK_VENDOR_FIELDS = {
-    "ficha_portabilidade",
-    "pendencia_resposta_vendedor",
-    "pendencia_respondida_em",
-    "status",
-}
-
 FINAL_OPERATION_STATUSES = {"APROVADO", "REPROVADO"}
 
 PIPELINE_ACTIVE_STATUSES = (
-    "ENVIADA_ESTEIRA",
+    "PRONTA_DIGITAR",
     "EM_DIGITACAO",
     "AGUARDANDO_FORMALIZACAO",
+    "ANALISE_BANCO",
+    "PENDENCIA",
+    "DEVOLVIDA_VENDEDOR",
+)
+
+PIPELINE_ACTIVE_STATUSES_WITH_LEGACY = PIPELINE_ACTIVE_STATUSES + (
+    "PENDENTE",
+    "ENVIADA_ESTEIRA",
     "FORMALIZADA",
     "EM_ANALISE_BANCO",
     "PENDENTE_BANCO",
     "EM_TRATATIVA_VENDEDOR",
     "REENVIADA_BANCO",
-)
-
-PIPELINE_ACTIVE_STATUSES_WITH_LEGACY = PIPELINE_ACTIVE_STATUSES + (
     "EM_ANALISE",
     "DEVOLVIDA",
 )
@@ -95,8 +93,15 @@ PIPELINE_ACTIVE_STATUSES_WITH_LEGACY = PIPELINE_ACTIVE_STATUSES + (
 VALID_PIPELINE_STATUS_UPDATES = set(PIPELINE_ACTIVE_STATUSES) | FINAL_OPERATION_STATUSES
 
 LEGACY_STATUS_MAP = {
-    "EM_ANALISE": "EM_ANALISE_BANCO",
-    "DEVOLVIDA": "AGUARDANDO_FORMALIZACAO",
+    "PENDENTE": "PRONTA_DIGITAR",
+    "ENVIADA_ESTEIRA": "PRONTA_DIGITAR",
+    "FORMALIZADA": "ANALISE_BANCO",
+    "EM_ANALISE_BANCO": "ANALISE_BANCO",
+    "PENDENTE_BANCO": "PENDENCIA",
+    "EM_TRATATIVA_VENDEDOR": "DEVOLVIDA_VENDEDOR",
+    "REENVIADA_BANCO": "ANALISE_BANCO",
+    "EM_ANALISE": "ANALISE_BANCO",
+    "DEVOLVIDA": "DEVOLVIDA_VENDEDOR",
 }
 
 PORTABILITY_FORM_FIELDS = (
@@ -265,6 +270,7 @@ def ensure_operations_extra_columns(cursor, db):
           AND TABLE_NAME = 'operacoes'
           AND COLUMN_NAME IN (
               'status',
+              'enviada_esteira_em',
               'link_formalizacao',
               'devolvida_em',
               'ficha_portabilidade',
@@ -296,6 +302,12 @@ def ensure_operations_extra_columns(cursor, db):
     if "link_formalizacao" not in existing:
         cursor.execute(
             "ALTER TABLE operacoes ADD COLUMN link_formalizacao VARCHAR(500) NULL"
+        )
+        changed = True
+
+    if "enviada_esteira_em" not in existing:
+        cursor.execute(
+            "ALTER TABLE operacoes ADD COLUMN enviada_esteira_em DATETIME NULL"
         )
         changed = True
 
@@ -546,7 +558,7 @@ def create_operation(client_id):
             ficha_portabilidade,
             status,
             criado_em
-        ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,'PENDENTE', NOW())
+        ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,'PRONTA_DIGITAR', NOW())
     """, (
         client_id,
         produto,
@@ -1052,7 +1064,8 @@ def update_operation(operation_id):
         SELECT
             o.id,
             o.status,
-            o.pendencia_resposta_vendedor,
+            o.enviada_esteira_em,
+            o.pendencia_motivo,
             c.vendedor_id
         FROM operacoes o
         JOIN clientes c ON c.id = o.cliente_id
@@ -1068,6 +1081,7 @@ def update_operation(operation_id):
         return jsonify({"error": "Operacao nao encontrada"}), 404
 
     current_status = normalize_operation_status(operation.get("status"))
+    sent_to_pipeline = operation.get("enviada_esteira_em") is not None
     allowed_fields = set()
 
     if role == "VENDEDOR":
@@ -1076,48 +1090,38 @@ def update_operation(operation_id):
             db.close()
             return jsonify({"error": "Voce nao pode editar essa operacao"}), 403
 
-        if current_status == "PENDENTE":
+        if current_status == "PRONTA_DIGITAR":
+            if sent_to_pipeline:
+                cursor.close()
+                db.close()
+                return jsonify({
+                    "error": "Operacao ja enviada para esteira. Aguarde retorno."
+                }), 400
+
             if "status" in data:
                 next_status = normalize_operation_status(data.get("status"))
-                if next_status != "PENDENTE":
+                if next_status != "PRONTA_DIGITAR":
                     cursor.close()
                     db.close()
                     return jsonify({
                         "error": "Para enviar para esteira, use o botao de envio"
                     }), 400
-                data["status"] = "PENDENTE"
+                data["status"] = "PRONTA_DIGITAR"
 
             allowed_fields = PENDING_OPERATION_FIELDS
 
-        elif current_status in {"PENDENTE_BANCO", "EM_TRATATIVA_VENDEDOR"}:
+        elif current_status == "DEVOLVIDA_VENDEDOR":
             if "status" in data:
                 next_status = normalize_operation_status(data.get("status"))
-                if next_status != "EM_TRATATIVA_VENDEDOR":
+                if next_status != "DEVOLVIDA_VENDEDOR":
                     cursor.close()
                     db.close()
                     return jsonify({
-                        "error": "Vendedor pode somente registrar tratativa da pendencia"
+                        "error": "Edite os dados e use o botao de reenviar para esteira"
                     }), 400
                 data["status"] = next_status
-            else:
-                data["status"] = "EM_TRATATIVA_VENDEDOR"
 
-            response_text = str(data.get("pendencia_resposta_vendedor") or "").strip()
-            if not response_text:
-                response_text = str(
-                    operation.get("pendencia_resposta_vendedor") or ""
-                ).strip()
-
-            if not response_text:
-                cursor.close()
-                db.close()
-                return jsonify({
-                    "error": "Informe a resposta da pendencia antes de reenviar"
-                }), 400
-
-            data["pendencia_resposta_vendedor"] = response_text
-            data["pendencia_respondida_em"] = now_str
-            allowed_fields = PENDING_BANK_VENDOR_FIELDS
+            allowed_fields = PENDING_OPERATION_FIELDS
 
         else:
             cursor.close()
@@ -1134,17 +1138,15 @@ def update_operation(operation_id):
                 "error": "Operacao finalizada. Nao e possivel editar."
             }), 400
 
-        if current_status == "PENDENTE":
+        if current_status == "PRONTA_DIGITAR" and not sent_to_pipeline:
             if "status" in data:
                 next_status = normalize_operation_status(data.get("status"))
-                if next_status != "PENDENTE":
+                if next_status != "PRONTA_DIGITAR":
                     cursor.close()
                     db.close()
                     return jsonify({
-                        "error": "Para enviar para esteira, use o botao de envio"
+                        "error": "Envie para esteira antes de alterar o fluxo"
                     }), 400
-                data["status"] = "PENDENTE"
-
             allowed_fields = PENDING_OPERATION_FIELDS
         else:
             allowed_fields = PIPELINE_OPERATION_FIELDS
@@ -1155,6 +1157,34 @@ def update_operation(operation_id):
                     cursor.close()
                     db.close()
                     return jsonify({"error": "Status invalido para a esteira"}), 400
+
+                allowed_transitions = {
+                    "PRONTA_DIGITAR": {"PRONTA_DIGITAR", "EM_DIGITACAO"},
+                    "EM_DIGITACAO": {"EM_DIGITACAO", "AGUARDANDO_FORMALIZACAO"},
+                    "AGUARDANDO_FORMALIZACAO": {"AGUARDANDO_FORMALIZACAO", "ANALISE_BANCO"},
+                    "ANALISE_BANCO": {"ANALISE_BANCO", "PENDENCIA", "APROVADO", "REPROVADO"},
+                    "PENDENCIA": {"PENDENCIA", "ANALISE_BANCO", "DEVOLVIDA_VENDEDOR"},
+                    "DEVOLVIDA_VENDEDOR": {"DEVOLVIDA_VENDEDOR", "ANALISE_BANCO"},
+                }
+
+                allowed_next = allowed_transitions.get(current_status, {current_status})
+                if next_status not in allowed_next:
+                    cursor.close()
+                    db.close()
+                    return jsonify({
+                        "error": "Transicao de status invalida para o fluxo atual"
+                    }), 400
+
+                if (
+                    current_status == "PRONTA_DIGITAR"
+                    and next_status == "EM_DIGITACAO"
+                    and not sent_to_pipeline
+                ):
+                    cursor.close()
+                    db.close()
+                    return jsonify({
+                        "error": "Envie para esteira antes de iniciar digitacao"
+                    }), 400
 
                 data["status"] = next_status
 
@@ -1169,10 +1199,14 @@ def update_operation(operation_id):
                     data["link_formalizacao"] = link
                     data["devolvida_em"] = now_str
 
-                if next_status == "FORMALIZADA" and "formalizado_em" not in data:
+                if (
+                    current_status == "AGUARDANDO_FORMALIZACAO"
+                    and next_status == "ANALISE_BANCO"
+                    and "formalizado_em" not in data
+                ):
                     data["formalizado_em"] = now_str
 
-                if next_status == "PENDENTE_BANCO":
+                if next_status == "PENDENCIA":
                     reason = str(data.get("pendencia_motivo") or "").strip()
                     if not reason:
                         cursor.close()
@@ -1182,6 +1216,18 @@ def update_operation(operation_id):
                         }), 400
                     data["pendencia_motivo"] = reason
                     data["pendencia_aberta_em"] = now_str
+
+                if next_status == "DEVOLVIDA_VENDEDOR":
+                    reason = str(data.get("pendencia_motivo") or "").strip()
+                    if not reason:
+                        reason = str(operation.get("pendencia_motivo") or "").strip()
+                    if not reason:
+                        cursor.close()
+                        db.close()
+                        return jsonify({
+                            "error": "Informe o motivo para devolver ao vendedor"
+                        }), 400
+                    data["pendencia_motivo"] = reason
 
                 if next_status == "APROVADO" and "data_pagamento" not in data:
                     data["data_pagamento"] = now_str
@@ -1202,15 +1248,6 @@ def update_operation(operation_id):
 
             if "pendencia_motivo" in data and data.get("pendencia_motivo") is not None:
                 data["pendencia_motivo"] = str(data.get("pendencia_motivo") or "").strip()
-
-            if (
-                "pendencia_resposta_vendedor" in data
-                and data.get("pendencia_resposta_vendedor") is not None
-            ):
-                reply = str(data.get("pendencia_resposta_vendedor") or "").strip()
-                data["pendencia_resposta_vendedor"] = reply
-                if reply and "pendencia_respondida_em" not in data:
-                    data["pendencia_respondida_em"] = now_str
 
             if "motivo_reprovacao" in data and data.get("motivo_reprovacao") is not None:
                 data["motivo_reprovacao"] = str(data.get("motivo_reprovacao") or "").strip()
@@ -1277,7 +1314,7 @@ def send_operation_to_pipeline(operation_id):
             SELECT
                 o.id,
                 o.status,
-                o.pendencia_resposta_vendedor,
+                o.enviada_esteira_em,
                 c.vendedor_id
             FROM operacoes o
             JOIN clientes c ON c.id = o.cliente_id
@@ -1294,41 +1331,43 @@ def send_operation_to_pipeline(operation_id):
             return jsonify({"error": "Voce nao pode enviar essa operacao"}), 403
 
         current_status = normalize_operation_status(operation.get("status"))
-        next_status = None
+        sent_to_pipeline = operation.get("enviada_esteira_em") is not None
+        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        updates = []
+        params = []
+        next_status = current_status
 
         if current_status in FINAL_OPERATION_STATUSES:
             return jsonify({
                 "error": "Operacao finalizada nao pode voltar para esteira"
             }), 400
 
-        if current_status == "PENDENTE":
-            next_status = "ENVIADA_ESTEIRA"
-        elif current_status in {"PENDENTE_BANCO", "EM_TRATATIVA_VENDEDOR"}:
-            response_text = str(
-                operation.get("pendencia_resposta_vendedor") or ""
-            ).strip()
-            if not response_text:
-                return jsonify({
-                    "error": "Informe a resposta da pendencia antes de reenviar"
-                }), 400
-            next_status = "REENVIADA_BANCO"
+        if current_status == "PRONTA_DIGITAR":
+            if sent_to_pipeline:
+                return jsonify({"error": "Operacao ja esta na esteira"}), 400
 
-        if not next_status and current_status in PIPELINE_ACTIVE_STATUSES_WITH_LEGACY:
+            updates.append("status=%s")
+            params.append("PRONTA_DIGITAR")
+            updates.append("enviada_esteira_em=%s")
+            params.append(now_str)
+
+        elif current_status in {"AGUARDANDO_FORMALIZACAO", "DEVOLVIDA_VENDEDOR"}:
+            next_status = "ANALISE_BANCO"
+            updates.extend([
+                "status=%s",
+                "formalizado_em=COALESCE(formalizado_em, %s)",
+                "devolvida_em=NULL",
+            ])
+            params.extend([next_status, now_str])
+
+        elif current_status in PIPELINE_ACTIVE_STATUSES:
             return jsonify({"error": "Operacao ja esta na esteira"}), 400
 
-        if not next_status:
+        else:
             return jsonify({"error": "Status da operacao invalido para envio"}), 400
 
-        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        updates = ["status=%s"]
-        params = [next_status]
-
-        if next_status == "REENVIADA_BANCO":
-            updates.append("devolvida_em=NULL")
-            updates.append(
-                "pendencia_respondida_em=COALESCE(pendencia_respondida_em, %s)"
-            )
-            params.append(now_str)
+        if not updates:
+            return jsonify({"error": "Nada para atualizar"}), 400
 
         params.append(operation_id)
         cursor.execute(
@@ -1411,6 +1450,7 @@ def get_pipeline():
             o.parcela_solicitada,
             o.valor_liberado,
             o.parcela_liberada,
+            o.enviada_esteira_em,
             o.link_formalizacao,
             o.devolvida_em,
             o.formalizado_em,
@@ -1433,6 +1473,10 @@ def get_pipeline():
         JOIN clientes c ON c.id = o.cliente_id
         LEFT JOIN usuarios u ON u.id = c.vendedor_id
         WHERE o.status IN ({status_placeholders})
+          AND (
+              o.status NOT IN ('PRONTA_DIGITAR', 'PENDENTE')
+              OR o.enviada_esteira_em IS NOT NULL
+          )
         ORDER BY o.criado_em ASC
     """, tuple(PIPELINE_ACTIVE_STATUSES_WITH_LEGACY))
 
@@ -1609,7 +1653,11 @@ def get_operations_stats():
             SUM(CASE WHEN o.status='APROVADO' THEN 1 ELSE 0 END) as aprovados,
             SUM(
                 CASE
-                    WHEN o.status IN ({active_status_placeholders}) THEN 1
+                    WHEN o.status IN ({active_status_placeholders})
+                         AND (
+                            o.status NOT IN ('PRONTA_DIGITAR', 'PENDENTE')
+                            OR o.enviada_esteira_em IS NOT NULL
+                         ) THEN 1
                     ELSE 0
                 END
             ) as em_analise,
@@ -1672,7 +1720,11 @@ def get_dashboard_summary():
                 COUNT(*) AS generated_operations,
                 SUM(
                     CASE
-                        WHEN o.status IN ({sent_status_placeholders}) THEN 1
+                        WHEN o.status IN ({sent_status_placeholders})
+                             AND (
+                                o.status NOT IN ('PRONTA_DIGITAR', 'PENDENTE')
+                                OR o.enviada_esteira_em IS NOT NULL
+                             ) THEN 1
                         ELSE 0
                     END
                 ) AS sent_to_pipeline
@@ -1730,6 +1782,10 @@ def get_dashboard_summary():
             FROM operacoes o
             JOIN clientes c ON c.id = o.cliente_id
             WHERE o.status IN ({pipeline_status_placeholders})
+              AND (
+                  o.status NOT IN ('PRONTA_DIGITAR', 'PENDENTE')
+                  OR o.enviada_esteira_em IS NOT NULL
+              )
               {pipeline_vendor_clause}
             """,
             tuple(pipeline_params),
@@ -1974,6 +2030,10 @@ def get_dashboard_notifications():
             FROM operacoes o
             JOIN clientes c ON c.id = o.cliente_id
             WHERE o.status IN ({active_status_placeholders})
+              AND (
+                  o.status NOT IN ('PRONTA_DIGITAR', 'PENDENTE')
+                  OR o.enviada_esteira_em IS NOT NULL
+              )
               {vendor_clause}
             """,
             tuple(params),
