@@ -35,7 +35,7 @@ MONTH_LABELS = [
 
 
 # ======================================================
-# UTILITÁRIOS
+# UTILITÃRIOS
 # ======================================================
 def allowed_file(filename):
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
@@ -58,6 +58,45 @@ PIPELINE_OPERATION_FIELDS = PENDING_OPERATION_FIELDS | {
     "data_pagamento",
     "link_formalizacao",
     "devolvida_em",
+    "formalizado_em",
+    "pendencia_tipo",
+    "pendencia_motivo",
+    "pendencia_aberta_em",
+    "pendencia_resposta_vendedor",
+    "pendencia_respondida_em",
+    "motivo_reprovacao",
+}
+
+PENDING_BANK_VENDOR_FIELDS = {
+    "ficha_portabilidade",
+    "pendencia_resposta_vendedor",
+    "pendencia_respondida_em",
+    "status",
+}
+
+FINAL_OPERATION_STATUSES = {"APROVADO", "REPROVADO"}
+
+PIPELINE_ACTIVE_STATUSES = (
+    "ENVIADA_ESTEIRA",
+    "EM_DIGITACAO",
+    "AGUARDANDO_FORMALIZACAO",
+    "FORMALIZADA",
+    "EM_ANALISE_BANCO",
+    "PENDENTE_BANCO",
+    "EM_TRATATIVA_VENDEDOR",
+    "REENVIADA_BANCO",
+)
+
+PIPELINE_ACTIVE_STATUSES_WITH_LEGACY = PIPELINE_ACTIVE_STATUSES + (
+    "EM_ANALISE",
+    "DEVOLVIDA",
+)
+
+VALID_PIPELINE_STATUS_UPDATES = set(PIPELINE_ACTIVE_STATUSES) | FINAL_OPERATION_STATUSES
+
+LEGACY_STATUS_MAP = {
+    "EM_ANALISE": "EM_ANALISE_BANCO",
+    "DEVOLVIDA": "AGUARDANDO_FORMALIZACAO",
 }
 
 PORTABILITY_FORM_FIELDS = (
@@ -174,6 +213,11 @@ def normalize_role(role):
     return (role or "").strip().upper()
 
 
+def normalize_operation_status(status):
+    normalized = (status or "").strip().upper()
+    return LEGACY_STATUS_MAP.get(normalized, normalized)
+
+
 def parse_dashboard_period(month, year):
     if month < 1 or month > 12:
         return None, None, "Mes invalido. Use um valor entre 1 e 12."
@@ -212,16 +256,42 @@ def ensure_dashboard_goals_table(cursor, db):
 def ensure_operations_extra_columns(cursor, db):
     cursor.execute(
         """
-        SELECT COLUMN_NAME
+        SELECT
+            COLUMN_NAME,
+            DATA_TYPE,
+            CHARACTER_MAXIMUM_LENGTH
         FROM INFORMATION_SCHEMA.COLUMNS
         WHERE TABLE_SCHEMA = DATABASE()
           AND TABLE_NAME = 'operacoes'
-          AND COLUMN_NAME IN ('link_formalizacao', 'devolvida_em', 'ficha_portabilidade')
+          AND COLUMN_NAME IN (
+              'status',
+              'link_formalizacao',
+              'devolvida_em',
+              'ficha_portabilidade',
+              'formalizado_em',
+              'pendencia_tipo',
+              'pendencia_motivo',
+              'pendencia_aberta_em',
+              'pendencia_resposta_vendedor',
+              'pendencia_respondida_em',
+              'motivo_reprovacao'
+          )
         """
     )
 
-    existing = {row["COLUMN_NAME"] for row in cursor.fetchall()}
+    existing = {row["COLUMN_NAME"]: row for row in cursor.fetchall()}
     changed = False
+
+    status_column = existing.get("status")
+    if status_column:
+        status_type = str(status_column.get("DATA_TYPE") or "").lower()
+        status_len = status_column.get("CHARACTER_MAXIMUM_LENGTH") or 0
+
+        if status_type != "varchar" or status_len < 50:
+            cursor.execute(
+                "ALTER TABLE operacoes MODIFY COLUMN status VARCHAR(50) NOT NULL"
+            )
+            changed = True
 
     if "link_formalizacao" not in existing:
         cursor.execute(
@@ -238,6 +308,48 @@ def ensure_operations_extra_columns(cursor, db):
     if "ficha_portabilidade" not in existing:
         cursor.execute(
             "ALTER TABLE operacoes ADD COLUMN ficha_portabilidade LONGTEXT NULL"
+        )
+        changed = True
+
+    if "formalizado_em" not in existing:
+        cursor.execute(
+            "ALTER TABLE operacoes ADD COLUMN formalizado_em DATETIME NULL"
+        )
+        changed = True
+
+    if "pendencia_tipo" not in existing:
+        cursor.execute(
+            "ALTER TABLE operacoes ADD COLUMN pendencia_tipo VARCHAR(120) NULL"
+        )
+        changed = True
+
+    if "pendencia_motivo" not in existing:
+        cursor.execute(
+            "ALTER TABLE operacoes ADD COLUMN pendencia_motivo TEXT NULL"
+        )
+        changed = True
+
+    if "pendencia_aberta_em" not in existing:
+        cursor.execute(
+            "ALTER TABLE operacoes ADD COLUMN pendencia_aberta_em DATETIME NULL"
+        )
+        changed = True
+
+    if "pendencia_resposta_vendedor" not in existing:
+        cursor.execute(
+            "ALTER TABLE operacoes ADD COLUMN pendencia_resposta_vendedor TEXT NULL"
+        )
+        changed = True
+
+    if "pendencia_respondida_em" not in existing:
+        cursor.execute(
+            "ALTER TABLE operacoes ADD COLUMN pendencia_respondida_em DATETIME NULL"
+        )
+        changed = True
+
+    if "motivo_reprovacao" not in existing:
+        cursor.execute(
+            "ALTER TABLE operacoes ADD COLUMN motivo_reprovacao TEXT NULL"
         )
         changed = True
 
@@ -309,7 +421,7 @@ def resolve_dashboard_goal(cursor, year, month, vendedor_id):
 
 
 # ======================================================
-# ➕ CRIAR CLIENTE
+# âž• CRIAR CLIENTE
 # ======================================================
 @clients_bp.route("/clients", methods=["POST"])
 @jwt_required()
@@ -323,16 +435,16 @@ def create_client():
     role = (current_user_role() or "").upper()
     user_id = current_user_id()
 
-    print("ROLE EXTRAÍDA:", role)
+    print("ROLE EXTRAÃDA:", role)
     print("USER_ID:", user_id)
 
     if role not in ["ADMIN", "VENDEDOR"]:
-        return jsonify({"error": "Permissão negada"}), 403
+        return jsonify({"error": "PermissÃ£o negada"}), 403
 
     vendedor_id = user_id if role == "VENDEDOR" else data.get("vendedor_id")
 
     if not vendedor_id:
-        return jsonify({"error": "vendedor_id é obrigatório"}), 400
+        return jsonify({"error": "vendedor_id Ã© obrigatÃ³rio"}), 400
 
     db = get_db()
     cursor = db.cursor()
@@ -401,7 +513,7 @@ def create_client():
 
 
 # ======================================================
-# 📃 CRIAR OPERAÇÕES
+# ðŸ“ƒ CRIAR OPERAÃ‡Ã•ES
 # ======================================================
 
 @clients_bp.route("/clients/<int:client_id>/operations", methods=["POST"])
@@ -409,7 +521,7 @@ def create_client():
 def create_operation(client_id):
 
     if not can_access_client(client_id):
-        return jsonify({"error": "Acesso não autorizado"}), 403
+        return jsonify({"error": "Acesso nÃ£o autorizado"}), 403
 
     data = request.get_json() or {}
     produto = (data.get("produto") or "").strip().upper()
@@ -453,13 +565,13 @@ def create_operation(client_id):
     db.close()
 
     return jsonify({
-        "message": "Operação criada com sucesso",
+        "message": "OperaÃ§Ã£o criada com sucesso",
         "operation_id": operation_id
     }), 201
 
 
 # ======================================================
-# 📃 LISTAR CLIENTES
+# ðŸ“ƒ LISTAR CLIENTES
 # ======================================================
 @clients_bp.route("/clients", methods=["GET"])
 @jwt_required()
@@ -507,7 +619,7 @@ def list_clients():
 
 
 # ======================================================
-# 📃 LISTAR CONTRATOS DE CLIENTES
+# ðŸ“ƒ LISTAR CONTRATOS DE CLIENTES
 # ======================================================
 
 @clients_bp.route("/clients/<int:client_id>/operations", methods=["GET"])
@@ -515,7 +627,7 @@ def list_clients():
 def list_operations(client_id):
 
     if not can_access_client(client_id):
-        return jsonify({"error": "Acesso não autorizado"}), 403
+        return jsonify({"error": "Acesso nÃ£o autorizado"}), 403
 
     db = get_db()
     cursor = db.cursor(dictionary=True)
@@ -745,13 +857,13 @@ def create_operation_comment(operation_id):
     return jsonify({"message": "Comentario enviado", "comment": comment}), 201
 
 
-# 📄 OBTER CLIENTE POR ID
+# ðŸ“„ OBTER CLIENTE POR ID
 # ======================================================
 @clients_bp.route("/clients/<int:client_id>", methods=["GET"])
 @jwt_required()
 def get_client(client_id):
     if not can_access_client(client_id):
-        return jsonify({"error": "Acesso não autorizado"}), 403
+        return jsonify({"error": "Acesso nÃ£o autorizado"}), 403
 
     db = get_db()
     cursor = db.cursor(dictionary=True)
@@ -767,14 +879,14 @@ def get_client(client_id):
     db.close()
 
     if not client:
-        return jsonify({"error": "Cliente não encontrado"}), 404
+        return jsonify({"error": "Cliente nÃ£o encontrado"}), 404
 
     return jsonify(client), 200
 
 
 
 # ======================================================
-# 📤 UPLOAD DE DOCUMENTOS
+# ðŸ“¤ UPLOAD DE DOCUMENTOS
 # ======================================================
 @clients_bp.route("/clients/upload", methods=["POST", "OPTIONS"])
 @jwt_required(optional=True)
@@ -785,10 +897,10 @@ def upload_document():
     client_id = request.form.get("client_id")
 
     if not client_id:
-        return jsonify({"error": "client_id é obrigatório"}), 400
+        return jsonify({"error": "client_id Ã© obrigatÃ³rio"}), 400
 
     if not can_access_client(int(client_id)):
-        return jsonify({"error": "Acesso não autorizado"}), 403
+        return jsonify({"error": "Acesso nÃ£o autorizado"}), 403
 
     if not request.files:
         return jsonify({"error": "Nenhum arquivo enviado"}), 400
@@ -806,7 +918,7 @@ def upload_document():
             saved_files[field_name] = filename
 
     if not saved_files:
-        return jsonify({"error": "Nenhum arquivo válido enviado"}), 400
+        return jsonify({"error": "Nenhum arquivo vÃ¡lido enviado"}), 400
 
     return jsonify({
         "message": "Arquivos enviados com sucesso",
@@ -815,7 +927,7 @@ def upload_document():
 
 
 # ======================================================
-# 📃 LISTAR DOCUMENTOS
+# ðŸ“ƒ LISTAR DOCUMENTOS
 # ======================================================
 @clients_bp.route("/clients/<int:client_id>/documents", methods=["GET", "OPTIONS"])
 @jwt_required(optional=True)
@@ -824,7 +936,7 @@ def list_documents(client_id):
         return "", 200
 
     if not can_access_client(client_id):
-        return jsonify({"error": "Acesso não autorizado"}), 403
+        return jsonify({"error": "Acesso nÃ£o autorizado"}), 403
 
     client_folder = os.path.join(BASE_STORAGE, str(client_id))
 
@@ -853,7 +965,7 @@ def list_documents(client_id):
 
 
 # ======================================================
-# 📥 DOWNLOAD DOCUMENTO
+# ðŸ“¥ DOWNLOAD DOCUMENTO
 # ======================================================
 @clients_bp.route(
     "/clients/<int:client_id>/documents/<filename>",
@@ -865,13 +977,13 @@ def download_document(client_id, filename):
         return "", 200
 
     if not can_access_client(client_id):
-        return jsonify({"error": "Acesso não autorizado"}), 403
+        return jsonify({"error": "Acesso nÃ£o autorizado"}), 403
 
     client_folder = os.path.join(BASE_STORAGE, str(client_id))
     file_path = os.path.join(client_folder, filename)
 
     if not os.path.exists(file_path):
-        abort(404, description="Arquivo não encontrado")
+        abort(404, description="Arquivo nÃ£o encontrado")
 
     return send_from_directory(
         client_folder,
@@ -881,7 +993,7 @@ def download_document(client_id, filename):
 
 
 # ======================================================
-# 🗑️ EXCLUIR DOCUMENTO
+# ðŸ—‘ï¸ EXCLUIR DOCUMENTO
 # ======================================================
 @clients_bp.route(
     "/clients/<int:client_id>/documents/<filename>",
@@ -893,31 +1005,30 @@ def delete_document(client_id, filename):
         return "", 200
 
     if not can_access_client(client_id):
-        return jsonify({"error": "Acesso não autorizado"}), 403
+        return jsonify({"error": "Acesso nÃ£o autorizado"}), 403
 
     client_folder = os.path.join(BASE_STORAGE, str(client_id))
     file_path = os.path.join(client_folder, filename)
 
     if not os.path.exists(file_path):
-        return jsonify({"error": "Arquivo não encontrado"}), 404
+        return jsonify({"error": "Arquivo nÃ£o encontrado"}), 404
 
     os.remove(file_path)
 
     return jsonify({
-        "message": "Documento excluído com sucesso",
+        "message": "Documento excluÃ­do com sucesso",
         "filename": filename
     }), 200
 
 
 # ======================================================
-# 📄 ADMIN ATUALIZA STATUS
+# ðŸ“„ ADMIN ATUALIZA STATUS
 # ======================================================
 
 
 @clients_bp.route("/operations/<int:operation_id>", methods=["PUT"])
 @jwt_required()
 def update_operation(operation_id):
-
     data = request.get_json() or {}
 
     if not data:
@@ -925,6 +1036,7 @@ def update_operation(operation_id):
 
     role = normalize_role(current_user_role())
     user_id = current_user_id()
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     db = get_db()
     cursor = db.cursor(dictionary=True)
@@ -940,12 +1052,13 @@ def update_operation(operation_id):
         SELECT
             o.id,
             o.status,
+            o.pendencia_resposta_vendedor,
             c.vendedor_id
         FROM operacoes o
         JOIN clientes c ON c.id = o.cliente_id
         WHERE o.id=%s
         """,
-        (operation_id,)
+        (operation_id,),
     )
     operation = cursor.fetchone()
 
@@ -954,71 +1067,158 @@ def update_operation(operation_id):
         db.close()
         return jsonify({"error": "Operacao nao encontrada"}), 404
 
-    current_status = (operation.get("status") or "").upper()
+    current_status = normalize_operation_status(operation.get("status"))
+    allowed_fields = set()
 
-    if current_status == "PENDENTE" or (current_status == "DEVOLVIDA" and role == "VENDEDOR"):
-        if role == "VENDEDOR" and operation["vendedor_id"] != user_id:
+    if role == "VENDEDOR":
+        if operation.get("vendedor_id") != user_id:
             cursor.close()
             db.close()
             return jsonify({"error": "Voce nao pode editar essa operacao"}), 403
 
-        if role not in {"VENDEDOR", "ADMIN"}:
-            cursor.close()
-            db.close()
-            return jsonify({"error": "Sem permissao para editar esta operacao"}), 403
-
-        if "status" in data and (data.get("status") or "").upper() != current_status:
-            cursor.close()
-            db.close()
-            return jsonify({
-                "error": "Para enviar para esteira, use o botao de envio"
-            }), 400
-
-        allowed_fields = PENDING_OPERATION_FIELDS
-
-    elif current_status in {"EM_ANALISE", "DEVOLVIDA"}:
-        if role != "ADMIN":
-            cursor.close()
-            db.close()
-            return jsonify({"error": "Somente ADMIN pode editar na esteira"}), 403
-
-        if "status" in data:
-            next_status = (data.get("status") or "").upper().strip()
-            allowed_status = {"EM_ANALISE", "DEVOLVIDA", "APROVADO", "REPROVADO"}
-
-            if next_status not in allowed_status:
-                cursor.close()
-                db.close()
-                return jsonify({"error": "Status invalido para a esteira"}), 400
-
-            data["status"] = next_status
-
-            if next_status == "APROVADO" and "data_pagamento" not in data:
-                data["data_pagamento"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-            if next_status == "DEVOLVIDA":
-                link = (data.get("link_formalizacao") or "").strip()
-                if not link:
+        if current_status == "PENDENTE":
+            if "status" in data:
+                next_status = normalize_operation_status(data.get("status"))
+                if next_status != "PENDENTE":
                     cursor.close()
                     db.close()
                     return jsonify({
-                        "error": "Informe o link_formalizacao para devolver ao vendedor"
+                        "error": "Para enviar para esteira, use o botao de envio"
                     }), 400
+                data["status"] = "PENDENTE"
 
-                data["link_formalizacao"] = link
-                data["devolvida_em"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            allowed_fields = PENDING_OPERATION_FIELDS
 
-        if "link_formalizacao" in data and data.get("link_formalizacao") is not None:
-            data["link_formalizacao"] = (data.get("link_formalizacao") or "").strip()
+        elif current_status in {"PENDENTE_BANCO", "EM_TRATATIVA_VENDEDOR"}:
+            if "status" in data:
+                next_status = normalize_operation_status(data.get("status"))
+                if next_status != "EM_TRATATIVA_VENDEDOR":
+                    cursor.close()
+                    db.close()
+                    return jsonify({
+                        "error": "Vendedor pode somente registrar tratativa da pendencia"
+                    }), 400
+                data["status"] = next_status
+            else:
+                data["status"] = "EM_TRATATIVA_VENDEDOR"
 
-        allowed_fields = PIPELINE_OPERATION_FIELDS
+            response_text = str(data.get("pendencia_resposta_vendedor") or "").strip()
+            if not response_text:
+                response_text = str(
+                    operation.get("pendencia_resposta_vendedor") or ""
+                ).strip()
+
+            if not response_text:
+                cursor.close()
+                db.close()
+                return jsonify({
+                    "error": "Informe a resposta da pendencia antes de reenviar"
+                }), 400
+
+            data["pendencia_resposta_vendedor"] = response_text
+            data["pendencia_respondida_em"] = now_str
+            allowed_fields = PENDING_BANK_VENDOR_FIELDS
+
+        else:
+            cursor.close()
+            db.close()
+            return jsonify({
+                "error": "Sem permissao para editar operacao neste status"
+            }), 403
+
+    elif role == "ADMIN":
+        if current_status in FINAL_OPERATION_STATUSES:
+            cursor.close()
+            db.close()
+            return jsonify({
+                "error": "Operacao finalizada. Nao e possivel editar."
+            }), 400
+
+        if current_status == "PENDENTE":
+            if "status" in data:
+                next_status = normalize_operation_status(data.get("status"))
+                if next_status != "PENDENTE":
+                    cursor.close()
+                    db.close()
+                    return jsonify({
+                        "error": "Para enviar para esteira, use o botao de envio"
+                    }), 400
+                data["status"] = "PENDENTE"
+
+            allowed_fields = PENDING_OPERATION_FIELDS
+        else:
+            allowed_fields = PIPELINE_OPERATION_FIELDS
+
+            if "status" in data:
+                next_status = normalize_operation_status(data.get("status"))
+                if next_status not in VALID_PIPELINE_STATUS_UPDATES:
+                    cursor.close()
+                    db.close()
+                    return jsonify({"error": "Status invalido para a esteira"}), 400
+
+                data["status"] = next_status
+
+                if next_status == "AGUARDANDO_FORMALIZACAO":
+                    link = str(data.get("link_formalizacao") or "").strip()
+                    if not link:
+                        cursor.close()
+                        db.close()
+                        return jsonify({
+                            "error": "Informe o link_formalizacao para devolver ao vendedor"
+                        }), 400
+                    data["link_formalizacao"] = link
+                    data["devolvida_em"] = now_str
+
+                if next_status == "FORMALIZADA" and "formalizado_em" not in data:
+                    data["formalizado_em"] = now_str
+
+                if next_status == "PENDENTE_BANCO":
+                    reason = str(data.get("pendencia_motivo") or "").strip()
+                    if not reason:
+                        cursor.close()
+                        db.close()
+                        return jsonify({
+                            "error": "Informe o motivo da pendencia para o vendedor"
+                        }), 400
+                    data["pendencia_motivo"] = reason
+                    data["pendencia_aberta_em"] = now_str
+
+                if next_status == "APROVADO" and "data_pagamento" not in data:
+                    data["data_pagamento"] = now_str
+
+                if next_status == "REPROVADO":
+                    rejected_reason = str(data.get("motivo_reprovacao") or "").strip()
+                    if not rejected_reason:
+                        cursor.close()
+                        db.close()
+                        return jsonify({"error": "Informe o motivo da reprovaÃ§Ã£o"}), 400
+                    data["motivo_reprovacao"] = rejected_reason
+
+            if "link_formalizacao" in data and data.get("link_formalizacao") is not None:
+                data["link_formalizacao"] = str(data.get("link_formalizacao") or "").strip()
+
+            if "pendencia_tipo" in data and data.get("pendencia_tipo") is not None:
+                data["pendencia_tipo"] = str(data.get("pendencia_tipo") or "").strip().upper()
+
+            if "pendencia_motivo" in data and data.get("pendencia_motivo") is not None:
+                data["pendencia_motivo"] = str(data.get("pendencia_motivo") or "").strip()
+
+            if (
+                "pendencia_resposta_vendedor" in data
+                and data.get("pendencia_resposta_vendedor") is not None
+            ):
+                reply = str(data.get("pendencia_resposta_vendedor") or "").strip()
+                data["pendencia_resposta_vendedor"] = reply
+                if reply and "pendencia_respondida_em" not in data:
+                    data["pendencia_respondida_em"] = now_str
+
+            if "motivo_reprovacao" in data and data.get("motivo_reprovacao") is not None:
+                data["motivo_reprovacao"] = str(data.get("motivo_reprovacao") or "").strip()
 
     else:
         cursor.close()
         db.close()
-        return jsonify({
-            "error": "Operacao finalizada. Nao e possivel editar."
-        }), 400
+        return jsonify({"error": "Usuario sem permissao"}), 403
 
     updates, params = build_operation_update(data, allowed_fields)
 
@@ -1030,114 +1230,130 @@ def update_operation(operation_id):
     params.append(operation_id)
     cursor.execute(
         f"UPDATE operacoes SET {', '.join(updates)} WHERE id=%s",
-        tuple(params)
+        tuple(params),
     )
-
     db.commit()
 
-    cursor.execute(
-        "SELECT * FROM operacoes WHERE id=%s",
-        (operation_id,)
-    )
+    cursor.execute("SELECT * FROM operacoes WHERE id=%s", (operation_id,))
     updated_operation = hydrate_operation_payload(cursor.fetchone())
+
+    if updated_operation:
+        updated_operation["status"] = normalize_operation_status(
+            updated_operation.get("status")
+        )
 
     cursor.close()
     db.close()
     return jsonify({
         "message": "Operacao atualizada",
-        "operation": updated_operation
+        "operation": updated_operation,
     }), 200
 
 
 
 # ======================================================
-# 📄 ENVIAR OPERAÇÃO PARA ESTEIRA
+# ðŸ“„ ENVIAR OPERAÃ‡ÃƒO PARA ESTEIRA
 # ======================================================
 
 @clients_bp.route("/operations/<int:operation_id>/send", methods=["POST"])
 @jwt_required()
 def send_operation_to_pipeline(operation_id):
+    conn = None
+    cursor = None
+
     try:
         role = normalize_role(current_user_role())
         user_id = current_user_id()
 
         if not role:
-            return jsonify({"error": "Usuário inválido"}), 403
+            return jsonify({"error": "Usuario invalido"}), 403
 
         conn = get_db()
         cursor = conn.cursor(dictionary=True)
+        ensure_operations_extra_columns(cursor, conn)
 
-        # Busca operação + vendedor dono do cliente
-        cursor.execute("""
-            SELECT 
+        cursor.execute(
+            """
+            SELECT
                 o.id,
                 o.status,
+                o.pendencia_resposta_vendedor,
                 c.vendedor_id
             FROM operacoes o
             JOIN clientes c ON c.id = o.cliente_id
             WHERE o.id=%s
-        """, (operation_id,))
-
+            """,
+            (operation_id,),
+        )
         operation = cursor.fetchone()
 
         if not operation:
-            return jsonify({"error": "Operação não encontrada"}), 404
+            return jsonify({"error": "Operacao nao encontrada"}), 404
 
+        if role == "VENDEDOR" and operation.get("vendedor_id") != user_id:
+            return jsonify({"error": "Voce nao pode enviar essa operacao"}), 403
 
-        # ==========================
-        # REGRA DE PERMISSÃO
-        # ==========================
-        if role == "VENDEDOR":
-            if operation["vendedor_id"] != user_id:
-                return jsonify({"error": "Você não pode enviar essa operação"}), 403
+        current_status = normalize_operation_status(operation.get("status"))
+        next_status = None
 
-        # ADMIN pode enviar qualquer operação
-
-        # ==========================
-        # VALIDA STATUS
-        # ==========================
-        current_status = (operation.get("status") or "").upper()
-
-        if current_status == "EM_ANALISE":
-            return jsonify({"error": "Operação já está na esteira"}), 400
-
-        if current_status in {"APROVADO", "REPROVADO"}:
+        if current_status in FINAL_OPERATION_STATUSES:
             return jsonify({
                 "error": "Operacao finalizada nao pode voltar para esteira"
             }), 400
 
-        if current_status not in {"PENDENTE", "DEVOLVIDA"}:
+        if current_status == "PENDENTE":
+            next_status = "ENVIADA_ESTEIRA"
+        elif current_status in {"PENDENTE_BANCO", "EM_TRATATIVA_VENDEDOR"}:
+            response_text = str(
+                operation.get("pendencia_resposta_vendedor") or ""
+            ).strip()
+            if not response_text:
+                return jsonify({
+                    "error": "Informe a resposta da pendencia antes de reenviar"
+                }), 400
+            next_status = "REENVIADA_BANCO"
+
+        if not next_status and current_status in PIPELINE_ACTIVE_STATUSES_WITH_LEGACY:
+            return jsonify({"error": "Operacao ja esta na esteira"}), 400
+
+        if not next_status:
             return jsonify({"error": "Status da operacao invalido para envio"}), 400
 
-        # ==========================
-        # ATUALIZA STATUS
-        # ==========================
+        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        updates = ["status=%s"]
+        params = [next_status]
+
+        if next_status == "REENVIADA_BANCO":
+            updates.append("devolvida_em=NULL")
+            updates.append(
+                "pendencia_respondida_em=COALESCE(pendencia_respondida_em, %s)"
+            )
+            params.append(now_str)
+
+        params.append(operation_id)
         cursor.execute(
-            "UPDATE operacoes SET status='EM_ANALISE' WHERE id=%s",
-            (operation_id,)
+            f"UPDATE operacoes SET {', '.join(updates)} WHERE id=%s",
+            tuple(params),
         )
 
         conn.commit()
 
-        return jsonify({"message": "Operação enviada para esteira"}), 200
+        return jsonify({
+            "message": "Operacao enviada para esteira",
+            "status": next_status,
+        }), 200
 
     except Exception as e:
         import traceback
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
-
     finally:
-        try:
+        if cursor:
             cursor.close()
+        if conn:
             conn.close()
-        except:
-            pass
-
-
-
-
 # ======================================================
-# 📄 ADMIN FASE COMERCIAL
+# ðŸ“„ ADMIN FASE COMERCIAL
 # ======================================================
 
 
@@ -1170,7 +1386,7 @@ def update_client_fase(client_id):
 
 
 # ======================================================
-# 📄 ADMIN - LISTAR ESTEIRA
+# ðŸ“„ ADMIN - LISTAR ESTEIRA
 # ======================================================
 
 @clients_bp.route("/operations/pipeline", methods=["GET"])
@@ -1184,7 +1400,8 @@ def get_pipeline():
     cursor = db.cursor(dictionary=True)
     ensure_operations_extra_columns(cursor, db)
 
-    cursor.execute("""
+    status_placeholders = ", ".join(["%s"] * len(PIPELINE_ACTIVE_STATUSES_WITH_LEGACY))
+    cursor.execute(f"""
         SELECT 
             o.id,
             o.produto,
@@ -1196,6 +1413,13 @@ def get_pipeline():
             o.parcela_liberada,
             o.link_formalizacao,
             o.devolvida_em,
+            o.formalizado_em,
+            o.pendencia_tipo,
+            o.pendencia_motivo,
+            o.pendencia_aberta_em,
+            o.pendencia_resposta_vendedor,
+            o.pendencia_respondida_em,
+            o.motivo_reprovacao,
             o.ficha_portabilidade,
             o.prazo,
             o.status,
@@ -1208,14 +1432,17 @@ def get_pipeline():
         FROM operacoes o
         JOIN clientes c ON c.id = o.cliente_id
         LEFT JOIN usuarios u ON u.id = c.vendedor_id
-        WHERE o.status = 'EM_ANALISE'
+        WHERE o.status IN ({status_placeholders})
         ORDER BY o.criado_em ASC
-    """)
+    """, tuple(PIPELINE_ACTIVE_STATUSES_WITH_LEGACY))
 
     operations = [
         hydrate_operation_payload(operation)
         for operation in cursor.fetchall()
     ]
+
+    for operation in operations:
+        operation["status"] = normalize_operation_status(operation.get("status"))
 
     cursor.close()
     db.close()
@@ -1224,7 +1451,7 @@ def get_pipeline():
 
 
 # ======================================================
-# 📊 ADMIN - RELATÓRIO DE OPERAÇÕES FINALIZADAS
+# ðŸ“Š ADMIN - RELATÃ“RIO DE OPERAÃ‡Ã•ES FINALIZADAS
 # ======================================================
 
 @clients_bp.route("/operations/report", methods=["GET"])
@@ -1243,7 +1470,7 @@ def get_operations_report():
     allowed_status = {"APROVADO", "REPROVADO"}
 
     if status and status not in allowed_status:
-        return jsonify({"error": "status inválido"}), 400
+        return jsonify({"error": "status invÃ¡lido"}), 400
 
     parsed_from = None
     parsed_to = None
@@ -1254,10 +1481,10 @@ def get_operations_report():
         if date_to:
             parsed_to = datetime.strptime(date_to, "%Y-%m-%d")
     except ValueError:
-        return jsonify({"error": "Formato de data inválido. Use YYYY-MM-DD."}), 400
+        return jsonify({"error": "Formato de data invÃ¡lido. Use YYYY-MM-DD."}), 400
 
     if parsed_from and parsed_to and parsed_from > parsed_to:
-        return jsonify({"error": "date_from não pode ser maior que date_to"}), 400
+        return jsonify({"error": "date_from nÃ£o pode ser maior que date_to"}), 400
 
     db = get_db()
     cursor = db.cursor(dictionary=True)
@@ -1349,7 +1576,7 @@ def get_operations_report():
 
 
 # ======================================================
-# 📊 ADMIN - ESTATÍSTICAS DA ESTEIRA
+# ðŸ“Š ADMIN - ESTATÃSTICAS DA ESTEIRA
 # ======================================================
 
 @clients_bp.route("/operations/stats", methods=["GET"])
@@ -1371,16 +1598,27 @@ def get_operations_stats():
     elif period == "month":
         date_filter = "MONTH(o.criado_em) = MONTH(CURDATE()) AND YEAR(o.criado_em)=YEAR(CURDATE())"
     else:
-        return jsonify({"error": "Período inválido"}), 400
+        return jsonify({"error": "PerÃ­odo invÃ¡lido"}), 400
 
-    cursor.execute(f"""
-        SELECT 
+    active_status_placeholders = ", ".join(
+        ["%s"] * len(PIPELINE_ACTIVE_STATUSES_WITH_LEGACY)
+    )
+    cursor.execute(
+        f"""
+        SELECT
             SUM(CASE WHEN o.status='APROVADO' THEN 1 ELSE 0 END) as aprovados,
-            SUM(CASE WHEN o.status='EM_ANALISE' THEN 1 ELSE 0 END) as em_analise,
+            SUM(
+                CASE
+                    WHEN o.status IN ({active_status_placeholders}) THEN 1
+                    ELSE 0
+                END
+            ) as em_analise,
             SUM(CASE WHEN o.status='REPROVADO' THEN 1 ELSE 0 END) as reprovados
         FROM operacoes o
         WHERE {date_filter}
-    """)
+        """,
+        tuple(PIPELINE_ACTIVE_STATUSES_WITH_LEGACY),
+    )
 
     stats = cursor.fetchone()
 
@@ -1415,7 +1653,13 @@ def get_dashboard_summary():
     try:
         ensure_dashboard_goals_table(cursor, db)
 
-        stats_params = [period_start, period_end]
+        sent_statuses = PIPELINE_ACTIVE_STATUSES_WITH_LEGACY + (
+            "APROVADO",
+            "REPROVADO",
+        )
+        sent_status_placeholders = ", ".join(["%s"] * len(sent_statuses))
+
+        stats_params = list(sent_statuses) + [period_start, period_end]
         vendor_clause = ""
 
         if selected_vendor_id:
@@ -1428,9 +1672,7 @@ def get_dashboard_summary():
                 COUNT(*) AS generated_operations,
                 SUM(
                     CASE
-                        WHEN o.status IN ('EM_ANALISE', 'APROVADO', 'REPROVADO')
-                        OR o.status = 'DEVOLVIDA'
-                        THEN 1
+                        WHEN o.status IN ({sent_status_placeholders}) THEN 1
                         ELSE 0
                     END
                 ) AS sent_to_pipeline
@@ -1472,7 +1714,10 @@ def get_dashboard_summary():
         )
         approved_row = cursor.fetchone() or {}
 
-        pipeline_params = []
+        pipeline_status_placeholders = ", ".join(
+            ["%s"] * len(PIPELINE_ACTIVE_STATUSES_WITH_LEGACY)
+        )
+        pipeline_params = list(PIPELINE_ACTIVE_STATUSES_WITH_LEGACY)
         pipeline_vendor_clause = ""
 
         if selected_vendor_id:
@@ -1484,7 +1729,7 @@ def get_dashboard_summary():
             SELECT COUNT(*) AS in_pipeline
             FROM operacoes o
             JOIN clientes c ON c.id = o.cliente_id
-            WHERE o.status = 'EM_ANALISE'
+            WHERE o.status IN ({pipeline_status_placeholders})
               {pipeline_vendor_clause}
             """,
             tuple(pipeline_params),
@@ -1713,7 +1958,10 @@ def get_dashboard_notifications():
     cursor = db.cursor(dictionary=True)
 
     try:
-        params = []
+        active_status_placeholders = ", ".join(
+            ["%s"] * len(PIPELINE_ACTIVE_STATUSES_WITH_LEGACY)
+        )
+        params = list(PIPELINE_ACTIVE_STATUSES_WITH_LEGACY)
         vendor_clause = ""
 
         if vendor_id:
@@ -1725,7 +1973,7 @@ def get_dashboard_notifications():
             SELECT COUNT(*) AS pipeline_count
             FROM operacoes o
             JOIN clientes c ON c.id = o.cliente_id
-            WHERE o.status = 'EM_ANALISE'
+            WHERE o.status IN ({active_status_placeholders})
               {vendor_clause}
             """,
             tuple(params),
@@ -1742,3 +1990,4 @@ def get_dashboard_notifications():
     finally:
         cursor.close()
         db.close()
+

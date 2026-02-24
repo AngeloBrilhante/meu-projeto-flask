@@ -373,7 +373,8 @@
 .operationsTable td {
   border-bottom: 1px solid var(--border-color);
   padding: 10px;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .operationsTable tbody tr:hover {
@@ -406,6 +407,23 @@
 
 .operationStatusBadge.DEVOLVIDA {
   background: #2f53cc;
+}
+
+.operationStatusBadge.ENVIADA_ESTEIRA,
+.operationStatusBadge.EM_DIGITACAO,
+.operationStatusBadge.AGUARDANDO_FORMALIZACAO,
+.operationStatusBadge.FORMALIZADA,
+.operationStatusBadge.EM_ANALISE_BANCO,
+.operationStatusBadge.REENVIADA_BANCO {
+  background: #4f75ff;
+}
+
+.operationStatusBadge.PENDENTE_BANCO {
+  background: #2f53cc;
+}
+
+.operationStatusBadge.EM_TRATATIVA_VENDEDOR {
+  background: #6b55d8;
 }
 
 .operationTableActions {

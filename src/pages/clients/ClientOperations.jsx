@@ -23,8 +23,32 @@ const PRODUCT_OPTIONS = [
   { value: "PORTABILIDADE", label: "Portabilidade" },
   { value: "REFINANCIAMENTO", label: "Refinanciamento" },
   { value: "PORTABILIDADE_REFIN", label: "Port + Refin" },
-  { value: "CARTAO", label: "Cartao" },
+  { value: "CARTAO", label: "Cartão" },
 ];
+
+const STATUS_LABELS = {
+  PENDENTE: "Pendente",
+  ENVIADA_ESTEIRA: "Enviada para esteira",
+  EM_DIGITACAO: "Em digitação",
+  AGUARDANDO_FORMALIZACAO: "Aguardando formalização",
+  FORMALIZADA: "Formalizada",
+  EM_ANALISE_BANCO: "Em análise banco",
+  PENDENTE_BANCO: "Pendente banco",
+  EM_TRATATIVA_VENDEDOR: "Em tratativa vendedor",
+  REENVIADA_BANCO: "Reenviada ao banco",
+  APROVADO: "Aprovada",
+  REPROVADO: "Reprovada",
+};
+
+const LEGACY_STATUS_MAP = {
+  EM_ANALISE: "EM_ANALISE_BANCO",
+  DEVOLVIDA: "AGUARDANDO_FORMALIZACAO",
+};
+
+function normalizeStatus(status) {
+  const normalized = String(status || "").trim().toUpperCase();
+  return LEGACY_STATUS_MAP[normalized] || normalized;
+}
 
 function getStoredUser() {
   try {
@@ -54,7 +78,8 @@ function formatCurrency(value) {
 }
 
 function formatStatus(status) {
-  return String(status || "PENDENTE").replaceAll("_", " ");
+  const normalized = normalizeStatus(status);
+  return STATUS_LABELS[normalized] || normalized.replaceAll("_", " ");
 }
 
 export default function ClientOperations() {
@@ -68,6 +93,7 @@ export default function ClientOperations() {
   const [form, setForm] = useState(EMPTY_FORM);
 
   const user = useMemo(() => getStoredUser(), []);
+  const isVendor = String(user?.role || "").toUpperCase() === "VENDEDOR";
   const formSchema = getOperationSchema(form.produto);
 
   async function loadOperations() {
@@ -75,7 +101,7 @@ export default function ClientOperations() {
       const data = await listClientOperations(id);
       setOperations(Array.isArray(data) ? data : []);
     } catch (error) {
-      console.error("Erro ao carregar operacoes:", error);
+      console.error("Erro ao carregar operações:", error);
       setOperations([]);
     }
   }
@@ -163,7 +189,7 @@ export default function ClientOperations() {
     }
 
     if (!formSchema) {
-      alert("Nao existe ficha configurada para este produto.");
+      alert("Não existe ficha configurada para este produto.");
       return;
     }
 
@@ -177,17 +203,17 @@ export default function ClientOperations() {
 
       if (editingOperationId) {
         await updateOperation(editingOperationId, payload);
-        alert("Operacao editada com sucesso");
+        alert("Operação editada com sucesso");
       } else {
         await createOperation(id, payload);
-        alert("Operacao criada com sucesso");
+        alert("Operação criada com sucesso");
       }
 
       resetForm("");
       await loadOperations();
     } catch (error) {
-      console.error("Erro ao salvar operacao:", error);
-      alert(error.message || "Nao foi possivel salvar a operacao");
+      console.error("Erro ao salvar operação:", error);
+      alert(error.message || "Não foi possível salvar a operação");
     } finally {
       setLoading(false);
     }
@@ -198,9 +224,36 @@ export default function ClientOperations() {
       await sendOperationToPipeline(operationId);
       await loadOperations();
       window.dispatchEvent(new Event("pipeline:changed"));
-      alert("Operacao enviada para esteira");
+      alert("Operação enviada para esteira");
     } catch (error) {
-      alert(error.message || "Nao foi possivel enviar para esteira");
+      alert(error.message || "Não foi possível enviar para esteira");
+    }
+  }
+
+  async function handlePendingResponse(operation) {
+    const initial = String(operation.pendencia_resposta_vendedor || "");
+    const response = window.prompt(
+      "Descreva a resposta da pendência para o banco:",
+      initial
+    );
+
+    if (response === null) return;
+
+    const text = String(response || "").trim();
+    if (!text) {
+      alert("Informe a resposta para continuar.");
+      return;
+    }
+
+    try {
+      await updateOperation(operation.id, {
+        pendencia_resposta_vendedor: text,
+        status: "EM_TRATATIVA_VENDEDOR",
+      });
+      await loadOperations();
+      alert("Resposta registrada. Agora você pode reenviar ao banco.");
+    } catch (error) {
+      alert(error.message || "Não foi possível registrar a resposta.");
     }
   }
 
@@ -235,10 +288,10 @@ export default function ClientOperations() {
 
   return (
     <div className="clientSection clientOperationsSection">
-      <h2>Operacoes</h2>
+      <h2>Operações</h2>
 
       <form onSubmit={handleSubmit} className="operationsFormCard">
-        <h3>{editingOperationId ? "Editar operacao" : "Nova operacao"}</h3>
+        <h3>{editingOperationId ? "Editar operação" : "Nova operação"}</h3>
 
         <label className="operationsField operationProductField">
           <span>Produto</span>
@@ -259,13 +312,13 @@ export default function ClientOperations() {
 
         {!form.produto && (
           <p className="operationFichaHint">
-            Selecione o produto para abrir a ficha especifica.
+            Selecione o produto para abrir a ficha específica.
           </p>
         )}
 
         {form.produto && !formSchema && (
           <p className="operationFichaHint">
-            Nao existe ficha configurada para este produto.
+            Não existe ficha configurada para este produto.
           </p>
         )}
 
@@ -324,7 +377,7 @@ export default function ClientOperations() {
             className="clientPrimaryButton"
             disabled={loading || !formSchema}
           >
-            {loading ? "Salvando..." : editingOperationId ? "Salvar edicao" : "Criar operacao"}
+            {loading ? "Salvando..." : editingOperationId ? "Salvar edição" : "Criar operação"}
           </button>
 
           {editingOperationId && (
@@ -333,16 +386,16 @@ export default function ClientOperations() {
               className="clientGhostButton"
               onClick={() => resetForm("")}
             >
-              Cancelar edicao
+              Cancelar edição
             </button>
           )}
         </div>
       </form>
 
-      <h3>Operacoes cadastradas</h3>
+      <h3>Operações cadastradas</h3>
 
       {sortedOperations.length === 0 ? (
-        <p className="clientSectionText">Nenhuma operacao cadastrada.</p>
+        <p className="clientSectionText">Nenhuma operação cadastrada.</p>
       ) : (
         <div className="operationsTableWrap">
           <table className="operationsTable">
@@ -354,36 +407,49 @@ export default function ClientOperations() {
                 <th>Prazo</th>
                 <th>Ficha</th>
                 <th>Status</th>
-                <th>Acao</th>
+                <th>Pendência banco</th>
+                <th>Resposta vendedor</th>
+                <th>Ação</th>
               </tr>
             </thead>
             <tbody>
-              {sortedOperations.map((operation) => (
-                <tr key={operation.id}>
-                  <td>{operation.produto}</td>
-                  <td>{operation.banco_digitacao || "-"}</td>
-                  <td>{formatCurrency(operation.valor_solicitado)}</td>
-                  <td>{operation.prazo || "-"}</td>
-                  <td>
-                    <button
-                      type="button"
-                      className="clientGhostButton"
-                      onClick={() => openFicha(operation.id)}
-                    >
-                      {hasOperationFicha(operation.produto, operation.ficha_portabilidade)
-                        ? "Abrir ficha"
-                        : "Sem ficha"}
-                    </button>
-                  </td>
-                  <td>
-                    <span className={`operationStatusBadge ${operation.status || "PENDENTE"}`}>
-                      {formatStatus(operation.status)}
-                    </span>
-                  </td>
-                  <td>
-                    <div className="operationTableActions">
-                      {(operation.status === "PENDENTE" || operation.status === "DEVOLVIDA") && (
-                        <>
+              {sortedOperations.map((operation) => {
+                const normalizedStatus = normalizeStatus(operation.status);
+                const canEdit = normalizedStatus === "PENDENTE";
+                const canSend =
+                  normalizedStatus === "PENDENTE" ||
+                  normalizedStatus === "PENDENTE_BANCO" ||
+                  normalizedStatus === "EM_TRATATIVA_VENDEDOR";
+                const canRespondPending =
+                  isVendor && normalizedStatus === "PENDENTE_BANCO";
+
+                return (
+                  <tr key={operation.id}>
+                    <td>{operation.produto}</td>
+                    <td>{operation.banco_digitacao || "-"}</td>
+                    <td>{formatCurrency(operation.valor_solicitado)}</td>
+                    <td>{operation.prazo || "-"}</td>
+                    <td>
+                      <button
+                        type="button"
+                        className="clientGhostButton"
+                        onClick={() => openFicha(operation.id)}
+                      >
+                        {hasOperationFicha(operation.produto, operation.ficha_portabilidade)
+                          ? "Abrir ficha"
+                          : "Sem ficha"}
+                      </button>
+                    </td>
+                    <td>
+                      <span className={`operationStatusBadge ${normalizedStatus}`}>
+                        {formatStatus(normalizedStatus)}
+                      </span>
+                    </td>
+                    <td>{operation.pendencia_motivo || "-"}</td>
+                    <td>{operation.pendencia_resposta_vendedor || "-"}</td>
+                    <td>
+                      <div className="operationTableActions">
+                        {canEdit && (
                           <button
                             type="button"
                             className="clientGhostButton"
@@ -391,20 +457,32 @@ export default function ClientOperations() {
                           >
                             {editingOperationId === operation.id ? "Editando" : "Editar"}
                           </button>
+                        )}
 
+                        {canRespondPending && (
+                          <button
+                            type="button"
+                            className="clientGhostButton"
+                            onClick={() => handlePendingResponse(operation)}
+                          >
+                            Responder pendência
+                          </button>
+                        )}
+
+                        {canSend && (
                           <button
                             type="button"
                             className="clientPrimaryButton"
                             onClick={() => handleSend(operation.id)}
                           >
-                            {operation.status === "DEVOLVIDA" ? "Reenviar" : "Enviar"}
+                            {normalizedStatus === "PENDENTE" ? "Enviar" : "Reenviar"}
                           </button>
-                        </>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
