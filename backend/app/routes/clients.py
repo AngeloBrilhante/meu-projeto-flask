@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import uuid
 from datetime import datetime
 from flask import Blueprint, request, jsonify, send_from_directory, abort
@@ -39,6 +40,29 @@ MONTH_LABELS = [
 # ======================================================
 def allowed_file(filename):
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
+
+
+def only_digits(value):
+    return "".join(char for char in str(value or "") if char.isdigit())
+
+
+def normalize_date_text(value):
+    text = str(value or "").strip()
+    if not text:
+        raise ValueError("data vazia")
+
+    for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y"):
+        try:
+            parsed = datetime.strptime(text, fmt)
+            return parsed.strftime("%Y-%m-%d")
+        except ValueError:
+            continue
+
+    raise ValueError("data invalida")
+
+
+def normalize_text(value):
+    return str(value or "").strip()
 
 
 PENDING_OPERATION_FIELDS = {
@@ -509,7 +533,14 @@ def create_client():
     if role not in ["ADMIN", "VENDEDOR"]:
         return jsonify({"error": "Permissao negada"}), 403
 
-    vendedor_id = user_id if role == "VENDEDOR" else data.get("vendedor_id")
+    if role == "VENDEDOR":
+        vendedor_id = user_id
+    else:
+        raw_vendedor_id = data.get("vendedor_id")
+        try:
+            vendedor_id = int(raw_vendedor_id)
+        except (TypeError, ValueError):
+            vendedor_id = 0
 
     if not vendedor_id:
         return jsonify({"error": "vendedor_id e obrigatorio"}), 400
@@ -552,59 +583,164 @@ def create_client():
     except (TypeError, ValueError):
         return jsonify({"error": "salario invalido"}), 400
 
+    cpf = only_digits(data.get("cpf"))
+    if len(cpf) != 11:
+        return jsonify({"error": "cpf invalido. Informe 11 digitos"}), 400
+
+    cep = only_digits(data.get("cep"))
+    if len(cep) != 8:
+        return jsonify({"error": "cep invalido. Informe 8 digitos"}), 400
+
+    uf_beneficio = str(data.get("uf_beneficio") or "").strip().upper()
+    if len(uf_beneficio) != 2:
+        return jsonify({"error": "uf_beneficio invalida. Use 2 letras"}), 400
+
+    rg_uf = str(data.get("rg_uf") or "").strip().upper()
+    if len(rg_uf) != 2:
+        return jsonify({"error": "rg_uf invalida. Use 2 letras"}), 400
+
+    try:
+        data_nascimento = normalize_date_text(data.get("data_nascimento"))
+        rg_data_emissao = normalize_date_text(data.get("rg_data_emissao"))
+    except ValueError:
+        return jsonify({"error": "Data invalida. Use DD/MM/AAAA ou AAAA-MM-DD"}), 400
+
+    nome = normalize_text(data.get("nome"))
+    especie = normalize_text(data.get("especie"))
+    numero_beneficio = normalize_text(data.get("numero_beneficio"))
+    nome_mae = normalize_text(data.get("nome_mae"))
+    rg_numero = normalize_text(data.get("rg_numero"))
+    rg_orgao_exp = normalize_text(data.get("rg_orgao_exp"))
+    naturalidade = normalize_text(data.get("naturalidade"))
+    telefone = only_digits(data.get("telefone"))
+    rua = normalize_text(data.get("rua"))
+    numero = normalize_text(data.get("numero"))
+    bairro = normalize_text(data.get("bairro"))
+
+    if len(telefone) < 10:
+        return jsonify({"error": "telefone invalido. Informe DDD e numero"}), 400
+
     db = get_db()
-    cursor = db.cursor()
+    cursor = db.cursor(dictionary=True)
 
     try:
         cursor.execute(
             """
+            SELECT
+                COLUMN_NAME,
+                CHARACTER_MAXIMUM_LENGTH
+            FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+              AND TABLE_NAME = 'clientes'
+            """
+        )
+        column_meta = {
+            row["COLUMN_NAME"]: row.get("CHARACTER_MAXIMUM_LENGTH")
+            for row in cursor.fetchall()
+        }
+
+        base_columns = [
+            "vendedor_id",
+            "nome",
+            "cpf",
+            "data_nascimento",
+            "especie",
+            "uf_beneficio",
+            "numero_beneficio",
+            "salario",
+            "nome_mae",
+            "rg_numero",
+            "rg_orgao_exp",
+            "rg_uf",
+            "rg_data_emissao",
+            "naturalidade",
+            "telefone",
+            "cep",
+        ]
+        missing_base_columns = [
+            column_name for column_name in base_columns if column_name not in column_meta
+        ]
+        if missing_base_columns:
+            return jsonify({
+                "error": "Estrutura da tabela clientes desatualizada",
+                "fields": missing_base_columns,
+            }), 500
+
+        use_split_address = all(
+            column_name in column_meta for column_name in ("rua", "numero", "bairro")
+        )
+        use_legacy_address = all(
+            column_name in column_meta for column_name in ("endereco", "bairro")
+        )
+
+        if use_split_address:
+            address_columns = ["rua", "numero", "bairro"]
+            address_values = [rua, numero, bairro]
+        elif use_legacy_address:
+            address_columns = ["endereco", "bairro"]
+            composed_address = ", ".join(part for part in (rua, numero) if part).strip()
+            address_values = [composed_address, bairro]
+        else:
+            return jsonify({
+                "error": "Estrutura da tabela clientes invalida para endereco",
+            }), 500
+
+        string_values = {
+            "nome": nome,
+            "cpf": cpf,
+            "especie": especie,
+            "uf_beneficio": uf_beneficio,
+            "numero_beneficio": numero_beneficio,
+            "nome_mae": nome_mae,
+            "rg_numero": rg_numero,
+            "rg_orgao_exp": rg_orgao_exp,
+            "rg_uf": rg_uf,
+            "naturalidade": naturalidade,
+            "telefone": telefone,
+            "cep": cep,
+            **dict(zip(address_columns, address_values)),
+        }
+
+        for column_name, value in string_values.items():
+            max_length = column_meta.get(column_name)
+            if max_length and len(str(value)) > int(max_length):
+                return jsonify({
+                    "error": f"{column_name} excede o limite de {int(max_length)} caracteres",
+                }), 400
+
+        insert_columns = base_columns + address_columns
+        insert_values = [
+            vendedor_id,
+            nome,
+            cpf,
+            data_nascimento,
+            especie,
+            uf_beneficio,
+            numero_beneficio,
+            salario,
+            nome_mae,
+            rg_numero,
+            rg_orgao_exp,
+            rg_uf,
+            rg_data_emissao,
+            naturalidade,
+            telefone,
+            cep,
+            *address_values,
+        ]
+
+        columns_sql = ",\n                ".join(insert_columns)
+        placeholders_sql = ", ".join(["%s"] * len(insert_columns))
+
+        cursor.execute(
+            f"""
             INSERT INTO clientes (
-                vendedor_id,
-                nome,
-                cpf,
-                data_nascimento,
-                especie,
-                uf_beneficio,
-                numero_beneficio,
-                salario,
-                nome_mae,
-                rg_numero,
-                rg_orgao_exp,
-                rg_uf,
-                rg_data_emissao,
-                naturalidade,
-                telefone,
-                cep,
-                rua,
-                numero,
-                bairro,
-                criado_em
+                {columns_sql}
             ) VALUES (
-                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW()
+                {placeholders_sql}
             )
             """,
-            (
-                vendedor_id,
-                str(data.get("nome") or "").strip(),
-                str(data.get("cpf") or "").strip(),
-                str(data.get("data_nascimento") or "").strip(),
-                str(data.get("especie") or "").strip(),
-                str(data.get("uf_beneficio") or "").strip().upper(),
-                str(data.get("numero_beneficio") or "").strip(),
-                salario,
-                str(data.get("nome_mae") or "").strip(),
-                str(data.get("rg_numero") or "").strip(),
-                str(data.get("rg_orgao_exp") or "").strip(),
-                str(data.get("rg_uf") or "").strip().upper(),
-                str(data.get("rg_data_emissao") or "").strip(),
-                str(data.get("naturalidade") or "").strip(),
-                str(data.get("telefone") or "").strip(),
-                str(data.get("cep") or "").strip(),
-                str(data.get("rua") or "").strip(),
-                str(data.get("numero") or "").strip(),
-                str(data.get("bairro") or "").strip(),
-            )
+            tuple(insert_values),
         )
 
         db.commit()
@@ -620,6 +756,23 @@ def create_client():
 
         if "Duplicate entry" in message and "cpf" in message.lower():
             return jsonify({"error": "CPF ja cadastrado"}), 409
+
+        if "Incorrect date value" in message:
+            return jsonify({"error": "Data invalida"}), 400
+
+        data_too_long_match = re.search(
+            r"Data too long for column '([^']+)'",
+            message,
+            flags=re.IGNORECASE,
+        )
+        if data_too_long_match:
+            field_name = data_too_long_match.group(1)
+            return jsonify({
+                "error": f"{field_name} excede o limite permitido",
+            }), 400
+
+        if "Cannot add or update a child row" in message:
+            return jsonify({"error": "vendedor_id invalido"}), 400
 
         return jsonify({"error": "Erro ao criar cliente"}), 500
     finally:

@@ -38,7 +38,7 @@ export async function createClient(clientData) {
       const error = await response.json();
       const details = Array.isArray(error.fields) ? error.fields : [];
       const suffix = details.length ? `: ${details.join(", ")}` : "";
-      throw new Error((error.error || "Erro ao criar cliente") + suffix);
+      throw new Error((error.error || "Erro ao criar cliente") + suffix + ` (HTTP ${response.status})`);
     }
 
     const rawText = await response.text();
@@ -48,10 +48,10 @@ export async function createClient(clientData) {
       .trim();
 
     if (/<!doctype|<html/i.test(rawText || "")) {
-      throw new Error("Servidor retornou HTML em vez de JSON. Verifique a API.");
+      throw new Error(`Servidor retornou HTML em vez de JSON. Verifique a API. (HTTP ${response.status})`);
     }
 
-    throw new Error(compactText || "Erro ao criar cliente");
+    throw new Error((compactText || "Erro ao criar cliente") + ` (HTTP ${response.status})`);
   }
 
   const data = await response.json();
