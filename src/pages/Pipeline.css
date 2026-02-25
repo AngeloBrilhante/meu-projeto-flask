@@ -131,6 +131,73 @@
   min-width: 240px;
 }
 
+.pipelineNoteCell {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 240px;
+}
+
+.pipelineNoteText {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.35;
+  white-space: normal;
+}
+
+.pipelineNoteText.muted {
+  color: var(--text-secondary);
+}
+
+.pipelineTag {
+  width: fit-content;
+  max-width: 100%;
+  border-radius: 999px;
+  border: 1px solid #d9b85b;
+  background: #ffe9a9;
+  color: #614700;
+  padding: 3px 9px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.pipelineToggleBtn {
+  border: none;
+  border-radius: 8px;
+  height: 30px;
+  padding: 0 10px;
+  cursor: pointer;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  width: fit-content;
+  transition: filter 0.16s ease, transform 0.16s ease;
+}
+
+.pipelineToggleBtn:hover {
+  filter: brightness(1.05);
+  transform: translateY(-1px);
+}
+
+.pipelineToggleBtn.pendencia {
+  background: #f59e0b;
+  color: #2d1f00;
+}
+
+.pipelineToggleBtn.pendencia.active {
+  background: #c47f06;
+  color: #fff;
+}
+
+.pipelineToggleBtn.reprovacao {
+  background: #dc2626;
+}
+
+.pipelineToggleBtn.reprovacao.active {
+  background: #b91c1c;
+}
+
 .proposalTextarea {
   width: 240px;
   min-height: 66px;
@@ -175,22 +242,32 @@
   color: #fff;
   font-size: 12px;
   font-weight: 600;
+  transition: filter 0.16s ease, transform 0.16s ease;
+}
+
+.saveBtn:hover,
+.returnBtn:hover,
+.approveBtn:hover,
+.rejectBtn:hover,
+.pipelineDownloadBtn:hover {
+  filter: brightness(1.05);
+  transform: translateY(-1px);
 }
 
 .saveBtn {
-  background: var(--accent);
+  background: #2563eb;
 }
 
 .returnBtn {
-  background: #2f53cc;
+  background: #0f766e;
 }
 
 .approveBtn {
-  background: #1ca86e;
+  background: #15803d;
 }
 
 .rejectBtn {
-  background: #d25353;
+  background: #dc2626;
 }
 
 .pipelineDownloadBtn {
@@ -212,6 +289,7 @@
 .pipelineDownloadBtn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+  transform: none;
 }
 
 .pipelineDetailsCard {

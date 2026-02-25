@@ -60,6 +60,7 @@ export default function Pipeline() {
   const [drafts, setDrafts] = useState({});
   const [loading, setLoading] = useState(false);
   const [savingOperationId, setSavingOperationId] = useState(null);
+  const [openEditors, setOpenEditors] = useState({});
 
   async function fetchPipeline() {
     try {
@@ -108,6 +109,30 @@ export default function Pipeline() {
     }));
   }
 
+  function toggleEditor(operationId, editorKey) {
+    setOpenEditors((prev) => ({
+      ...prev,
+      [operationId]: {
+        ...(prev[operationId] || {}),
+        [editorKey]: !prev[operationId]?.[editorKey],
+      },
+    }));
+  }
+
+  function openEditor(operationId, editorKey) {
+    setOpenEditors((prev) => ({
+      ...prev,
+      [operationId]: {
+        ...(prev[operationId] || {}),
+        [editorKey]: true,
+      },
+    }));
+  }
+
+  function isEditorOpen(operationId, editorKey) {
+    return Boolean(openEditors[operationId]?.[editorKey]);
+  }
+
   async function updateFlow(operation, nextStatus) {
     const draft = drafts[operation.id] || {};
     const payload = {
@@ -124,16 +149,19 @@ export default function Pipeline() {
     }
 
     if (nextStatus === "PENDENCIA" && !payload.pendencia_motivo) {
+      openEditor(operation.id, "pendencia");
       alert("Informe o motivo da pendencia.");
       return;
     }
 
     if (nextStatus === "DEVOLVIDA_VENDEDOR" && !payload.pendencia_motivo) {
+      openEditor(operation.id, "pendencia");
       alert("Informe o motivo para devolver ao vendedor.");
       return;
     }
 
     if (nextStatus === "REPROVADO" && !payload.motivo_reprovacao) {
+      openEditor(operation.id, "reprovacao");
       alert("Informe o motivo da reprovacao.");
       return;
     }
@@ -141,6 +169,14 @@ export default function Pipeline() {
     try {
       setSavingOperationId(operation.id);
       await updateOperation(operation.id, payload);
+      setOpenEditors((prev) => ({
+        ...prev,
+        [operation.id]: {
+          ...(prev[operation.id] || {}),
+          pendencia: false,
+          reprovacao: false,
+        },
+      }));
       await fetchPipeline();
       window.dispatchEvent(new Event("pipeline:changed"));
     } catch (error) {
@@ -215,6 +251,12 @@ export default function Pipeline() {
               {rows.map((operation) => {
                 const draft = drafts[operation.id] || toDraft(operation);
                 const isSaving = savingOperationId === operation.id;
+                const pendenciaAberta = isEditorOpen(operation.id, "pendencia");
+                const reprovacaoAberta = isEditorOpen(operation.id, "reprovacao");
+                const pendenciaTipo = draft.pendencia_tipo || operation.pendencia_tipo || "";
+                const pendenciaResumo = draft.pendencia_motivo || operation.pendencia_motivo || "";
+                const motivoReprovacao =
+                  draft.motivo_reprovacao || operation.motivo_reprovacao || "";
 
                 return (
                   <tr
@@ -248,48 +290,102 @@ export default function Pipeline() {
                       />
                     </td>
                     <td>
-                      <div className="proposalStackField">
-                        <select
-                          className="proposalInput"
-                          value={draft.pendencia_tipo}
-                          onChange={(event) =>
-                            handleDraftChange(operation.id, "pendencia_tipo", event.target.value)
-                          }
+                      <div className="pipelineNoteCell">
+                        <button
+                          type="button"
+                          className={`pipelineToggleBtn pendencia${
+                            pendenciaAberta ? " active" : ""
+                          }`}
+                          onClick={() => toggleEditor(operation.id, "pendencia")}
                         >
-                          {PENDENCIA_TYPE_OPTIONS.map((option) => (
-                            <option key={option.value} value={option.value}>
-                              {option.label}
-                            </option>
-                          ))}
-                        </select>
+                          {pendenciaAberta ? "Fechar pendencia" : "Pendencia"}
+                        </button>
 
-                        <textarea
-                          className="proposalTextarea"
-                          placeholder="Descreva a pendencia"
-                          value={draft.pendencia_motivo}
-                          onChange={(event) =>
-                            handleDraftChange(
-                              operation.id,
-                              "pendencia_motivo",
-                              event.target.value
-                            )
-                          }
-                        />
+                        <p
+                          className={`pipelineNoteText${
+                            pendenciaResumo ? "" : " muted"
+                          }`}
+                        >
+                          {pendenciaResumo || "Sem pendencia registrada"}
+                        </p>
+
+                        {pendenciaTipo && (
+                          <span className="pipelineTag">
+                            {pendenciaTipo.replaceAll("_", " ")}
+                          </span>
+                        )}
+
+                        {pendenciaAberta && (
+                          <div className="proposalStackField">
+                            <select
+                              className="proposalInput"
+                              value={draft.pendencia_tipo}
+                              onChange={(event) =>
+                                handleDraftChange(
+                                  operation.id,
+                                  "pendencia_tipo",
+                                  event.target.value
+                                )
+                              }
+                            >
+                              {PENDENCIA_TYPE_OPTIONS.map((option) => (
+                                <option key={option.value} value={option.value}>
+                                  {option.label}
+                                </option>
+                              ))}
+                            </select>
+
+                            <textarea
+                              className="proposalTextarea"
+                              placeholder="Descreva a pendencia"
+                              value={draft.pendencia_motivo}
+                              onChange={(event) =>
+                                handleDraftChange(
+                                  operation.id,
+                                  "pendencia_motivo",
+                                  event.target.value
+                                )
+                              }
+                            />
+                          </div>
+                        )}
                       </div>
                     </td>
                     <td>
-                      <textarea
-                        className="proposalTextarea"
-                        placeholder="Motivo da reprovacao"
-                        value={draft.motivo_reprovacao}
-                        onChange={(event) =>
-                          handleDraftChange(
-                            operation.id,
-                            "motivo_reprovacao",
-                            event.target.value
-                          )
-                        }
-                      />
+                      <div className="pipelineNoteCell">
+                        <button
+                          type="button"
+                          className={`pipelineToggleBtn reprovacao${
+                            reprovacaoAberta ? " active" : ""
+                          }`}
+                          onClick={() => toggleEditor(operation.id, "reprovacao")}
+                        >
+                          {reprovacaoAberta ? "Fechar motivo" : "Motivo reprovacao"}
+                        </button>
+
+                        <p
+                          className={`pipelineNoteText${
+                            motivoReprovacao ? "" : " muted"
+                          }`}
+                        >
+                          {motivoReprovacao || "Sem motivo registrado"}
+                        </p>
+
+                        {reprovacaoAberta && (
+                          <textarea
+                            className="proposalTextarea"
+                            placeholder="Motivo da reprovacao"
+                            value={draft.motivo_reprovacao}
+                            onChange={(event) =>
+                              handleDraftChange(
+                                operation.id,
+                                "motivo_reprovacao",
+                                event.target.value
+                              )
+                            }
+                          />
+                        )}
+                      </div>
                     </td>
                     <td>
                       <div className="pipelineActions">
