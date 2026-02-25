@@ -3,7 +3,7 @@ import os
 import uuid
 from datetime import datetime
 from flask import Blueprint, request, jsonify, send_from_directory, abort
-from flask_jwt_extended import jwt_required, get_jwt, get_jwt_identity
+from flask_jwt_extended import jwt_required
 from app.database import get_db
 from app.utils.auth import (
     current_user_id,
@@ -499,89 +499,132 @@ def resolve_dashboard_goal(cursor, year, month, vendedor_id):
 @jwt_required()
 def create_client():
     
-    print("JWT COMPLETO:", get_jwt())
-    print("IDENTITY:", get_jwt_identity())
 
     data = request.get_json() or {}
 
     role = (current_user_role() or "").upper()
     user_id = current_user_id()
 
-    print("ROLE EXTRAÃDA:", role)
-    print("USER_ID:", user_id)
 
     if role not in ["ADMIN", "VENDEDOR"]:
-        return jsonify({"error": "PermissÃ£o negada"}), 403
+        return jsonify({"error": "Permissao negada"}), 403
 
     vendedor_id = user_id if role == "VENDEDOR" else data.get("vendedor_id")
 
     if not vendedor_id:
-        return jsonify({"error": "vendedor_id Ã© obrigatÃ³rio"}), 400
+        return jsonify({"error": "vendedor_id e obrigatorio"}), 400
+
+    required_fields = [
+        "nome",
+        "cpf",
+        "data_nascimento",
+        "especie",
+        "uf_beneficio",
+        "numero_beneficio",
+        "salario",
+        "nome_mae",
+        "rg_numero",
+        "rg_orgao_exp",
+        "rg_uf",
+        "rg_data_emissao",
+        "naturalidade",
+        "telefone",
+        "cep",
+        "rua",
+        "numero",
+        "bairro",
+    ]
+
+    missing_fields = []
+    for field in required_fields:
+        value = data.get(field)
+        if value is None or str(value).strip() == "":
+            missing_fields.append(field)
+
+    if missing_fields:
+        return jsonify({
+            "error": "Campos obrigatorios faltando",
+            "fields": missing_fields
+        }), 400
+
+    try:
+        salario = float(str(data.get("salario")).replace(",", "."))
+    except (TypeError, ValueError):
+        return jsonify({"error": "salario invalido"}), 400
 
     db = get_db()
     cursor = db.cursor()
 
-    cursor.execute(
-        """
-        INSERT INTO clientes (
-            vendedor_id,
-            nome,
-            cpf,
-            data_nascimento,
-            especie,
-            uf_beneficio,
-            numero_beneficio,
-            salario,
-            nome_mae,
-            rg_numero,
-            rg_orgao_exp,
-            rg_uf,
-            rg_data_emissao,
-            naturalidade,
-            telefone,
-            cep,
-            rua,
-            numero,
-            bairro,
-            criado_em
-        ) VALUES (
-            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-            %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW()
+    try:
+        cursor.execute(
+            """
+            INSERT INTO clientes (
+                vendedor_id,
+                nome,
+                cpf,
+                data_nascimento,
+                especie,
+                uf_beneficio,
+                numero_beneficio,
+                salario,
+                nome_mae,
+                rg_numero,
+                rg_orgao_exp,
+                rg_uf,
+                rg_data_emissao,
+                naturalidade,
+                telefone,
+                cep,
+                rua,
+                numero,
+                bairro,
+                criado_em
+            ) VALUES (
+                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW()
+            )
+            """,
+            (
+                vendedor_id,
+                str(data.get("nome") or "").strip(),
+                str(data.get("cpf") or "").strip(),
+                str(data.get("data_nascimento") or "").strip(),
+                str(data.get("especie") or "").strip(),
+                str(data.get("uf_beneficio") or "").strip().upper(),
+                str(data.get("numero_beneficio") or "").strip(),
+                salario,
+                str(data.get("nome_mae") or "").strip(),
+                str(data.get("rg_numero") or "").strip(),
+                str(data.get("rg_orgao_exp") or "").strip(),
+                str(data.get("rg_uf") or "").strip().upper(),
+                str(data.get("rg_data_emissao") or "").strip(),
+                str(data.get("naturalidade") or "").strip(),
+                str(data.get("telefone") or "").strip(),
+                str(data.get("cep") or "").strip(),
+                str(data.get("rua") or "").strip(),
+                str(data.get("numero") or "").strip(),
+                str(data.get("bairro") or "").strip(),
+            )
         )
-        """,
-        (
-            vendedor_id,
-            data.get("nome"),
-            data.get("cpf"),
-            data.get("data_nascimento"),
-            data.get("especie"),
-            data.get("uf_beneficio"),
-            data.get("numero_beneficio"),
-            data.get("salario"),
-            data.get("nome_mae"),
-            data.get("rg_numero"),
-            data.get("rg_orgao_exp"),
-            data.get("rg_uf"),
-            data.get("rg_data_emissao"),
-            data.get("naturalidade"),
-            data.get("telefone"),
-            data.get("cep"),
-            data.get("rua"),
-            data.get("numero"),
-            data.get("bairro"),
-        )
-    )
 
-    db.commit()
-    client_id = cursor.lastrowid
+        db.commit()
+        client_id = cursor.lastrowid
 
-    cursor.close()
-    db.close()
+        return jsonify({
+            "message": "Cliente criado com sucesso",
+            "client_id": client_id
+        }), 201
+    except Exception as exc:
+        db.rollback()
+        message = str(exc)
 
-    return jsonify({
-        "message": "Cliente criado com sucesso",
-        "client_id": client_id
-    }), 201
+        if "Duplicate entry" in message and "cpf" in message.lower():
+            return jsonify({"error": "CPF ja cadastrado"}), 409
+
+        return jsonify({"error": "Erro ao criar cliente"}), 500
+    finally:
+        cursor.close()
+        db.close()
 
 
 # ======================================================

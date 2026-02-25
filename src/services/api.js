@@ -32,11 +32,30 @@ export async function createClient(clientData) {
   });
 
   if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.error || "Erro ao criar cliente");
+    const contentType = response.headers.get("content-type") || "";
+
+    if (contentType.includes("application/json")) {
+      const error = await response.json();
+      const details = Array.isArray(error.fields) ? error.fields : [];
+      const suffix = details.length ? `: ${details.join(", ")}` : "";
+      throw new Error((error.error || "Erro ao criar cliente") + suffix);
+    }
+
+    const rawText = await response.text();
+    const compactText = String(rawText || "")
+      .replace(/<[^>]*>/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    if (/<!doctype|<html/i.test(rawText || "")) {
+      throw new Error("Servidor retornou HTML em vez de JSON. Verifique a API.");
+    }
+
+    throw new Error(compactText || "Erro ao criar cliente");
   }
 
-  return response.json();
+  const data = await response.json();
+  return data;
 }
 
 /* =======================
