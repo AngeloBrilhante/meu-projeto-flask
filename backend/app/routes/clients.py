@@ -385,6 +385,66 @@ def ensure_operation_comments_table(cursor, db):
     db.commit()
 
 
+def ensure_operation_status_history_table(cursor, db):
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS operation_status_history (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            operation_id INT NOT NULL,
+            previous_status VARCHAR(50) NULL,
+            next_status VARCHAR(50) NOT NULL,
+            changed_by INT NULL,
+            changed_by_role VARCHAR(30) NULL,
+            note TEXT NULL,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_operation_status_history_operation_created (operation_id, created_at)
+        )
+        """
+    )
+    db.commit()
+
+
+def register_operation_status_history(
+    cursor,
+    operation_id,
+    previous_status,
+    next_status,
+    changed_by=None,
+    changed_by_role="",
+    note=None,
+):
+    normalized_next = normalize_operation_status(next_status)
+
+    if not normalized_next:
+        return
+
+    normalized_previous = normalize_operation_status(previous_status)
+    role_value = (changed_by_role or "").strip().upper()
+    note_value = str(note or "").strip() or None
+
+    cursor.execute(
+        """
+        INSERT INTO operation_status_history (
+            operation_id,
+            previous_status,
+            next_status,
+            changed_by,
+            changed_by_role,
+            note
+        )
+        VALUES (%s, %s, %s, %s, %s, %s)
+        """,
+        (
+            operation_id,
+            normalized_previous or None,
+            normalized_next,
+            changed_by,
+            role_value,
+            note_value,
+        ),
+    )
+
+
 def to_int(value):
     try:
         return int(value or 0)
@@ -531,6 +591,8 @@ def create_client():
 @clients_bp.route("/clients/<int:client_id>/operations", methods=["POST"])
 @jwt_required()
 def create_operation(client_id):
+    role = normalize_role(current_user_role())
+    user_id = current_user_id()
 
     if not can_access_client(client_id):
         return jsonify({"error": "Acesso nÃ£o autorizado"}), 403
@@ -545,6 +607,7 @@ def create_operation(client_id):
     db = get_db()
     cursor = db.cursor(dictionary=True)
     ensure_operations_extra_columns(cursor, db)
+    ensure_operation_status_history_table(cursor, db)
 
     cursor.execute("""
         INSERT INTO operacoes (
@@ -570,8 +633,17 @@ def create_operation(client_id):
         ficha_portabilidade,
     ))
 
-    db.commit()
     operation_id = cursor.lastrowid
+    register_operation_status_history(
+        cursor,
+        operation_id,
+        None,
+        "PRONTA_DIGITAR",
+        changed_by=user_id,
+        changed_by_role=role,
+        note="Operacao criada",
+    )
+    db.commit()
 
     cursor.close()
     db.close()
@@ -869,6 +941,96 @@ def create_operation_comment(operation_id):
     return jsonify({"message": "Comentario enviado", "comment": comment}), 201
 
 
+# ======================================================
+# HISTORICO DE STATUS DA OPERACAO
+# ======================================================
+@clients_bp.route("/operations/<int:operation_id>/status-history", methods=["GET"])
+@jwt_required()
+def get_operation_status_history(operation_id):
+    role = normalize_role(current_user_role())
+    user_id = current_user_id()
+
+    if role not in {"ADMIN", "VENDEDOR"}:
+        return jsonify({"error": "Acesso nao autorizado"}), 403
+
+    db = get_db()
+    cursor = db.cursor(dictionary=True)
+    ensure_operation_status_history_table(cursor, db)
+
+    cursor.execute(
+        """
+        SELECT
+            o.id,
+            o.status,
+            o.criado_em,
+            c.vendedor_id
+        FROM operacoes o
+        JOIN clientes c ON c.id = o.cliente_id
+        WHERE o.id = %s
+        LIMIT 1
+        """,
+        (operation_id,),
+    )
+    operation = cursor.fetchone()
+
+    if not operation:
+        cursor.close()
+        db.close()
+        return jsonify({"error": "Operacao nao encontrada"}), 404
+
+    if role != "ADMIN" and operation.get("vendedor_id") != user_id:
+        cursor.close()
+        db.close()
+        return jsonify({"error": "Acesso nao autorizado"}), 403
+
+    cursor.execute(
+        """
+        SELECT
+            osh.id,
+            osh.operation_id,
+            osh.previous_status,
+            osh.next_status,
+            osh.changed_by,
+            COALESCE(u.nome, '-') AS changed_by_name,
+            COALESCE(osh.changed_by_role, '') AS changed_by_role,
+            osh.note,
+            osh.created_at
+        FROM operation_status_history osh
+        LEFT JOIN usuarios u ON u.id = osh.changed_by
+        WHERE osh.operation_id = %s
+        ORDER BY osh.created_at ASC, osh.id ASC
+        """,
+        (operation_id,),
+    )
+    history = cursor.fetchall()
+
+    if not history:
+        history = [
+            {
+                "id": 0,
+                "operation_id": operation_id,
+                "previous_status": None,
+                "next_status": normalize_operation_status(operation.get("status")),
+                "changed_by": None,
+                "changed_by_name": "-",
+                "changed_by_role": "",
+                "note": "Historico iniciado a partir do estado atual",
+                "created_at": operation.get("criado_em"),
+            }
+        ]
+
+    for item in history:
+        previous_status = item.get("previous_status")
+        item["previous_status"] = (
+            normalize_operation_status(previous_status) if previous_status else None
+        )
+        item["next_status"] = normalize_operation_status(item.get("next_status"))
+
+    cursor.close()
+    db.close()
+    return jsonify(history), 200
+
+
 # ðŸ“„ OBTER CLIENTE POR ID
 # ======================================================
 @clients_bp.route("/clients/<int:client_id>", methods=["GET"])
@@ -1053,6 +1215,7 @@ def update_operation(operation_id):
     db = get_db()
     cursor = db.cursor(dictionary=True)
     ensure_operations_extra_columns(cursor, db)
+    ensure_operation_status_history_table(cursor, db)
 
     if "ficha_portabilidade" in data:
         data["ficha_portabilidade"] = serialize_portability_form(
@@ -1081,6 +1244,8 @@ def update_operation(operation_id):
         return jsonify({"error": "Operacao nao encontrada"}), 404
 
     current_status = normalize_operation_status(operation.get("status"))
+    original_status = current_status
+    next_status_for_history = current_status
     sent_to_pipeline = operation.get("enviada_esteira_em") is not None
     allowed_fields = set()
 
@@ -1107,6 +1272,7 @@ def update_operation(operation_id):
                         "error": "Para enviar para esteira, use o botao de envio"
                     }), 400
                 data["status"] = "PRONTA_DIGITAR"
+                next_status_for_history = "PRONTA_DIGITAR"
 
             allowed_fields = PENDING_OPERATION_FIELDS
 
@@ -1120,6 +1286,7 @@ def update_operation(operation_id):
                         "error": "Edite os dados e use o botao de reenviar para esteira"
                     }), 400
                 data["status"] = next_status
+                next_status_for_history = next_status
 
             allowed_fields = PENDING_OPERATION_FIELDS
 
@@ -1269,6 +1436,17 @@ def update_operation(operation_id):
         f"UPDATE operacoes SET {', '.join(updates)} WHERE id=%s",
         tuple(params),
     )
+
+    if next_status_for_history != original_status:
+        register_operation_status_history(
+            cursor,
+            operation_id,
+            original_status,
+            next_status_for_history,
+            changed_by=user_id,
+            changed_by_role=role,
+        )
+
     db.commit()
 
     cursor.execute("SELECT * FROM operacoes WHERE id=%s", (operation_id,))
@@ -1308,6 +1486,7 @@ def send_operation_to_pipeline(operation_id):
         conn = get_db()
         cursor = conn.cursor(dictionary=True)
         ensure_operations_extra_columns(cursor, conn)
+        ensure_operation_status_history_table(cursor, conn)
 
         cursor.execute(
             """
@@ -1373,6 +1552,21 @@ def send_operation_to_pipeline(operation_id):
         cursor.execute(
             f"UPDATE operacoes SET {', '.join(updates)} WHERE id=%s",
             tuple(params),
+        )
+
+        history_note = (
+            "Enviada para esteira"
+            if current_status == "PRONTA_DIGITAR"
+            else "Reenviada para analise do banco"
+        )
+        register_operation_status_history(
+            cursor,
+            operation_id,
+            current_status,
+            next_status,
+            changed_by=user_id,
+            changed_by_role=role,
+            note=history_note,
         )
 
         conn.commit()

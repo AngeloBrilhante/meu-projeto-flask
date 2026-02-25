@@ -286,6 +286,20 @@ export async function createOperationComment(operationId, message) {
   return data;
 }
 
+export async function getOperationStatusHistory(operationId) {
+  const response = await fetch(`${API_URL}/operations/${operationId}/status-history`, {
+    headers: getAuthHeaders(),
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.error || "Erro ao carregar historico da operacao");
+  }
+
+  return Array.isArray(data) ? data : [];
+}
+
 export async function getOperationStats(period) {
   const response = await fetch(
     `${API_URL}/operations/stats?period=${period}`,

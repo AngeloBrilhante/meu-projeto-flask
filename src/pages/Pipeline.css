@@ -68,7 +68,7 @@
 
 .pipelineTable th:nth-child(1),
 .pipelineTable td:nth-child(1) {
-  width: 56px;
+  width: 92px;
 }
 
 .pipelineTable th:nth-child(2),
@@ -89,6 +89,44 @@
 .pipelineTable th:nth-child(5),
 .pipelineTable td:nth-child(5) {
   width: 18%;
+}
+
+.pipelineIdCell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pipelineIdValue {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.pipelinePriorityBadge {
+  min-width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0.2px;
+  color: #0f172a;
+}
+
+.pipelinePriorityBadge.green {
+  background: #67d258;
+}
+
+.pipelinePriorityBadge.yellow {
+  background: #facc15;
+}
+
+.pipelinePriorityBadge.red {
+  background: #f43f5e;
+  color: #fff;
 }
 
 .pipelineTable tbody tr:hover {
@@ -194,6 +232,81 @@
   border-color: rgba(220, 38, 38, 0.4);
 }
 
+.pipelineHistoryPanel {
+  margin-top: 10px;
+  border: 1px solid rgba(79, 117, 255, 0.35);
+  border-radius: 10px;
+  background: rgba(14, 26, 64, 0.55);
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.pipelineHistoryHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.pipelineHistoryHeader h4 {
+  margin: 0;
+  font-size: 13px;
+}
+
+.pipelineHistoryEmpty {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.pipelineHistoryList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pipelineHistoryItem {
+  border: 1px solid rgba(79, 117, 255, 0.3);
+  border-radius: 8px;
+  padding: 8px;
+  background: rgba(11, 24, 58, 0.65);
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.pipelineHistoryItem time {
+  font-size: 11px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.pipelineHistoryMain {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.pipelineHistoryMain strong {
+  font-size: 12px;
+}
+
+.pipelineHistoryMain span {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.pipelineHistoryMain small {
+  font-size: 11px;
+  color: #b8c9ff;
+}
+
 .proposalTextarea {
   width: 100%;
   min-height: 96px;
@@ -230,6 +343,7 @@
 .returnBtn,
 .approveBtn,
 .rejectBtn,
+.historyBtn,
 .pipelineDownloadBtn,
 .ghostPipelineBtn {
   border: none;
@@ -248,6 +362,7 @@
 .returnBtn:hover,
 .approveBtn:hover,
 .rejectBtn:hover,
+.historyBtn:hover,
 .pipelineDownloadBtn:hover,
 .ghostPipelineBtn:hover {
   filter: brightness(1.05);
@@ -283,6 +398,14 @@
   background: #b91c1c;
 }
 
+.historyBtn {
+  background: #334155;
+}
+
+.historyBtn.active {
+  background: #1d4ed8;
+}
+
 .pipelineDownloadBtn {
   background: transparent;
   color: var(--text-primary);
@@ -307,6 +430,7 @@
 .returnBtn:disabled,
 .approveBtn:disabled,
 .rejectBtn:disabled,
+.historyBtn:disabled,
 .pipelineDownloadBtn:disabled,
 .ghostPipelineBtn:disabled {
   opacity: 0.6;
@@ -516,9 +640,15 @@
   .returnBtn,
   .approveBtn,
   .rejectBtn,
+  .historyBtn,
   .ghostPipelineBtn {
     min-height: 34px;
     font-size: 12px;
+  }
+
+  .pipelineHistoryItem {
+    flex-direction: column;
+    gap: 6px;
   }
 
   .pipelineDetailsHeader {

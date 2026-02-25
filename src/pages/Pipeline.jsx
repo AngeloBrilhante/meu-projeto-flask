@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { getPipeline, updateOperation } from "../services/api";
+import {
+  getOperationStatusHistory,
+  getPipeline,
+  updateOperation,
+} from "../services/api";
 import "./Pipeline.css";
 
 const STATUS_LABELS = {
@@ -45,6 +49,9 @@ const REPROVACAO_REASON_OPTIONS = [
   { value: "OUTROS", label: "Outros" },
 ];
 
+const FIVE_HOURS_MS = 5 * 60 * 60 * 1000;
+const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+
 function normalizeStatus(status) {
   const normalized = String(status || "").trim().toUpperCase();
   return LEGACY_STATUS_MAP[normalized] || normalized;
@@ -65,6 +72,80 @@ function toDraft(operation) {
   };
 }
 
+function toTimestamp(value) {
+  const time = new Date(value || "").getTime();
+  return Number.isFinite(time) ? time : Number.MAX_SAFE_INTEGER;
+}
+
+function getPriorityMeta(createdAt, nowMs) {
+  const createdMs = toTimestamp(createdAt);
+
+  if (createdMs === Number.MAX_SAFE_INTEGER) {
+    return {
+      label: "-",
+      tone: "green",
+      createdMs,
+    };
+  }
+
+  const elapsedMs = Math.max(0, nowMs - createdMs);
+  const elapsedHours = elapsedMs / (60 * 60 * 1000);
+  const elapsedMinutes = elapsedMs / (60 * 1000);
+  let tone = "green";
+
+  if (elapsedMs >= ONE_DAY_MS) {
+    tone = "red";
+  } else if (elapsedMs >= FIVE_HOURS_MS) {
+    tone = "yellow";
+  }
+
+  let label = `${Math.max(1, Math.floor(elapsedMinutes))}m`;
+
+  if (elapsedHours >= 24) {
+    label = `${Math.floor(elapsedHours / 24)}d`;
+  } else if (elapsedHours >= 1) {
+    label = `${Math.floor(elapsedHours)}h`;
+  }
+
+  return {
+    label,
+    tone,
+    createdMs,
+  };
+}
+
+function formatDateTime(value) {
+  if (!value) return "-";
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+
+  return date.toLocaleString("pt-BR");
+}
+
+function formatHistoryTransition(item) {
+  const nextLabel = getStatusLabel(item.next_status);
+
+  if (!item.previous_status) {
+    return nextLabel;
+  }
+
+  const previousLabel = getStatusLabel(item.previous_status);
+
+  if (previousLabel === nextLabel) {
+    return nextLabel;
+  }
+
+  return `${previousLabel} -> ${nextLabel}`;
+}
+
+function formatHistoryActor(item) {
+  const name = String(item.changed_by_name || "").trim();
+  const role = String(item.changed_by_role || "").trim().toUpperCase();
+  const base = name && name !== "-" ? name : "Sistema";
+  return role ? `${base} (${role})` : base;
+}
+
 export default function Pipeline() {
   const navigate = useNavigate();
   const [operations, setOperations] = useState([]);
@@ -72,6 +153,10 @@ export default function Pipeline() {
   const [loading, setLoading] = useState(false);
   const [savingOperationId, setSavingOperationId] = useState(null);
   const [openEditors, setOpenEditors] = useState({});
+  const [openHistory, setOpenHistory] = useState({});
+  const [historyByOperation, setHistoryByOperation] = useState({});
+  const [loadingHistoryOperationId, setLoadingHistoryOperationId] = useState(null);
+  const [nowMs, setNowMs] = useState(Date.now());
   const openEditorsRef = useRef({});
 
   useEffect(() => {
@@ -83,6 +168,7 @@ export default function Pipeline() {
       setLoading(true);
       const data = await getPipeline();
       const list = Array.isArray(data) ? data : [];
+      setNowMs(Date.now());
 
       setOperations(list);
       setDrafts((prev) => {
@@ -118,6 +204,14 @@ export default function Pipeline() {
     return () => clearInterval(interval);
   }, []);
 
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setNowMs(Date.now());
+    }, 60000);
+
+    return () => clearInterval(interval);
+  }, []);
+
   function handleDraftChange(operationId, field, value) {
     setDrafts((prev) => ({
       ...prev,
@@ -125,6 +219,44 @@ export default function Pipeline() {
         ...prev[operationId],
         [field]: value,
       },
+    }));
+  }
+
+  async function loadOperationHistory(operationId, options = {}) {
+    const { force = false } = options;
+
+    if (!force && historyByOperation[operationId]) {
+      return;
+    }
+
+    try {
+      setLoadingHistoryOperationId(operationId);
+      const data = await getOperationStatusHistory(operationId);
+      setHistoryByOperation((prev) => ({
+        ...prev,
+        [operationId]: Array.isArray(data) ? data : [],
+      }));
+    } catch (error) {
+      console.error("Erro ao carregar historico da operacao:", error);
+      setHistoryByOperation((prev) => ({
+        ...prev,
+        [operationId]: [],
+      }));
+    } finally {
+      setLoadingHistoryOperationId(null);
+    }
+  }
+
+  function toggleHistory(operationId) {
+    const isCurrentlyOpen = Boolean(openHistory[operationId]);
+
+    if (!isCurrentlyOpen) {
+      loadOperationHistory(operationId);
+    }
+
+    setOpenHistory((prev) => ({
+      ...prev,
+      [operationId]: !prev[operationId],
     }));
   }
 
@@ -197,6 +329,9 @@ export default function Pipeline() {
     try {
       setSavingOperationId(operation.id);
       await updateOperation(operation.id, payload);
+      if (openHistory[operation.id]) {
+        await loadOperationHistory(operation.id, { force: true });
+      }
       setOpenEditors((prev) => ({
         ...prev,
         [operation.id]: {
@@ -280,16 +415,24 @@ export default function Pipeline() {
 
   const rows = useMemo(
     () =>
-      operations.map((operation) => ({
-        ...operation,
-        normalizedStatus: normalizeStatus(operation.status),
-      })),
-    [operations]
+      [...operations]
+        .map((operation) => ({
+          ...operation,
+          normalizedStatus: normalizeStatus(operation.status),
+          priority: getPriorityMeta(operation.criado_em, nowMs),
+        }))
+        .sort((a, b) => {
+          if (a.priority.createdMs !== b.priority.createdMs) {
+            return a.priority.createdMs - b.priority.createdMs;
+          }
+          return Number(a.id || 0) - Number(b.id || 0);
+        }),
+    [operations, nowMs]
   );
 
   function openOperationFicha(operation, event) {
     const interactive = event.target.closest(
-      "button, input, select, textarea, a, label"
+      "button, input, select, textarea, a, label, .pipelineFlowCell"
     );
 
     if (interactive) return;
@@ -312,7 +455,7 @@ export default function Pipeline() {
           <table className="pipelineTable">
             <thead>
               <tr>
-                <th>ID</th>
+                <th>Prioridade</th>
                 <th>Cliente</th>
                 <th>Produto</th>
                 <th>Status</th>
@@ -326,6 +469,9 @@ export default function Pipeline() {
                 const isSaving = savingOperationId === operation.id;
                 const pendenciaAberta = isEditorOpen(operation.id, "pendencia");
                 const reprovacaoAberta = isEditorOpen(operation.id, "reprovacao");
+                const historyOpen = Boolean(openHistory[operation.id]);
+                const historyItems = historyByOperation[operation.id] || [];
+                const historyLoading = loadingHistoryOperationId === operation.id;
 
                 return (
                   <tr
@@ -333,7 +479,14 @@ export default function Pipeline() {
                     className="clickableRow"
                     onClick={(event) => openOperationFicha(operation, event)}
                   >
-                    <td>{operation.id}</td>
+                    <td>
+                      <div className="pipelineIdCell">
+                        <span className={`pipelinePriorityBadge ${operation.priority.tone}`}>
+                          {operation.priority.label}
+                        </span>
+                        <span className="pipelineIdValue">#{operation.id}</span>
+                      </div>
+                    </td>
                     <td>
                       <strong>{operation.nome}</strong>
                       <div className="pipelineHint">{operation.cpf}</div>
@@ -447,6 +600,15 @@ export default function Pipeline() {
                             </button>
                           </>
                         )}
+
+                        <button
+                          type="button"
+                          className={`historyBtn${historyOpen ? " active" : ""}`}
+                          disabled={historyLoading}
+                          onClick={() => toggleHistory(operation.id)}
+                        >
+                          {historyLoading && !historyOpen ? "Carregando..." : "Historico"}
+                        </button>
                       </div>
 
                       {operation.normalizedStatus === "AGUARDANDO_FORMALIZACAO" && (
@@ -585,6 +747,46 @@ export default function Pipeline() {
                               Fechar
                             </button>
                           </div>
+                        </div>
+                      )}
+
+                      {historyOpen && (
+                        <div className="pipelineHistoryPanel">
+                          <div className="pipelineHistoryHeader">
+                            <h4>Historico de status</h4>
+                            <button
+                              type="button"
+                              className="ghostPipelineBtn"
+                              disabled={historyLoading}
+                              onClick={() =>
+                                loadOperationHistory(operation.id, { force: true })
+                              }
+                            >
+                              {historyLoading ? "Atualizando..." : "Atualizar"}
+                            </button>
+                          </div>
+
+                          {historyLoading && historyItems.length === 0 ? (
+                            <p className="pipelineHistoryEmpty">Carregando historico...</p>
+                          ) : historyItems.length === 0 ? (
+                            <p className="pipelineHistoryEmpty">Sem historico para esta operacao.</p>
+                          ) : (
+                            <ul className="pipelineHistoryList">
+                              {historyItems.map((item, index) => (
+                                <li
+                                  key={`${operation.id}-${item.id || index}-${item.created_at || ""}`}
+                                  className="pipelineHistoryItem"
+                                >
+                                  <div className="pipelineHistoryMain">
+                                    <strong>{formatHistoryTransition(item)}</strong>
+                                    <span>{formatHistoryActor(item)}</span>
+                                    {item.note && <small>{item.note}</small>}
+                                  </div>
+                                  <time>{formatDateTime(item.created_at)}</time>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
                         </div>
                       )}
                     </td>
