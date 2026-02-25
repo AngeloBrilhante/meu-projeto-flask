@@ -472,6 +472,9 @@ export default function Pipeline() {
                 const historyOpen = Boolean(openHistory[operation.id]);
                 const historyItems = historyByOperation[operation.id] || [];
                 const historyLoading = loadingHistoryOperationId === operation.id;
+                const canManageFlow = !["APROVADO", "REPROVADO"].includes(
+                  operation.normalizedStatus
+                );
 
                 return (
                   <tr
@@ -484,7 +487,6 @@ export default function Pipeline() {
                         <span className={`pipelinePriorityBadge ${operation.priority.tone}`}>
                           {operation.priority.label}
                         </span>
-                        <span className="pipelineIdValue">#{operation.id}</span>
                       </div>
                     </td>
                     <td>
@@ -513,6 +515,17 @@ export default function Pipeline() {
                     </td>
                     <td className="pipelineFlowCell">
                       <div className="pipelineActions">
+                        {canManageFlow && (
+                          <button
+                            type="button"
+                            className={`pendingBtn${pendenciaAberta ? " active" : ""}`}
+                            disabled={isSaving}
+                            onClick={() => toggleEditor(operation.id, "pendencia")}
+                          >
+                            Pendencia
+                          </button>
+                        )}
+
                         {operation.normalizedStatus === "PRONTA_DIGITAR" && (
                           <button
                             type="button"
@@ -537,14 +550,6 @@ export default function Pipeline() {
 
                         {operation.normalizedStatus === "ANALISE_BANCO" && (
                           <>
-                            <button
-                              type="button"
-                              className={`pendingBtn${pendenciaAberta ? " active" : ""}`}
-                              disabled={isSaving}
-                              onClick={() => toggleEditor(operation.id, "pendencia")}
-                            >
-                              Pendencia
-                            </button>
                             <button
                               type="button"
                               className="returnBtn"
@@ -574,14 +579,6 @@ export default function Pipeline() {
 
                         {operation.normalizedStatus === "PENDENCIA" && (
                           <>
-                            <button
-                              type="button"
-                              className={`pendingBtn${pendenciaAberta ? " active" : ""}`}
-                              disabled={isSaving}
-                              onClick={() => toggleEditor(operation.id, "pendencia")}
-                            >
-                              Pendencia
-                            </button>
                             <button
                               type="button"
                               className="saveBtn"
