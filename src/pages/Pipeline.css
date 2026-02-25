@@ -44,25 +44,51 @@
 .pipelineTable {
   width: 100%;
   border-collapse: collapse;
+  table-layout: fixed;
 }
 
 .pipelineTable th {
   background: var(--surface-strong);
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
-  padding: 11px;
+  padding: 12px;
   text-align: left;
-  white-space: nowrap;
   border-bottom: 1px solid var(--border-color);
 }
 
 .pipelineTable td {
-  padding: 10px 11px;
+  padding: 12px;
   border-bottom: 1px solid var(--border-color);
   color: var(--text-primary);
-  white-space: nowrap;
+  white-space: normal;
+  font-size: 13px;
   vertical-align: top;
+}
+
+.pipelineTable th:nth-child(1),
+.pipelineTable td:nth-child(1) {
+  width: 56px;
+}
+
+.pipelineTable th:nth-child(2),
+.pipelineTable td:nth-child(2) {
+  width: 18%;
+}
+
+.pipelineTable th:nth-child(3),
+.pipelineTable td:nth-child(3) {
+  width: 14%;
+}
+
+.pipelineTable th:nth-child(4),
+.pipelineTable td:nth-child(4) {
+  width: 12%;
+}
+
+.pipelineTable th:nth-child(5),
+.pipelineTable td:nth-child(5) {
+  width: 18%;
 }
 
 .pipelineTable tbody tr:hover {
@@ -106,13 +132,14 @@
 }
 
 .proposalInput {
-  width: 168px;
-  height: 34px;
+  width: 100%;
+  min-height: 38px;
   border: 1px solid var(--border-color);
   border-radius: 8px;
-  padding: 0 8px;
+  padding: 0 10px;
   background: var(--surface-strong);
   color: var(--text-primary);
+  font-size: 13px;
 }
 
 .proposalInput:focus {
@@ -121,86 +148,55 @@
 }
 
 .proposalLinkInput {
-  width: 230px;
+  width: 100%;
 }
 
 .proposalStackField {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  min-width: 240px;
-}
-
-.pipelineNoteCell {
-  display: flex;
-  flex-direction: column;
   gap: 8px;
-  min-width: 240px;
 }
 
-.pipelineNoteText {
-  margin: 0;
+.pipelineFlowCell {
+  min-width: 380px;
+}
+
+.pipelineInlineHint {
+  margin: 8px 0 0;
   font-size: 12px;
-  line-height: 1.35;
-  white-space: normal;
-}
-
-.pipelineNoteText.muted {
   color: var(--text-secondary);
 }
 
-.pipelineTag {
-  width: fit-content;
-  max-width: 100%;
-  border-radius: 999px;
-  border: 1px solid #d9b85b;
-  background: #ffe9a9;
-  color: #614700;
-  padding: 3px 9px;
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
+.pipelineActionPanel {
+  margin-top: 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: var(--surface-strong);
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
-.pipelineToggleBtn {
-  border: none;
-  border-radius: 8px;
-  height: 30px;
-  padding: 0 10px;
-  cursor: pointer;
-  color: #fff;
-  font-size: 12px;
-  font-weight: 700;
-  width: fit-content;
-  transition: filter 0.16s ease, transform 0.16s ease;
+.pipelineActionPanel h4 {
+  margin: 0;
+  font-size: 13px;
 }
 
-.pipelineToggleBtn:hover {
-  filter: brightness(1.05);
-  transform: translateY(-1px);
+.pipelinePanelActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
 }
 
-.pipelineToggleBtn.pendencia {
-  background: #f59e0b;
-  color: #2d1f00;
-}
-
-.pipelineToggleBtn.pendencia.active {
-  background: #c47f06;
-  color: #fff;
-}
-
-.pipelineToggleBtn.reprovacao {
-  background: #dc2626;
-}
-
-.pipelineToggleBtn.reprovacao.active {
-  background: #b91c1c;
+.reprovacaoPanel {
+  border-color: rgba(220, 38, 38, 0.4);
 }
 
 .proposalTextarea {
-  width: 240px;
-  min-height: 66px;
+  width: 100%;
+  min-height: 96px;
   border: 1px solid var(--border-color);
   border-radius: 8px;
   padding: 8px;
@@ -208,7 +204,7 @@
   color: var(--text-primary);
   resize: vertical;
   font-family: inherit;
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .proposalTextarea:focus {
@@ -230,32 +226,45 @@
 }
 
 .saveBtn,
+.pendingBtn,
 .returnBtn,
 .approveBtn,
 .rejectBtn,
-.pipelineDownloadBtn {
+.pipelineDownloadBtn,
+.ghostPipelineBtn {
   border: none;
   border-radius: 8px;
-  height: 32px;
-  padding: 0 10px;
+  min-height: 36px;
+  padding: 0 12px;
   cursor: pointer;
   color: #fff;
-  font-size: 12px;
-  font-weight: 600;
+  font-size: 13px;
+  font-weight: 700;
   transition: filter 0.16s ease, transform 0.16s ease;
 }
 
 .saveBtn:hover,
+.pendingBtn:hover,
 .returnBtn:hover,
 .approveBtn:hover,
 .rejectBtn:hover,
-.pipelineDownloadBtn:hover {
+.pipelineDownloadBtn:hover,
+.ghostPipelineBtn:hover {
   filter: brightness(1.05);
   transform: translateY(-1px);
 }
 
 .saveBtn {
   background: #2563eb;
+}
+
+.pendingBtn {
+  background: #d97706;
+  color: #fff;
+}
+
+.pendingBtn.active {
+  background: #b45309;
 }
 
 .returnBtn {
@@ -270,7 +279,17 @@
   background: #dc2626;
 }
 
+.rejectBtn.active {
+  background: #b91c1c;
+}
+
 .pipelineDownloadBtn {
+  background: transparent;
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+}
+
+.ghostPipelineBtn {
   background: transparent;
   color: var(--text-primary);
   border: 1px solid var(--border-color);
@@ -279,14 +298,17 @@
 .pipelineActions {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 8px;
+  align-items: center;
 }
 
 .saveBtn:disabled,
+.pendingBtn:disabled,
 .returnBtn:disabled,
 .approveBtn:disabled,
 .rejectBtn:disabled,
-.pipelineDownloadBtn:disabled {
+.pipelineDownloadBtn:disabled,
+.ghostPipelineBtn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
   transform: none;
@@ -465,6 +487,10 @@
 }
 
 @media (max-width: 1100px) {
+  .pipelineFlowCell {
+    min-width: 320px;
+  }
+
   .pipelineDetailsGrid,
   .pipelineFichaGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -476,6 +502,25 @@
 }
 
 @media (max-width: 760px) {
+  .pipelineFlowCell {
+    min-width: 260px;
+  }
+
+  .pipelineActions,
+  .pipelinePanelActions {
+    gap: 6px;
+  }
+
+  .saveBtn,
+  .pendingBtn,
+  .returnBtn,
+  .approveBtn,
+  .rejectBtn,
+  .ghostPipelineBtn {
+    min-height: 34px;
+    font-size: 12px;
+  }
+
   .pipelineDetailsHeader {
     flex-direction: column;
     align-items: flex-start;
