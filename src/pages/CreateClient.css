@@ -59,6 +59,21 @@
   border-color: var(--accent);
 }
 
+.createFieldHint,
+.createFieldError {
+  margin-top: -2px;
+  font-size: 11px;
+  line-height: 1.2;
+}
+
+.createFieldHint {
+  color: var(--text-secondary);
+}
+
+.createFieldError {
+  color: #ff8b8b;
+}
+
 .createField.span2 {
   grid-column: span 2;
 }

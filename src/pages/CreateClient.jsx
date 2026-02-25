@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { createClient } from "../services/api";
 import "./CreateClient.css";
@@ -28,9 +28,84 @@ export default function CreateClient() {
   const navigate = useNavigate();
   const [form, setForm] = useState(INITIAL_FORM);
   const [saving, setSaving] = useState(false);
+  const [cepLoading, setCepLoading] = useState(false);
+  const [cepError, setCepError] = useState("");
+  const lastCepLookupRef = useRef("");
+  const cepRequestRef = useRef(0);
+
+  function onlyDigits(value) {
+    return String(value || "").replace(/\D/g, "");
+  }
+
+  function formatCep(value) {
+    const digits = onlyDigits(value).slice(0, 8);
+    if (digits.length <= 5) {
+      return digits;
+    }
+
+    return `${digits.slice(0, 5)}-${digits.slice(5)}`;
+  }
+
+  async function lookupAddressByCep(cepDigits) {
+    if (cepDigits.length !== 8 || cepDigits === lastCepLookupRef.current) {
+      return;
+    }
+
+    const requestId = ++cepRequestRef.current;
+    setCepLoading(true);
+    setCepError("");
+
+    try {
+      const response = await fetch(`https://viacep.com.br/ws/${cepDigits}/json/`);
+      const data = await response.json();
+
+      if (requestId !== cepRequestRef.current) {
+        return;
+      }
+
+      if (!response.ok || data.erro) {
+        setCepError("CEP nao encontrado.");
+        return;
+      }
+
+      setForm((prev) => ({
+        ...prev,
+        rua: data.logradouro || prev.rua,
+        bairro: data.bairro || prev.bairro,
+      }));
+      lastCepLookupRef.current = cepDigits;
+    } catch {
+      if (requestId !== cepRequestRef.current) {
+        return;
+      }
+      setCepError("Nao foi possivel buscar o endereco.");
+    } finally {
+      if (requestId === cepRequestRef.current) {
+        setCepLoading(false);
+      }
+    }
+  }
 
   function handleChange(event) {
     const { name, value } = event.target;
+
+    if (name === "cep") {
+      const nextCep = formatCep(value);
+      const cepDigits = onlyDigits(nextCep);
+
+      setForm((prev) => ({ ...prev, cep: nextCep }));
+      setCepError("");
+
+      if (cepDigits.length === 8) {
+        lookupAddressByCep(cepDigits);
+      } else {
+        setCepLoading(false);
+        lastCepLookupRef.current = "";
+      }
+
+      return;
+    }
+
     setForm((prev) => ({ ...prev, [name]: value }));
   }
 
@@ -95,7 +170,7 @@ export default function CreateClient() {
             </label>
 
             <label className="createField">
-              <span>Especie</span>
+              <span>Espécie</span>
               <input
                 name="especie"
                 value={form.especie}
@@ -104,7 +179,7 @@ export default function CreateClient() {
             </label>
 
             <label className="createField">
-              <span>UF beneficio</span>
+              <span>UF benefício</span>
               <input
                 name="uf_beneficio"
                 maxLength={2}
@@ -114,7 +189,7 @@ export default function CreateClient() {
             </label>
 
             <label className="createField">
-              <span>Numero beneficio</span>
+              <span>Número benefício</span>
               <input
                 name="numero_beneficio"
                 value={form.numero_beneficio}
@@ -123,7 +198,7 @@ export default function CreateClient() {
             </label>
 
             <label className="createField">
-              <span>Salario</span>
+              <span>Salário</span>
               <input
                 name="salario"
                 value={form.salario}
@@ -133,7 +208,7 @@ export default function CreateClient() {
             </label>
 
             <label className="createField span2">
-              <span>Nome da mae</span>
+              <span>Nome da mãe</span>
               <input
                 name="nome_mae"
                 value={form.nome_mae}
@@ -142,7 +217,7 @@ export default function CreateClient() {
             </label>
 
             <label className="createField">
-              <span>RG numero</span>
+              <span>RG número</span>
               <input
                 name="rg_numero"
                 value={form.rg_numero}
@@ -151,7 +226,7 @@ export default function CreateClient() {
             </label>
 
             <label className="createField">
-              <span>RG orgao emissor</span>
+              <span>RG órgão emissor</span>
               <input
                 name="rg_orgao_exp"
                 value={form.rg_orgao_exp}
@@ -170,7 +245,7 @@ export default function CreateClient() {
             </label>
 
             <label className="createField">
-              <span>Data emissao RG</span>
+              <span>Data emissão RG</span>
               <input
                 type="date"
                 name="rg_data_emissao"
@@ -199,7 +274,18 @@ export default function CreateClient() {
 
             <label className="createField">
               <span>CEP</span>
-              <input name="cep" value={form.cep} onChange={handleChange} />
+              <input
+                name="cep"
+                value={form.cep}
+                onChange={handleChange}
+                placeholder="00000-000"
+              />
+              {cepLoading && (
+                <small className="createFieldHint">Buscando endereco...</small>
+              )}
+              {!cepLoading && cepError && (
+                <small className="createFieldError">{cepError}</small>
+              )}
             </label>
 
             <label className="createField span2">
@@ -208,7 +294,7 @@ export default function CreateClient() {
             </label>
 
             <label className="createField">
-              <span>Numero</span>
+              <span>Número</span>
               <input
                 name="numero"
                 value={form.numero}
