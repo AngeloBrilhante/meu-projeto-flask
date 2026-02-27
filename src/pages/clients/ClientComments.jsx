@@ -68,7 +68,7 @@ export default function ClientComments() {
         return list[0] ? String(list[0].id) : "";
       });
     } catch (error) {
-      console.error("Erro ao carregar operacoes para comentarios:", error);
+      console.error("Erro ao carregar operações para comentários:", error);
       setOperations([]);
       setSelectedOperationId("");
     } finally {
@@ -92,7 +92,7 @@ export default function ClientComments() {
       const data = await getOperationComments(operationId);
       setComments(Array.isArray(data) ? data : []);
     } catch (error) {
-      console.error("Erro ao carregar comentarios:", error);
+      console.error("Erro ao carregar comentários:", error);
       if (!silent) {
         setComments([]);
       }
@@ -131,7 +131,7 @@ export default function ClientComments() {
     const payload = message.trim();
 
     if (!operationId) {
-      alert("Selecione uma operacao");
+      alert("Selecione uma operação");
       return;
     }
 
@@ -145,8 +145,8 @@ export default function ClientComments() {
       setMessage("");
       await loadComments(operationId, { silent: true });
     } catch (error) {
-      console.error("Erro ao enviar comentario:", error);
-      alert(error.message || "Nao foi possivel enviar o comentario");
+      console.error("Erro ao enviar comentário:", error);
+      alert(error.message || "Não foi possível enviar o comentário");
     } finally {
       setSending(false);
     }
@@ -154,29 +154,29 @@ export default function ClientComments() {
 
   return (
     <div className="clientSection">
-      <h2>Comentarios</h2>
+      <h2>Comentários</h2>
       <p className="clientSectionText">
-        Conversa entre vendedor e admin sobre a operacao.
+        Conversa entre vendedor e admin sobre a operação.
       </p>
 
       {loadingOperations ? (
-        <p className="clientSectionText">Carregando operacoes...</p>
+        <p className="clientSectionText">Carregando operações...</p>
       ) : operations.length === 0 ? (
         <p className="clientSectionText">
-          Nenhuma operacao cadastrada para este cliente.
+          Nenhuma operação cadastrada para este cliente.
         </p>
       ) : (
         <>
           <div className="commentsToolbar">
             <label className="commentsOperationPicker">
-              <span>Operacao</span>
+              <span>Operação</span>
               <select
                 value={selectedOperationId}
                 onChange={(event) => setSelectedOperationId(event.target.value)}
               >
                 {operations.map((operation) => (
                   <option key={operation.id} value={operation.id}>
-                    #{operation.id} - {operation.produto || "OPERACAO"} (
+                    #{operation.id} - {operation.produto || "OPERAÇÃO"} (
                     {formatStatus(operation.status)})
                   </option>
                 ))}
@@ -195,10 +195,10 @@ export default function ClientComments() {
 
           <div className="commentsChatCard">
             {loadingComments ? (
-              <p className="clientSectionText">Carregando comentarios...</p>
+              <p className="clientSectionText">Carregando comentários...</p>
             ) : comments.length === 0 ? (
               <p className="clientSectionText">
-                Nenhum comentario para esta operacao.
+                Nenhum comentário para esta operação.
               </p>
             ) : (
               <ul className="commentsList">
@@ -212,7 +212,7 @@ export default function ClientComments() {
                       className={isOwn ? "commentItem own" : "commentItem"}
                     >
                       <div className="commentMeta">
-                        <strong>{comment.author_name || "Usuario"}</strong>
+                        <strong>{comment.author_name || "Usuário"}</strong>
                         <span>
                           {role ? `${role} - ` : ""}
                           {formatDateTime(comment.created_at)}
@@ -230,7 +230,7 @@ export default function ClientComments() {
             <textarea
               value={message}
               onChange={(event) => setMessage(event.target.value)}
-              placeholder="Escreva um comentario sobre a operacao..."
+              placeholder="Escreva um comentário sobre a operação..."
               rows={3}
               maxLength={2000}
               disabled={sending || !selectedOperationId}
@@ -243,7 +243,7 @@ export default function ClientComments() {
                 className="clientPrimaryButton"
                 disabled={sending || !selectedOperationId}
               >
-                {sending ? "Enviando..." : "Enviar comentario"}
+                {sending ? "Enviando..." : "Enviar comentário"}
               </button>
             </div>
           </form>

@@ -31,12 +31,12 @@ export default function ClientStatus() {
   return (
     <div className="clientSection">
       <h2>Status</h2>
-      <p className="clientSectionText">Atualizacao do status comercial do cliente.</p>
+      <p className="clientSectionText">Atualização do status comercial do cliente.</p>
 
       <div className="statusPanel">
         <select value={status} onChange={(e) => setStatus(e.target.value)}>
           <option value="">Selecione</option>
-          <option value="em_analise">Em analise</option>
+          <option value="em_analise">Em análise</option>
           <option value="aprovado">Aprovado</option>
           <option value="recusado">Recusado</option>
           <option value="liberado">Liberado</option>

@@ -49,7 +49,7 @@ export default function OperationDossier() {
         }
       } catch (requestError) {
         if (!cancelled) {
-          setError(requestError.message || "Nao foi possivel carregar a ficha.");
+          setError(requestError.message || "Não foi possível carregar a ficha.");
           setPayload(null);
         }
       } finally {
@@ -72,7 +72,7 @@ export default function OperationDossier() {
     <div className="operationDossierPage">
       <header className="operationDossierHeader">
         <div>
-          <h2>Ficha da operacao #{operationId}</h2>
+          <h2>Ficha da operação #{operationId}</h2>
           {operation && (
             <p>
               Produto {operation.produto || "-"} | Status {formatStatus(operation.status)}
@@ -126,7 +126,7 @@ export default function OperationDossier() {
             </div>
           ) : (
             <p className="operationDossierMessage">
-              Esta operacao nao possui ficha preenchida.
+              Esta operação não possui ficha preenchida.
             </p>
           )}
         </section>

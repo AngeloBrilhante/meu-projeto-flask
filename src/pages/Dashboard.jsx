@@ -121,7 +121,7 @@ export default function Dashboard() {
 
       await loadSummary();
     } catch (err) {
-      setError(err.message || "Nao foi possivel atualizar a meta");
+      setError(err.message || "Não foi possível atualizar a meta");
     } finally {
       setSavingGoal(false);
     }
@@ -152,7 +152,7 @@ export default function Dashboard() {
 
         <div className="dashboardFilters">
           <label>
-            Mes de referencia
+            Mês de referência
             <input
               type="month"
               value={period}
@@ -193,21 +193,21 @@ export default function Dashboard() {
             </article>
 
             <article className="metricCard">
-              <span>Operacoes geradas</span>
+              <span>Operações geradas</span>
               <strong>{operations.generated || 0}</strong>
-              <small>no mes selecionado</small>
+              <small>no mês selecionado</small>
             </article>
 
             <article className="metricCard">
-              <span>Operacoes aprovadas</span>
+              <span>Operações aprovadas</span>
               <strong>{operations.approved || 0}</strong>
-              <small>quantidade no periodo</small>
+              <small>quantidade no período</small>
             </article>
 
             <article className="metricCard">
               <span>Enviadas para esteira</span>
               <strong>{operations.sent_to_pipeline || 0}</strong>
-              <small>em analise + finalizadas</small>
+              <small>em análise + finalizadas</small>
             </article>
           </section>
 
@@ -240,7 +240,7 @@ export default function Dashboard() {
             <article className="panel panelGoal">
               <h3>Meta mensal</h3>
               <p>
-                Progresso calculado pelas operacoes aprovadas deste periodo.
+                Progresso calculado pelas operações aprovadas deste período.
               </p>
 
               <GoalGauge percentage={progress.percentage} />

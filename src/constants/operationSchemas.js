@@ -1,7 +1,7 @@
-const ACCOUNT_TYPE_OPTIONS = [
+﻿const ACCOUNT_TYPE_OPTIONS = [
   { value: "CORRENTE", label: "Corrente" },
-  { value: "POUPANCA", label: "Poupanca" },
-  { value: "SALARIO", label: "Salario" },
+  { value: "POUPANCA", label: "Poupança" },
+  { value: "SALARIO", label: "Salário" },
 ];
 
 export const OPERATION_SCHEMAS = {
@@ -17,29 +17,29 @@ export const OPERATION_SCHEMAS = {
         ],
       },
       {
-        title: "Dados do beneficiario",
+        title: "Dados do beneficiário",
         fields: [
           { name: "cliente_nome", label: "Nome", required: true },
-          { name: "especie", label: "Especie", required: true },
-          { name: "uf_beneficio", label: "UF do beneficio", required: true },
-          { name: "numero_beneficio", label: "Numero do beneficio", required: true },
+          { name: "especie", label: "Espécie", required: true },
+          { name: "uf_beneficio", label: "UF do benefício", required: true },
+          { name: "numero_beneficio", label: "Número do benefício", required: true },
           { name: "data_nascimento", label: "Data de nascimento", type: "date", required: true },
           { name: "cpf", label: "CPF", required: true },
           { name: "rg", label: "RG", required: true },
-          { name: "data_emissao", label: "Data emissao", type: "date" },
-          { name: "nome_mae", label: "Nome da mae", required: true },
+          { name: "data_emissao", label: "Data emissão", type: "date" },
+          { name: "nome_mae", label: "Nome da mãe", required: true },
           { name: "telefone", label: "Telefone", required: true },
-          { name: "email", label: "Email", type: "email" },
+          { name: "email", label: "E-mail", type: "email" },
           { name: "cep", label: "CEP", required: true },
-          { name: "endereco", label: "Endereco", required: true },
+          { name: "endereco", label: "Endereço", required: true },
           { name: "bairro", label: "Bairro", required: true },
         ],
       },
       {
-        title: "Dados bancarios",
+        title: "Dados bancários",
         fields: [
           { name: "conta", label: "Conta", required: true },
-          { name: "agencia", label: "Agencia", required: true },
+          { name: "agencia", label: "Agência", required: true },
           { name: "banco", label: "Banco", required: true },
           {
             name: "tipo_conta",
@@ -57,7 +57,7 @@ export const OPERATION_SCHEMAS = {
           { name: "total_parcelas", label: "Total de parcelas", type: "number", min: 0, required: true },
           { name: "parcelas_pagas", label: "Parcelas pagas", type: "number", min: 0, required: true },
           { name: "parcelas_restantes", label: "Parcelas restantes", type: "number", min: 0, required: true },
-          { name: "saldo_quitacao", label: "Saldo de quitacao", type: "number", min: 0, step: "0.01", required: true },
+          { name: "saldo_quitacao", label: "Saldo de quitação", type: "number", min: 0, step: "0.01", required: true },
           { name: "valor_parcela", label: "Valor da parcela", type: "number", min: 0, step: "0.01", required: true },
           { name: "prazo", label: "Prazo", type: "number", min: 0 },
           { name: "margem", label: "Margem", type: "number", min: 0, step: "0.01" },
@@ -82,29 +82,29 @@ export const OPERATION_SCHEMAS = {
         ],
       },
       {
-        title: "Dados do beneficiario",
+        title: "Dados do beneficiário",
         fields: [
-          { name: "especie", label: "Especie", required: true },
-          { name: "uf_beneficio", label: "UF do beneficio", required: true },
+          { name: "especie", label: "Espécie", required: true },
+          { name: "uf_beneficio", label: "UF do benefício", required: true },
           { name: "cliente_nome", label: "Nome", required: true },
           { name: "cpf", label: "CPF", required: true },
           { name: "data_nascimento", label: "Data de nascimento", type: "date", required: true },
-          { name: "numero_beneficio", label: "Numero do beneficio", required: true },
+          { name: "numero_beneficio", label: "Número do benefício", required: true },
           { name: "telefone", label: "Telefone", required: true },
-          { name: "nome_mae", label: "Nome da mae", required: true },
-          { name: "rg", label: "Numero do RG", required: true },
+          { name: "nome_mae", label: "Nome da mãe", required: true },
+          { name: "rg", label: "Número do RG", required: true },
           { name: "naturalidade", label: "Naturalidade", required: true },
           { name: "rg_uf", label: "UF", required: true },
-          { name: "rg_orgao_exp", label: "Orgao exp", required: true },
-          { name: "data_emissao_rg", label: "Data emissao RG", type: "date", required: true },
-          { name: "salario", label: "Salario", type: "number", min: 0, step: "0.01", required: true },
+          { name: "rg_orgao_exp", label: "Órgão exp", required: true },
+          { name: "data_emissao_rg", label: "Data emissão RG", type: "date", required: true },
+          { name: "salario", label: "Salário", type: "number", min: 0, step: "0.01", required: true },
         ],
       },
       {
-        title: "Dados bancarios",
+        title: "Dados bancários",
         fields: [
-          { name: "banco_codigo", label: "Cod banco", required: true },
-          { name: "agencia", label: "Agencia", required: true },
+          { name: "banco_codigo", label: "Cód banco", required: true },
+          { name: "agencia", label: "Agência", required: true },
           { name: "conta", label: "Conta", required: true },
           {
             name: "tipo_conta",
@@ -115,7 +115,7 @@ export const OPERATION_SCHEMAS = {
         ],
       },
       {
-        title: "Endereco",
+        title: "Endereço",
         fields: [
           { name: "cep", label: "CEP", required: true },
           { name: "rua", label: "Rua", required: true },
@@ -126,7 +126,7 @@ export const OPERATION_SCHEMAS = {
     ],
   },
   CARTAO: {
-    title: "Ficha para Cartao",
+    title: "Ficha para Cartão",
     groups: [
       {
         title: "Dados gerais",
@@ -140,29 +140,29 @@ export const OPERATION_SCHEMAS = {
         ],
       },
       {
-        title: "Dados do beneficiario",
+        title: "Dados do beneficiário",
         fields: [
-          { name: "especie", label: "Especie", required: true },
-          { name: "uf_beneficio", label: "UF do beneficio", required: true },
+          { name: "especie", label: "Espécie", required: true },
+          { name: "uf_beneficio", label: "UF do benefício", required: true },
           { name: "cliente_nome", label: "Nome", required: true },
           { name: "cpf", label: "CPF", required: true },
           { name: "data_nascimento", label: "Data de nascimento", type: "date", required: true },
-          { name: "numero_beneficio", label: "Numero do beneficio", required: true },
+          { name: "numero_beneficio", label: "Número do benefício", required: true },
           { name: "telefone", label: "Telefone", required: true },
-          { name: "nome_mae", label: "Nome da mae", required: true },
-          { name: "rg", label: "Numero do RG", required: true },
+          { name: "nome_mae", label: "Nome da mãe", required: true },
+          { name: "rg", label: "Número do RG", required: true },
           { name: "naturalidade", label: "Naturalidade", required: true },
           { name: "rg_uf", label: "UF", required: true },
-          { name: "rg_orgao_exp", label: "Orgao exp", required: true },
-          { name: "data_emissao_rg", label: "Data emissao RG", type: "date", required: true },
-          { name: "salario", label: "Salario", type: "number", min: 0, step: "0.01", required: true },
+          { name: "rg_orgao_exp", label: "Órgão exp", required: true },
+          { name: "data_emissao_rg", label: "Data emissão RG", type: "date", required: true },
+          { name: "salario", label: "Salário", type: "number", min: 0, step: "0.01", required: true },
         ],
       },
       {
-        title: "Dados bancarios",
+        title: "Dados bancários",
         fields: [
-          { name: "banco_codigo", label: "Cod banco", required: true },
-          { name: "agencia", label: "Agencia", required: true },
+          { name: "banco_codigo", label: "Cód banco", required: true },
+          { name: "agencia", label: "Agência", required: true },
           { name: "conta", label: "Conta", required: true },
           {
             name: "tipo_conta",
@@ -173,7 +173,7 @@ export const OPERATION_SCHEMAS = {
         ],
       },
       {
-        title: "Endereco",
+        title: "Endereço",
         fields: [
           { name: "cep", label: "CEP", required: true },
           { name: "rua", label: "Rua", required: true },
@@ -376,3 +376,4 @@ export function formatOperationFichaValue(value, type) {
 
   return String(value);
 }
+
