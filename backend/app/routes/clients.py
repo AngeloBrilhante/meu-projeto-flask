@@ -34,6 +34,40 @@ MONTH_LABELS = [
     "Dez",
 ]
 
+ROLE_ADMIN = "ADMIN"
+ROLE_VENDOR = "VENDEDOR"
+ROLE_DIGITADOR_PORT_REFIN = "DIGITADOR_PORT_REFIN"
+ROLE_DIGITADOR_NOVO_CARTAO = "DIGITADOR_NOVO_CARTAO"
+
+DIGITADOR_PRODUCT_PERMISSIONS = {
+    ROLE_DIGITADOR_PORT_REFIN: {
+        "PORTABILIDADE",
+        "REFINANCIAMENTO",
+        "PORTABILIDADE_REFIN",
+    },
+    ROLE_DIGITADOR_NOVO_CARTAO: {
+        "NOVO",
+        "CARTAO",
+    },
+}
+
+PIPELINE_ALLOWED_ROLES = {
+    ROLE_ADMIN,
+    *DIGITADOR_PRODUCT_PERMISSIONS.keys(),
+}
+
+REPORT_ALLOWED_ROLES = {
+    ROLE_ADMIN,
+    ROLE_VENDOR,
+    *DIGITADOR_PRODUCT_PERMISSIONS.keys(),
+}
+
+OPERATION_VIEW_ALLOWED_ROLES = {
+    ROLE_ADMIN,
+    ROLE_VENDOR,
+    *DIGITADOR_PRODUCT_PERMISSIONS.keys(),
+}
+
 
 # ======================================================
 # UTILITÃRIOS
@@ -245,6 +279,47 @@ def normalize_role(role):
 def normalize_operation_status(status):
     normalized = (status or "").strip().upper()
     return LEGACY_STATUS_MAP.get(normalized, normalized)
+
+
+def normalize_product_name(product):
+    return (product or "").strip().upper()
+
+
+def is_digitador_role(role):
+    return normalize_role(role) in DIGITADOR_PRODUCT_PERMISSIONS
+
+
+def allowed_products_for_role(role):
+    products = DIGITADOR_PRODUCT_PERMISSIONS.get(normalize_role(role))
+    if not products:
+        return ()
+    return tuple(sorted(products))
+
+
+def role_can_access_operation(role, user_id, operation):
+    normalized_role = normalize_role(role)
+
+    if normalized_role == ROLE_ADMIN:
+        return True
+
+    if normalized_role == ROLE_VENDOR:
+        return operation.get("vendedor_id") == user_id
+
+    products = allowed_products_for_role(normalized_role)
+    if not products:
+        return False
+
+    return normalize_product_name(operation.get("produto")) in products
+
+
+def apply_role_product_scope(role, conditions, params, column_name):
+    products = allowed_products_for_role(role)
+    if not products:
+        return
+
+    placeholders = ", ".join(["%s"] * len(products))
+    conditions.append(f"UPPER({column_name}) IN ({placeholders})")
+    params.extend(products)
 
 
 def parse_dashboard_period(month, year):
@@ -529,11 +604,10 @@ def create_client():
     role = (current_user_role() or "").upper()
     user_id = current_user_id()
 
-
-    if role not in ["ADMIN", "VENDEDOR"]:
+    if role not in {ROLE_ADMIN, ROLE_VENDOR}:
         return jsonify({"error": "Permissao negada"}), 403
 
-    if role == "VENDEDOR":
+    if role == ROLE_VENDOR:
         vendedor_id = user_id
     else:
         raw_vendedor_id = data.get("vendedor_id")
@@ -790,6 +864,9 @@ def create_operation(client_id):
     role = normalize_role(current_user_role())
     user_id = current_user_id()
 
+    if role not in {ROLE_ADMIN, ROLE_VENDOR}:
+        return jsonify({"error": "Acesso nao autorizado"}), 403
+
     if not can_access_client(client_id):
         return jsonify({"error": "Acesso nÃ£o autorizado"}), 403
 
@@ -939,7 +1016,7 @@ def get_operation_dossier(operation_id):
     role = normalize_role(current_user_role())
     user_id = current_user_id()
 
-    if role not in {"ADMIN", "VENDEDOR"}:
+    if role not in OPERATION_VIEW_ALLOWED_ROLES:
         return jsonify({"error": "Acesso nao autorizado"}), 403
 
     db = get_db()
@@ -969,7 +1046,7 @@ def get_operation_dossier(operation_id):
     if not operation:
         return jsonify({"error": "Operacao nao encontrada"}), 404
 
-    if role != "ADMIN" and operation.get("vendedor_id") != user_id:
+    if not role_can_access_operation(role, user_id, operation):
         return jsonify({"error": "Acesso nao autorizado"}), 403
 
     operation = hydrate_operation_payload(operation)
@@ -1004,7 +1081,7 @@ def list_operation_comments(operation_id):
     role = normalize_role(current_user_role())
     user_id = current_user_id()
 
-    if role not in {"ADMIN", "VENDEDOR"}:
+    if role not in OPERATION_VIEW_ALLOWED_ROLES:
         return jsonify({"error": "Acesso nao autorizado"}), 403
 
     db = get_db()
@@ -1015,6 +1092,7 @@ def list_operation_comments(operation_id):
         """
         SELECT
             o.id,
+            o.produto,
             c.vendedor_id
         FROM operacoes o
         JOIN clientes c ON c.id = o.cliente_id
@@ -1029,7 +1107,7 @@ def list_operation_comments(operation_id):
         db.close()
         return jsonify({"error": "Operacao nao encontrada"}), 404
 
-    if role != "ADMIN" and operation.get("vendedor_id") != user_id:
+    if not role_can_access_operation(role, user_id, operation):
         cursor.close()
         db.close()
         return jsonify({"error": "Acesso nao autorizado"}), 403
@@ -1064,7 +1142,7 @@ def create_operation_comment(operation_id):
     role = normalize_role(current_user_role())
     user_id = current_user_id()
 
-    if role not in {"ADMIN", "VENDEDOR"}:
+    if role not in OPERATION_VIEW_ALLOWED_ROLES:
         return jsonify({"error": "Acesso nao autorizado"}), 403
 
     data = request.get_json() or {}
@@ -1084,6 +1162,7 @@ def create_operation_comment(operation_id):
         """
         SELECT
             o.id,
+            o.produto,
             c.vendedor_id
         FROM operacoes o
         JOIN clientes c ON c.id = o.cliente_id
@@ -1098,7 +1177,7 @@ def create_operation_comment(operation_id):
         db.close()
         return jsonify({"error": "Operacao nao encontrada"}), 404
 
-    if role != "ADMIN" and operation.get("vendedor_id") != user_id:
+    if not role_can_access_operation(role, user_id, operation):
         cursor.close()
         db.close()
         return jsonify({"error": "Acesso nao autorizado"}), 403
@@ -1146,7 +1225,7 @@ def get_operation_status_history(operation_id):
     role = normalize_role(current_user_role())
     user_id = current_user_id()
 
-    if role not in {"ADMIN", "VENDEDOR"}:
+    if role not in OPERATION_VIEW_ALLOWED_ROLES:
         return jsonify({"error": "Acesso nao autorizado"}), 403
 
     db = get_db()
@@ -1158,6 +1237,7 @@ def get_operation_status_history(operation_id):
         SELECT
             o.id,
             o.status,
+            o.produto,
             o.criado_em,
             c.vendedor_id
         FROM operacoes o
@@ -1174,7 +1254,7 @@ def get_operation_status_history(operation_id):
         db.close()
         return jsonify({"error": "Operacao nao encontrada"}), 404
 
-    if role != "ADMIN" and operation.get("vendedor_id") != user_id:
+    if not role_can_access_operation(role, user_id, operation):
         cursor.close()
         db.close()
         return jsonify({"error": "Acesso nao autorizado"}), 403
@@ -1425,6 +1505,7 @@ def update_operation(operation_id):
             o.status,
             o.enviada_esteira_em,
             o.pendencia_motivo,
+            o.produto,
             c.vendedor_id
         FROM operacoes o
         JOIN clientes c ON c.id = o.cliente_id
@@ -1445,7 +1526,7 @@ def update_operation(operation_id):
     sent_to_pipeline = operation.get("enviada_esteira_em") is not None
     allowed_fields = set()
 
-    if role == "VENDEDOR":
+    if role == ROLE_VENDOR:
         if operation.get("vendedor_id") != user_id:
             cursor.close()
             db.close()
@@ -1493,7 +1574,23 @@ def update_operation(operation_id):
                 "error": "Sem permissao para editar operacao neste status"
             }), 403
 
-    elif role == "ADMIN":
+    elif role == ROLE_ADMIN or is_digitador_role(role):
+        if is_digitador_role(role) and not role_can_access_operation(role, user_id, operation):
+            cursor.close()
+            db.close()
+            return jsonify({"error": "Acesso nao autorizado para este produto"}), 403
+
+        if is_digitador_role(role) and "produto" in data:
+            next_product = normalize_product_name(data.get("produto"))
+            if (
+                next_product
+                and next_product not in allowed_products_for_role(role)
+            ):
+                cursor.close()
+                db.close()
+                return jsonify({"error": "Produto nao permitido para este perfil"}), 403
+            data["produto"] = next_product
+
         if current_status in FINAL_OPERATION_STATUSES:
             cursor.close()
             db.close()
@@ -1676,8 +1773,8 @@ def send_operation_to_pipeline(operation_id):
         role = normalize_role(current_user_role())
         user_id = current_user_id()
 
-        if not role:
-            return jsonify({"error": "Usuario invalido"}), 403
+        if role not in {ROLE_ADMIN, ROLE_VENDOR}:
+            return jsonify({"error": "Usuario sem permissao"}), 403
 
         conn = get_db()
         cursor = conn.cursor(dictionary=True)
@@ -1702,7 +1799,7 @@ def send_operation_to_pipeline(operation_id):
         if not operation:
             return jsonify({"error": "Operacao nao encontrada"}), 404
 
-        if role == "VENDEDOR" and operation.get("vendedor_id") != user_id:
+        if role == ROLE_VENDOR and operation.get("vendedor_id") != user_id:
             return jsonify({"error": "Voce nao pode enviar essa operacao"}), 403
 
         current_status = normalize_operation_status(operation.get("status"))
@@ -1821,8 +1918,9 @@ def update_client_fase(client_id):
 @clients_bp.route("/operations/pipeline", methods=["GET"])
 @jwt_required()
 def get_pipeline():
+    role = normalize_role(current_user_role())
 
-    if not is_admin():
+    if role not in PIPELINE_ALLOWED_ROLES:
         return jsonify({"error": "Acesso restrito"}), 403
 
     db = get_db()
@@ -1830,6 +1928,17 @@ def get_pipeline():
     ensure_operations_extra_columns(cursor, db)
 
     status_placeholders = ", ".join(["%s"] * len(PIPELINE_ACTIVE_STATUSES_WITH_LEGACY))
+    conditions = [
+        f"o.status IN ({status_placeholders})",
+        """(
+            o.status NOT IN ('PRONTA_DIGITAR', 'PENDENTE')
+            OR o.enviada_esteira_em IS NOT NULL
+        )""",
+    ]
+    params = list(PIPELINE_ACTIVE_STATUSES_WITH_LEGACY)
+    apply_role_product_scope(role, conditions, params, "o.produto")
+    where_clause = " AND ".join(conditions)
+
     cursor.execute(f"""
         SELECT 
             o.id,
@@ -1862,13 +1971,9 @@ def get_pipeline():
         FROM operacoes o
         JOIN clientes c ON c.id = o.cliente_id
         LEFT JOIN usuarios u ON u.id = c.vendedor_id
-        WHERE o.status IN ({status_placeholders})
-          AND (
-              o.status NOT IN ('PRONTA_DIGITAR', 'PENDENTE')
-              OR o.enviada_esteira_em IS NOT NULL
-          )
+        WHERE {where_clause}
         ORDER BY o.criado_em ASC
-    """, tuple(PIPELINE_ACTIVE_STATUSES_WITH_LEGACY))
+    """, tuple(params))
 
     operations = [
         hydrate_operation_payload(operation)
@@ -1891,15 +1996,24 @@ def get_pipeline():
 @clients_bp.route("/operations/report", methods=["GET"])
 @jwt_required()
 def get_operations_report():
+    role = normalize_role(current_user_role())
+    user_id = current_user_id()
 
-    if not is_admin():
+    if role not in REPORT_ALLOWED_ROLES:
         return jsonify({"error": "Acesso restrito"}), 403
 
     status = (request.args.get("status") or "").strip().upper()
-    vendedor_id = request.args.get("vendedor_id", type=int)
+    requested_vendedor_id = request.args.get("vendedor_id", type=int)
     date_from = (request.args.get("date_from") or "").strip()
     date_to = (request.args.get("date_to") or "").strip()
     search = (request.args.get("search") or "").strip()
+
+    if role == ROLE_ADMIN:
+        vendedor_id = requested_vendedor_id
+    elif role == ROLE_VENDOR:
+        vendedor_id = user_id
+    else:
+        vendedor_id = requested_vendedor_id
 
     allowed_status = {"APROVADO", "REPROVADO"}
 
@@ -1935,6 +2049,8 @@ def get_operations_report():
     if vendedor_id:
         conditions.append("c.vendedor_id = %s")
         params.append(vendedor_id)
+
+    apply_role_product_scope(role, conditions, params, "o.produto")
 
     if date_from:
         conditions.append("DATE(o.criado_em) >= %s")
@@ -1986,19 +2102,21 @@ def get_operations_report():
 
     operations = cursor.fetchall()
 
-    cursor.execute(
-        """
-        SELECT DISTINCT
-            u.id,
-            u.nome
-        FROM usuarios u
-        JOIN clientes c ON c.vendedor_id = u.id
-        JOIN operacoes o ON o.cliente_id = c.id
-        WHERE o.status IN ('APROVADO', 'REPROVADO')
-        ORDER BY u.nome ASC
-        """
-    )
-    vendors = cursor.fetchall()
+    vendors = []
+    if role == ROLE_ADMIN:
+        cursor.execute(
+            """
+            SELECT DISTINCT
+                u.id,
+                u.nome
+            FROM usuarios u
+            JOIN clientes c ON c.vendedor_id = u.id
+            JOIN operacoes o ON o.cliente_id = c.id
+            WHERE o.status IN ('APROVADO', 'REPROVADO')
+            ORDER BY u.nome ASC
+            """
+        )
+        vendors = cursor.fetchall()
 
     cursor.close()
     db.close()
@@ -2398,7 +2516,15 @@ def upsert_dashboard_goal():
 @jwt_required()
 def get_dashboard_notifications():
     role = normalize_role(current_user_role())
-    vendor_id = None if role == "ADMIN" else current_user_id()
+
+    if role == ROLE_ADMIN:
+        vendor_id = None
+    elif role == ROLE_VENDOR:
+        vendor_id = current_user_id()
+    elif is_digitador_role(role):
+        vendor_id = None
+    else:
+        return jsonify({"error": "Acesso restrito"}), 403
 
     db = get_db()
     cursor = db.cursor(dictionary=True)
@@ -2408,23 +2534,27 @@ def get_dashboard_notifications():
             ["%s"] * len(PIPELINE_ACTIVE_STATUSES_WITH_LEGACY)
         )
         params = list(PIPELINE_ACTIVE_STATUSES_WITH_LEGACY)
-        vendor_clause = ""
+        conditions = [
+            f"o.status IN ({active_status_placeholders})",
+            """(
+                o.status NOT IN ('PRONTA_DIGITAR', 'PENDENTE')
+                OR o.enviada_esteira_em IS NOT NULL
+            )""",
+        ]
 
         if vendor_id:
-            vendor_clause = " AND c.vendedor_id = %s"
+            conditions.append("c.vendedor_id = %s")
             params.append(vendor_id)
+
+        apply_role_product_scope(role, conditions, params, "o.produto")
+        where_clause = " AND ".join(conditions)
 
         cursor.execute(
             f"""
             SELECT COUNT(*) AS pipeline_count
             FROM operacoes o
             JOIN clientes c ON c.id = o.cliente_id
-            WHERE o.status IN ({active_status_placeholders})
-              AND (
-                  o.status NOT IN ('PRONTA_DIGITAR', 'PENDENTE')
-                  OR o.enviada_esteira_em IS NOT NULL
-              )
-              {vendor_clause}
+            WHERE {where_clause}
             """,
             tuple(params),
         )

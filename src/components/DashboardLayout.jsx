@@ -51,6 +51,16 @@ export default function DashboardLayout() {
 
   const role = (user?.role || "").toUpperCase();
   const isAdmin = role === "ADMIN";
+  const isVendor = role === "VENDEDOR";
+  const isDigitador = role.startsWith("DIGITADOR");
+  const canAccessPipeline = isAdmin || isDigitador;
+  const canAccessReport = isAdmin || isVendor || isDigitador;
+
+  const roleLabel = isAdmin
+    ? "Painel admin"
+    : isDigitador
+    ? "Painel digitador"
+    : "Painel vendedor";
 
   const displayName = user?.nome || "Usuario";
   const displayEmail = user?.email || "";
@@ -112,12 +122,12 @@ export default function DashboardLayout() {
   }
 
   function openPipeline() {
-    if (isAdmin) {
+    if (canAccessPipeline) {
       navigate("/pipeline");
       return;
     }
 
-    navigate("/dashboard");
+    navigate("/operations-report");
   }
 
   return (
@@ -127,7 +137,7 @@ export default function DashboardLayout() {
           <div className="brandLogo">{displayInitial}</div>
           <div>
             <h2>JR Cred</h2>
-            <span>{isAdmin ? "Painel admin" : "Painel vendedor"}</span>
+            <span>{roleLabel}</span>
           </div>
         </div>
 
@@ -149,7 +159,7 @@ export default function DashboardLayout() {
             Clientes
           </NavLink>
 
-          {isAdmin && (
+          {canAccessPipeline && (
             <NavLink
               to="/pipeline"
               className={({ isActive }) =>
@@ -160,7 +170,7 @@ export default function DashboardLayout() {
             </NavLink>
           )}
 
-          {isAdmin && (
+          {canAccessReport && (
             <NavLink
               to="/operations-report"
               className={({ isActive }) =>
@@ -223,7 +233,7 @@ export default function DashboardLayout() {
               <div className="userChipAvatar">{displayInitial}</div>
               <div className="userChipInfo">
                 <strong>{displayName}</strong>
-                <span>{displayEmail || (isAdmin ? "ADMIN" : "VENDEDOR")}</span>
+                <span>{displayEmail || role || "USUARIO"}</span>
               </div>
             </div>
           </div>

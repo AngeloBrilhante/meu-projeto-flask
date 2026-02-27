@@ -52,7 +52,8 @@ export default function Login() {
 
 
       // redireciona
-      navigate("/dashboard");
+      const normalizedRole = String(data?.user?.role || "").toUpperCase();
+      navigate(normalizedRole.startsWith("DIGITADOR") ? "/pipeline" : "/dashboard");
 
     } catch (error) {
       setErro("Erro de conexão com o servidor");

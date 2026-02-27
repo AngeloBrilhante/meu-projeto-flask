@@ -10,6 +10,52 @@ from app.database import get_db
 
 users_bp = Blueprint("users", __name__)
 
+ALLOWED_USER_ROLES = (
+    "ADMIN",
+    "VENDEDOR",
+    "DIGITADOR_PORT_REFIN",
+    "DIGITADOR_NOVO_CARTAO",
+)
+
+
+def ensure_user_role_enum(cursor, db):
+    cursor.execute(
+        """
+        SELECT
+            DATA_TYPE,
+            COLUMN_TYPE
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'usuarios'
+          AND COLUMN_NAME = 'role'
+        LIMIT 1
+        """
+    )
+    column = cursor.fetchone()
+
+    if not column:
+        return
+
+    data_type = str(column.get("DATA_TYPE") or "").lower()
+    if data_type != "enum":
+        return
+
+    column_type = str(column.get("COLUMN_TYPE") or "").upper()
+    missing_roles = [
+        role for role in ALLOWED_USER_ROLES if f"'{role}'" not in column_type
+    ]
+    if not missing_roles:
+        return
+
+    enum_values = ", ".join(f"'{role}'" for role in ALLOWED_USER_ROLES)
+    cursor.execute(
+        f"""
+        ALTER TABLE usuarios
+        MODIFY COLUMN role ENUM({enum_values}) NOT NULL DEFAULT 'VENDEDOR'
+        """
+    )
+    db.commit()
+
 # ======================================================
 # 👤 CRIAR USUÁRIO (APENAS ADM)
 # ======================================================
@@ -28,20 +74,28 @@ def create_user():
     if not data:
         return jsonify({"error": "JSON inválido ou ausente"}), 400
 
-    nome = data.get("nome")
-    email = data.get("email")
-    senha = data.get("senha")
-    role = data.get("role")  # ADM ou VENDEDOR
+    nome = (data.get("nome") or "").strip()
+    email = (data.get("email") or "").strip().lower()
+    senha = data.get("senha") or ""
+    role = (data.get("role") or "").strip().upper()
 
     if not nome or not email or not senha or not role:
         return jsonify({"error": "Dados obrigatórios faltando"}), 400
 
+    if role not in ALLOWED_USER_ROLES:
+        return jsonify({
+            "error": "role invalido",
+            "allowed_roles": list(ALLOWED_USER_ROLES),
+        }), 400
+
     senha_hash = generate_password_hash(senha)
 
     db = get_db()
-    cursor = db.cursor()
+    cursor = db.cursor(dictionary=True)
 
     try:
+        ensure_user_role_enum(cursor, db)
+
         cursor.execute(
             """
             INSERT INTO usuarios (nome, email, senha_hash, role)

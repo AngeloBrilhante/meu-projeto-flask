@@ -10,6 +10,17 @@ const INITIAL_FILTERS = {
   search: "",
 };
 
+function getStoredRole() {
+  try {
+    const raw = localStorage.getItem("usuario");
+    if (!raw) return "";
+    const parsed = JSON.parse(raw);
+    return String(parsed?.role || "").toUpperCase();
+  } catch {
+    return "";
+  }
+}
+
 function formatCurrency(value) {
   const number = Number(value);
 
@@ -43,6 +54,15 @@ export default function OperationsReport() {
   const [vendors, setVendors] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const role = useMemo(() => getStoredRole(), []);
+  const isAdmin = role === "ADMIN";
+  const isVendor = role === "VENDEDOR";
+
+  const subtitle = isAdmin
+    ? "Aprovadas e reprovadas de todos os vendedores"
+    : isVendor
+    ? "Aprovadas e reprovadas apenas do seu usuario"
+    : "Aprovadas e reprovadas dos produtos permitidos para seu perfil";
 
   async function loadReport(nextFilters = filters) {
     setLoading(true);
@@ -142,7 +162,7 @@ export default function OperationsReport() {
       <div className="reportHeader">
         <div>
           <h2>Planilha de Operacoes</h2>
-          <p>Aprovadas e reprovadas de todos os vendedores</p>
+          <p>{subtitle}</p>
         </div>
 
         <button
@@ -170,18 +190,20 @@ export default function OperationsReport() {
           <option value="REPROVADO">Reprovado</option>
         </select>
 
-        <select
-          name="vendedor_id"
-          value={filters.vendedor_id}
-          onChange={handleChange}
-        >
-          <option value="">Todos os vendedores</option>
-          {vendors.map((vendor) => (
-            <option key={vendor.id} value={vendor.id}>
-              {vendor.nome}
-            </option>
-          ))}
-        </select>
+        {isAdmin && (
+          <select
+            name="vendedor_id"
+            value={filters.vendedor_id}
+            onChange={handleChange}
+          >
+            <option value="">Todos os vendedores</option>
+            {vendors.map((vendor) => (
+              <option key={vendor.id} value={vendor.id}>
+                {vendor.nome}
+              </option>
+            ))}
+          </select>
+        )}
 
         <input
           type="date"
