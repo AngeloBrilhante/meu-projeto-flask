@@ -39,6 +39,13 @@ function formatCurrency(value) {
   });
 }
 
+function formatProductLabel(product) {
+  return String(product || "")
+    .replace(/_/g, " ")
+    .toLowerCase()
+    .replace(/(^\w)|(\s\w)/g, (char) => char.toUpperCase());
+}
+
 function GoalGauge({ percentage }) {
   const normalized = Math.min(Math.max(Number(percentage || 0), 0), 100);
 
@@ -73,6 +80,8 @@ export default function Dashboard() {
 
   const role = getStoredRole();
   const isAdmin = role === "ADMIN";
+  const isDigitador = role.startsWith("DIGITADOR");
+  const canFilterByVendor = isAdmin || isDigitador;
 
   const periodValues = useMemo(() => toMonthAndYear(period), [period]);
 
@@ -130,6 +139,10 @@ export default function Dashboard() {
   const operations = summary?.operations || {};
   const progress = summary?.progress || {};
   const vendors = summary?.vendors || [];
+  const vendorsProductStats = summary?.vendors_product_stats || [];
+  const productScope = Array.isArray(summary?.product_scope)
+    ? summary.product_scope
+    : [];
   const monthlyApproved = summary?.monthly_approved || [];
 
   const chartMax = Math.max(
@@ -137,10 +150,26 @@ export default function Dashboard() {
     ...monthlyApproved.map((item) => Number(item?.approved_value || 0))
   );
 
-  const scopeLabel =
-    summary?.scope === "GERAL"
-      ? "Desempenho geral de todos os vendedores"
-      : "Desempenho individual";
+  const scopeLabel = useMemo(() => {
+    if (summary?.scope === "GERAL") {
+      return "Desempenho geral de todos os vendedores";
+    }
+
+    if (summary?.scope === "PRODUTO") {
+      return "Desempenho geral dos produtos permitidos para o seu perfil";
+    }
+
+    if (summary?.scope === "PRODUTO_VENDEDOR") {
+      const selectedVendorName = summary?.selected_vendor?.nome || "vendedor";
+      return `Desempenho dos seus produtos para ${selectedVendorName}`;
+    }
+
+    return "Desempenho individual";
+  }, [summary]);
+
+  const productScopeLabel = productScope.length
+    ? productScope.map(formatProductLabel).join(", ")
+    : "Todos os produtos";
 
   return (
     <div className="dashboardPage">
@@ -160,14 +189,18 @@ export default function Dashboard() {
             />
           </label>
 
-          {isAdmin && (
+          {canFilterByVendor && (
             <label>
               Visao
               <select
                 value={vendorId}
                 onChange={(event) => setVendorId(event.target.value)}
               >
-                <option value="">Geral (todos os vendedores)</option>
+                <option value="">
+                  {isAdmin
+                    ? "Geral (todos os vendedores)"
+                    : "Todos os vendedores dos meus produtos"}
+                </option>
                 {vendors.map((vendor) => (
                   <option key={vendor.id} value={vendor.id}>
                     {vendor.nome}
@@ -180,6 +213,9 @@ export default function Dashboard() {
       </div>
 
       {error && <p className="dashboardError">{error}</p>}
+      {isDigitador && (
+        <p className="dashboardScopePill">Produtos permitidos: {productScopeLabel}</p>
+      )}
 
       {loading ? (
         <p className="dashboardLoading">Carregando dados...</p>
@@ -277,6 +313,44 @@ export default function Dashboard() {
               )}
             </article>
           </section>
+
+          {isDigitador && (
+            <section className="panel vendorsStatsPanel">
+              <h3>Visao por vendedor</h3>
+              <p>Resumo dos vendedores considerando apenas os seus produtos.</p>
+
+              <div className="vendorsStatsTableWrap">
+                <table className="vendorsStatsTable">
+                  <thead>
+                    <tr>
+                      <th>Vendedor</th>
+                      <th>Geradas</th>
+                      <th>Na esteira</th>
+                      <th>Aprovadas</th>
+                      <th>Valor aprovado</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {vendorsProductStats.length === 0 ? (
+                      <tr>
+                        <td colSpan={5}>Sem dados para o periodo selecionado.</td>
+                      </tr>
+                    ) : (
+                      vendorsProductStats.map((item) => (
+                        <tr key={`${item.vendedor_id}-${item.vendedor_nome}`}>
+                          <td>{item.vendedor_nome}</td>
+                          <td>{item.generated || 0}</td>
+                          <td>{item.in_pipeline || 0}</td>
+                          <td>{item.approved || 0}</td>
+                          <td>{formatCurrency(item.approved_value || 0)}</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          )}
         </>
       )}
     </div>

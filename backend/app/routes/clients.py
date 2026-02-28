@@ -162,6 +162,17 @@ LEGACY_STATUS_MAP = {
     "DEVOLVIDA": "DEVOLVIDA_VENDEDOR",
 }
 
+STATUS_LABELS = {
+    "PRONTA_DIGITAR": "Pronta para digitar",
+    "EM_DIGITACAO": "Em digitacao",
+    "AGUARDANDO_FORMALIZACAO": "Aguardando formalizacao",
+    "ANALISE_BANCO": "Analise do banco",
+    "PENDENCIA": "Pendencia",
+    "DEVOLVIDA_VENDEDOR": "Devolvida para vendedor",
+    "APROVADO": "Aprovada",
+    "REPROVADO": "Reprovada",
+}
+
 PORTABILITY_FORM_FIELDS = (
     "titulo_produto",
     "vendedor_nome",
@@ -279,6 +290,13 @@ def normalize_role(role):
 def normalize_operation_status(status):
     normalized = (status or "").strip().upper()
     return LEGACY_STATUS_MAP.get(normalized, normalized)
+
+
+def format_operation_status_label(status):
+    normalized = normalize_operation_status(status)
+    if not normalized:
+        return "-"
+    return STATUS_LABELS.get(normalized, normalized.replace("_", " ").title())
 
 
 def normalize_product_name(product):
@@ -503,6 +521,27 @@ def ensure_operation_status_history_table(cursor, db):
     db.commit()
 
 
+def ensure_operation_notifications_table(cursor, db):
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS operation_notifications (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            user_id INT NOT NULL,
+            operation_id INT NOT NULL,
+            previous_status VARCHAR(50) NULL,
+            next_status VARCHAR(50) NOT NULL,
+            title VARCHAR(180) NOT NULL,
+            message TEXT NOT NULL,
+            read_at DATETIME NULL,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_operation_notifications_user_read_created (user_id, read_at, created_at),
+            INDEX idx_operation_notifications_operation_created (operation_id, created_at)
+        )
+        """
+    )
+    db.commit()
+
+
 def register_operation_status_history(
     cursor,
     operation_id,
@@ -540,6 +579,76 @@ def register_operation_status_history(
             changed_by,
             role_value,
             note_value,
+        ),
+    )
+
+
+def notify_vendor_status_change(
+    cursor,
+    operation_id,
+    previous_status,
+    next_status,
+    changed_by=None,
+):
+    normalized_previous = normalize_operation_status(previous_status)
+    normalized_next = normalize_operation_status(next_status)
+
+    if not normalized_next or normalized_previous == normalized_next:
+        return
+
+    cursor.execute(
+        """
+        SELECT
+            c.vendedor_id,
+            COALESCE(c.nome, 'Cliente') AS cliente_nome,
+            COALESCE(o.produto, 'OPERACAO') AS produto
+        FROM operacoes o
+        JOIN clientes c ON c.id = o.cliente_id
+        WHERE o.id = %s
+        LIMIT 1
+        """,
+        (operation_id,),
+    )
+    operation = cursor.fetchone() or {}
+
+    vendedor_id = to_int(operation.get("vendedor_id"))
+    if vendedor_id <= 0:
+        return
+
+    if changed_by and vendedor_id == to_int(changed_by):
+        return
+
+    cliente_nome = str(operation.get("cliente_nome") or "Cliente").strip() or "Cliente"
+    produto = normalize_product_name(operation.get("produto")) or "OPERACAO"
+    previous_label = format_operation_status_label(normalized_previous)
+    next_label = format_operation_status_label(normalized_next)
+
+    title = f"Status da operacao #{operation_id} atualizado"
+    message = (
+        f"{cliente_nome} ({produto}): {previous_label} -> {next_label}"
+        if normalized_previous
+        else f"{cliente_nome} ({produto}): {next_label}"
+    )
+
+    cursor.execute(
+        """
+        INSERT INTO operation_notifications (
+            user_id,
+            operation_id,
+            previous_status,
+            next_status,
+            title,
+            message
+        )
+        VALUES (%s, %s, %s, %s, %s, %s)
+        """,
+        (
+            vendedor_id,
+            operation_id,
+            normalized_previous or None,
+            normalized_next,
+            title,
+            message,
         ),
     )
 
@@ -881,6 +990,7 @@ def create_operation(client_id):
     cursor = db.cursor(dictionary=True)
     ensure_operations_extra_columns(cursor, db)
     ensure_operation_status_history_table(cursor, db)
+    ensure_operation_notifications_table(cursor, db)
 
     cursor.execute("""
         INSERT INTO operacoes (
@@ -1739,6 +1849,13 @@ def update_operation(operation_id):
             changed_by=user_id,
             changed_by_role=role,
         )
+        notify_vendor_status_change(
+            cursor,
+            operation_id,
+            original_status,
+            next_status_for_history,
+            changed_by=user_id,
+        )
 
     db.commit()
 
@@ -1780,6 +1897,7 @@ def send_operation_to_pipeline(operation_id):
         cursor = conn.cursor(dictionary=True)
         ensure_operations_extra_columns(cursor, conn)
         ensure_operation_status_history_table(cursor, conn)
+        ensure_operation_notifications_table(cursor, conn)
 
         cursor.execute(
             """
@@ -1860,6 +1978,13 @@ def send_operation_to_pipeline(operation_id):
             changed_by=user_id,
             changed_by_role=role,
             note=history_note,
+        )
+        notify_vendor_status_change(
+            cursor,
+            operation_id,
+            current_status,
+            next_status,
+            changed_by=user_id,
         )
 
         conn.commit()
@@ -2201,7 +2326,13 @@ def get_dashboard_summary():
         return jsonify({"error": period_error}), 400
 
     role = normalize_role(current_user_role())
-    selected_vendor_id = requested_vendor_id if role == "ADMIN" else current_user_id()
+    if role == ROLE_ADMIN or is_digitador_role(role):
+        selected_vendor_id = requested_vendor_id
+    else:
+        selected_vendor_id = current_user_id()
+
+    if selected_vendor_id is not None and selected_vendor_id < 1:
+        return jsonify({"error": "vendedor_id invalido"}), 400
 
     db = get_db()
     cursor = db.cursor(dictionary=True)
@@ -2214,6 +2345,14 @@ def get_dashboard_summary():
             "REPROVADO",
         )
         sent_status_placeholders = ", ".join(["%s"] * len(sent_statuses))
+        allowed_role_products = allowed_products_for_role(role)
+        role_product_clause = ""
+        role_product_params = []
+
+        if allowed_role_products:
+            role_product_placeholders = ", ".join(["%s"] * len(allowed_role_products))
+            role_product_clause = f" AND UPPER(o.produto) IN ({role_product_placeholders})"
+            role_product_params = list(allowed_role_products)
 
         stats_params = list(sent_statuses) + [period_start, period_end]
         vendor_clause = ""
@@ -2221,6 +2360,8 @@ def get_dashboard_summary():
         if selected_vendor_id:
             vendor_clause = " AND c.vendedor_id = %s"
             stats_params.append(selected_vendor_id)
+
+        stats_params.extend(role_product_params)
 
         cursor.execute(
             f"""
@@ -2241,6 +2382,7 @@ def get_dashboard_summary():
             WHERE o.criado_em >= %s
               AND o.criado_em < %s
               {vendor_clause}
+              {role_product_clause}
             """,
             tuple(stats_params),
         )
@@ -2252,6 +2394,8 @@ def get_dashboard_summary():
         if selected_vendor_id:
             approved_vendor_clause = " AND c.vendedor_id = %s"
             approved_params.append(selected_vendor_id)
+
+        approved_params.extend(role_product_params)
 
         cursor.execute(
             f"""
@@ -2269,6 +2413,7 @@ def get_dashboard_summary():
               AND COALESCE(o.data_pagamento, o.criado_em) >= %s
               AND COALESCE(o.data_pagamento, o.criado_em) < %s
               {approved_vendor_clause}
+              {role_product_clause}
             """,
             tuple(approved_params),
         )
@@ -2284,6 +2429,8 @@ def get_dashboard_summary():
             pipeline_vendor_clause = " AND c.vendedor_id = %s"
             pipeline_params.append(selected_vendor_id)
 
+        pipeline_params.extend(role_product_params)
+
         cursor.execute(
             f"""
             SELECT COUNT(*) AS in_pipeline
@@ -2295,6 +2442,7 @@ def get_dashboard_summary():
                   OR o.enviada_esteira_em IS NOT NULL
               )
               {pipeline_vendor_clause}
+              {role_product_clause}
             """,
             tuple(pipeline_params),
         )
@@ -2306,6 +2454,8 @@ def get_dashboard_summary():
         if selected_vendor_id:
             series_vendor_clause = " AND c.vendedor_id = %s"
             series_params.append(selected_vendor_id)
+
+        series_params.extend(role_product_params)
 
         cursor.execute(
             f"""
@@ -2322,6 +2472,7 @@ def get_dashboard_summary():
             WHERE o.status = 'APROVADO'
               AND YEAR(COALESCE(o.data_pagamento, o.criado_em)) = %s
               {series_vendor_clause}
+              {role_product_clause}
             GROUP BY MONTH(COALESCE(o.data_pagamento, o.criado_em))
             """,
             tuple(series_params),
@@ -2342,7 +2493,7 @@ def get_dashboard_summary():
         ]
 
         vendors = []
-        if role == "ADMIN":
+        if role == ROLE_ADMIN:
             cursor.execute(
                 """
                 SELECT id, nome
@@ -2352,6 +2503,118 @@ def get_dashboard_summary():
                 """
             )
             vendors = cursor.fetchall()
+        elif is_digitador_role(role):
+            if role_product_params:
+                role_vendor_placeholders = ", ".join(
+                    ["%s"] * len(role_product_params)
+                )
+                cursor.execute(
+                    f"""
+                    SELECT DISTINCT
+                        u.id,
+                        u.nome
+                    FROM usuarios u
+                    JOIN clientes c ON c.vendedor_id = u.id
+                    JOIN operacoes o ON o.cliente_id = c.id
+                    WHERE UPPER(u.role) = 'VENDEDOR'
+                      AND UPPER(o.produto) IN ({role_vendor_placeholders})
+                    ORDER BY u.nome ASC
+                    """,
+                    tuple(role_product_params),
+                )
+                vendors = cursor.fetchall()
+            else:
+                cursor.execute(
+                    """
+                    SELECT id, nome
+                    FROM usuarios
+                    WHERE UPPER(role) = 'VENDEDOR'
+                    ORDER BY nome ASC
+                    """
+                )
+                vendors = cursor.fetchall()
+
+        vendor_stats_pipeline_placeholders = ", ".join(
+            ["%s"] * len(PIPELINE_ACTIVE_STATUSES_WITH_LEGACY)
+        )
+        vendor_stats_params = [
+            *PIPELINE_ACTIVE_STATUSES_WITH_LEGACY,
+            period_start,
+            period_end,
+            period_start,
+            period_end,
+            period_start,
+            period_end,
+        ]
+        vendor_stats_clause = ""
+
+        if selected_vendor_id:
+            vendor_stats_clause = " AND c.vendedor_id = %s"
+            vendor_stats_params.append(selected_vendor_id)
+
+        vendor_stats_params.extend(role_product_params)
+
+        cursor.execute(
+            f"""
+            SELECT
+                c.vendedor_id,
+                COALESCE(u.nome, '-') AS vendedor_nome,
+                COUNT(*) AS generated_operations,
+                SUM(
+                    CASE
+                        WHEN o.status IN ({vendor_stats_pipeline_placeholders})
+                             AND (
+                                o.status NOT IN ('PRONTA_DIGITAR', 'PENDENTE')
+                                OR o.enviada_esteira_em IS NOT NULL
+                             ) THEN 1
+                        ELSE 0
+                    END
+                ) AS in_pipeline,
+                SUM(
+                    CASE
+                        WHEN o.status = 'APROVADO'
+                             AND COALESCE(o.data_pagamento, o.criado_em) >= %s
+                             AND COALESCE(o.data_pagamento, o.criado_em) < %s
+                        THEN 1
+                        ELSE 0
+                    END
+                ) AS approved_operations,
+                COALESCE(
+                    SUM(
+                        CASE
+                            WHEN o.status = 'APROVADO'
+                                 AND COALESCE(o.data_pagamento, o.criado_em) >= %s
+                                 AND COALESCE(o.data_pagamento, o.criado_em) < %s
+                            THEN COALESCE(o.valor_liberado, o.valor_solicitado, 0)
+                            ELSE 0
+                        END
+                    ),
+                    0
+                ) AS approved_value
+            FROM operacoes o
+            JOIN clientes c ON c.id = o.cliente_id
+            LEFT JOIN usuarios u ON u.id = c.vendedor_id
+            WHERE o.criado_em >= %s
+              AND o.criado_em < %s
+              {vendor_stats_clause}
+              {role_product_clause}
+            GROUP BY c.vendedor_id, u.nome
+            ORDER BY u.nome ASC
+            """,
+            tuple(vendor_stats_params),
+        )
+        vendor_stats_rows = cursor.fetchall()
+        vendors_product_stats = [
+            {
+                "vendedor_id": to_int(row.get("vendedor_id")),
+                "vendedor_nome": row.get("vendedor_nome") or "-",
+                "generated": to_int(row.get("generated_operations")),
+                "in_pipeline": to_int(row.get("in_pipeline")),
+                "approved": to_int(row.get("approved_operations")),
+                "approved_value": round(to_number(row.get("approved_value")), 2),
+            }
+            for row in vendor_stats_rows
+        ]
 
         selected_vendor = None
         if selected_vendor_id:
@@ -2360,11 +2623,14 @@ def get_dashboard_summary():
                 SELECT id, nome
                 FROM usuarios
                 WHERE id = %s
+                  AND UPPER(role) = 'VENDEDOR'
                 LIMIT 1
                 """,
                 (selected_vendor_id,),
             )
             selected_vendor = cursor.fetchone()
+            if not selected_vendor:
+                return jsonify({"error": "Vendedor nao encontrado"}), 404
 
         goal_target, goal_source = resolve_dashboard_goal(
             cursor,
@@ -2379,18 +2645,23 @@ def get_dashboard_summary():
         approved_value = round(to_number(approved_row.get("approved_value")), 2)
         in_pipeline = to_int(pipeline_row.get("in_pipeline"))
         progress = round((approved_value / goal_target) * 100, 2) if goal_target else 0
+        scope = "INDIVIDUAL"
+
+        if role == ROLE_ADMIN and not selected_vendor_id:
+            scope = "GERAL"
+        elif is_digitador_role(role) and not selected_vendor_id:
+            scope = "PRODUTO"
+        elif is_digitador_role(role):
+            scope = "PRODUTO_VENDEDOR"
 
         return jsonify(
             {
-                "scope": (
-                    "GERAL"
-                    if role == "ADMIN" and not selected_vendor_id
-                    else "INDIVIDUAL"
-                ),
+                "scope": scope,
                 "period": {
                     "month": month,
                     "year": year,
                 },
+                "product_scope": list(allowed_role_products),
                 "goal": {
                     "target": round(goal_target, 2),
                     "source": goal_source,
@@ -2408,6 +2679,7 @@ def get_dashboard_summary():
                 },
                 "selected_vendor": selected_vendor,
                 "vendors": vendors,
+                "vendors_product_stats": vendors_product_stats,
                 "monthly_approved": monthly_approved,
             }
         ), 200
@@ -2501,6 +2773,190 @@ def upsert_dashboard_goal():
                     "vendedor_id": vendor_id,
                     "target": round(target, 2),
                 },
+            }
+        ), 200
+    finally:
+        cursor.close()
+        db.close()
+
+
+# ======================================================
+# NOTIFICACOES DE OPERACOES
+# ======================================================
+
+@clients_bp.route("/notifications", methods=["GET"])
+@jwt_required()
+def list_user_notifications():
+    user_id = current_user_id()
+    unread_only_raw = str(request.args.get("unread_only") or "").strip().lower()
+    unread_only = unread_only_raw in {"1", "true", "yes", "sim"}
+    limit = request.args.get("limit", type=int) or 20
+    limit = max(1, min(limit, 100))
+
+    db = get_db()
+    cursor = db.cursor(dictionary=True)
+
+    try:
+        ensure_operation_notifications_table(cursor, db)
+
+        conditions = ["user_id = %s"]
+        params = [user_id]
+
+        if unread_only:
+            conditions.append("read_at IS NULL")
+
+        where_clause = " AND ".join(conditions)
+        params_with_limit = [*params, limit]
+
+        cursor.execute(
+            f"""
+            SELECT
+                id,
+                operation_id,
+                previous_status,
+                next_status,
+                title,
+                message,
+                read_at,
+                created_at
+            FROM operation_notifications
+            WHERE {where_clause}
+            ORDER BY created_at DESC, id DESC
+            LIMIT %s
+            """,
+            tuple(params_with_limit),
+        )
+        notifications = cursor.fetchall()
+
+        for item in notifications:
+            previous_status = item.get("previous_status")
+            item["previous_status"] = (
+                normalize_operation_status(previous_status) if previous_status else None
+            )
+            item["next_status"] = normalize_operation_status(item.get("next_status"))
+            item["read"] = item.get("read_at") is not None
+
+        cursor.execute(
+            """
+            SELECT COUNT(*) AS unread_count
+            FROM operation_notifications
+            WHERE user_id = %s
+              AND read_at IS NULL
+            """,
+            (user_id,),
+        )
+        unread_count = to_int((cursor.fetchone() or {}).get("unread_count"))
+
+        return jsonify(
+            {
+                "notifications": notifications,
+                "unread_count": unread_count,
+            }
+        ), 200
+    finally:
+        cursor.close()
+        db.close()
+
+
+@clients_bp.route("/notifications/unread-count", methods=["GET"])
+@jwt_required()
+def get_user_notifications_unread_count():
+    user_id = current_user_id()
+
+    db = get_db()
+    cursor = db.cursor(dictionary=True)
+
+    try:
+        ensure_operation_notifications_table(cursor, db)
+        cursor.execute(
+            """
+            SELECT COUNT(*) AS unread_count
+            FROM operation_notifications
+            WHERE user_id = %s
+              AND read_at IS NULL
+            """,
+            (user_id,),
+        )
+        unread_count = to_int((cursor.fetchone() or {}).get("unread_count"))
+
+        return jsonify(
+            {
+                "unread_count": unread_count,
+            }
+        ), 200
+    finally:
+        cursor.close()
+        db.close()
+
+
+@clients_bp.route("/notifications/<int:notification_id>/read", methods=["PUT"])
+@jwt_required()
+def mark_user_notification_as_read(notification_id):
+    user_id = current_user_id()
+
+    db = get_db()
+    cursor = db.cursor(dictionary=True)
+
+    try:
+        ensure_operation_notifications_table(cursor, db)
+
+        cursor.execute(
+            """
+            SELECT id, read_at
+            FROM operation_notifications
+            WHERE id = %s
+              AND user_id = %s
+            LIMIT 1
+            """,
+            (notification_id, user_id),
+        )
+        notification = cursor.fetchone()
+        if not notification:
+            return jsonify({"error": "Notificacao nao encontrada"}), 404
+
+        if notification.get("read_at") is None:
+            cursor.execute(
+                """
+                UPDATE operation_notifications
+                SET read_at = NOW()
+                WHERE id = %s
+                  AND user_id = %s
+                """,
+                (notification_id, user_id),
+            )
+            db.commit()
+
+        return jsonify({"message": "Notificacao marcada como lida"}), 200
+    finally:
+        cursor.close()
+        db.close()
+
+
+@clients_bp.route("/notifications/read-all", methods=["PUT"])
+@jwt_required()
+def mark_all_user_notifications_as_read():
+    user_id = current_user_id()
+
+    db = get_db()
+    cursor = db.cursor(dictionary=True)
+
+    try:
+        ensure_operation_notifications_table(cursor, db)
+        cursor.execute(
+            """
+            UPDATE operation_notifications
+            SET read_at = NOW()
+            WHERE user_id = %s
+              AND read_at IS NULL
+            """,
+            (user_id,),
+        )
+        db.commit()
+
+        return jsonify(
+            {
+                "message": "Notificacoes marcadas como lidas",
+                "updated": cursor.rowcount,
             }
         ), 200
     finally:

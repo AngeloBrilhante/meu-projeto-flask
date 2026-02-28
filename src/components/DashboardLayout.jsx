@@ -1,6 +1,12 @@
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
-import { useEffect, useMemo, useState } from "react";
-import { getDashboardNotifications } from "../services/api";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  getDashboardNotifications,
+  getCurrentUserProfile,
+  getUserNotifications,
+  markAllNotificationsAsRead,
+  markNotificationAsRead,
+} from "../services/api";
 import "../pages/Dashboard.css";
 
 function getStoredUser() {
@@ -43,11 +49,21 @@ function IconBell() {
   );
 }
 
+function formatDateTime(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleString("pt-BR");
+}
+
 export default function DashboardLayout() {
   const navigate = useNavigate();
   const [user, setUser] = useState(() => getStoredUser());
   const [theme, setTheme] = useState(() => getStoredTheme());
   const [pipelineCount, setPipelineCount] = useState(0);
+  const [userNotifications, setUserNotifications] = useState([]);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const notificationMenuRef = useRef(null);
 
   const role = (user?.role || "").toUpperCase();
   const isAdmin = role === "ADMIN";
@@ -64,13 +80,46 @@ export default function DashboardLayout() {
 
   const displayName = user?.nome || "Usuario";
   const displayEmail = user?.email || "";
+  const avatarUrl = user?.foto_url || "";
   const displayInitial = useMemo(
     () => (displayName?.trim()?.charAt(0) || "U").toUpperCase(),
     [displayName]
   );
 
   useEffect(() => {
+    let mounted = true;
+
+    async function hydrateCurrentUser() {
+      try {
+        const profile = await getCurrentUserProfile();
+        if (!mounted || !profile) return;
+
+        const localUser = getStoredUser() || {};
+        const merged = { ...localUser, ...profile };
+
+        localStorage.setItem("usuario", JSON.stringify(merged));
+        setUser(merged);
+      } catch (error) {
+        if (mounted) {
+          setUser(getStoredUser());
+        }
+      }
+    }
+
     setUser(getStoredUser());
+    hydrateCurrentUser();
+
+    function handleUserUpdated() {
+      setUser(getStoredUser());
+      hydrateCurrentUser();
+    }
+
+    window.addEventListener("user:updated", handleUserUpdated);
+
+    return () => {
+      mounted = false;
+      window.removeEventListener("user:updated", handleUserUpdated);
+    };
   }, []);
 
   useEffect(() => {
@@ -83,13 +132,26 @@ export default function DashboardLayout() {
 
     async function loadNotifications() {
       try {
+        if (isVendor) {
+          const data = await getUserNotifications({ limit: 12 });
+          if (mounted) {
+            setUserNotifications(
+              Array.isArray(data?.notifications) ? data.notifications : []
+            );
+            setPipelineCount(Number(data?.unread_count || 0));
+          }
+          return;
+        }
+
         const data = await getDashboardNotifications();
         if (mounted) {
           setPipelineCount(Number(data?.pipeline_count || 0));
+          setUserNotifications([]);
         }
       } catch (error) {
         if (mounted) {
           setPipelineCount(0);
+          setUserNotifications([]);
         }
       }
     }
@@ -103,13 +165,30 @@ export default function DashboardLayout() {
     }
 
     window.addEventListener("pipeline:changed", refreshNotifications);
+    window.addEventListener("notifications:refresh", refreshNotifications);
 
     return () => {
       mounted = false;
       clearInterval(interval);
       window.removeEventListener("pipeline:changed", refreshNotifications);
+      window.removeEventListener("notifications:refresh", refreshNotifications);
     };
-  }, []);
+  }, [isVendor]);
+
+  useEffect(() => {
+    if (!notificationsOpen) return undefined;
+
+    function handleClickOutside(event) {
+      if (!notificationMenuRef.current) return;
+      if (notificationMenuRef.current.contains(event.target)) return;
+      setNotificationsOpen(false);
+    }
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [notificationsOpen]);
 
   function toggleTheme() {
     setTheme((prev) => (prev === "dark" ? "light" : "dark"));
@@ -122,6 +201,11 @@ export default function DashboardLayout() {
   }
 
   function openPipeline() {
+    if (isVendor) {
+      setNotificationsOpen((prev) => !prev);
+      return;
+    }
+
     if (canAccessPipeline) {
       navigate("/pipeline");
       return;
@@ -130,11 +214,79 @@ export default function DashboardLayout() {
     navigate("/operations-report");
   }
 
+  async function handleNotificationClick(notification) {
+    if (!notification) return;
+
+    try {
+      if (!notification.read_at) {
+        await markNotificationAsRead(notification.id);
+        setUserNotifications((prev) =>
+          prev.map((item) =>
+            item.id === notification.id
+              ? {
+                  ...item,
+                  read_at: item.read_at || new Date().toISOString(),
+                  read: true,
+                }
+              : item
+          )
+        );
+        setPipelineCount((prev) => Math.max(0, prev - 1));
+      }
+    } catch (error) {
+      // Mantem navegacao mesmo se falhar a marcacao de leitura.
+    }
+
+    setNotificationsOpen(false);
+
+    if (notification.operation_id) {
+      navigate(`/operations/${notification.operation_id}/ficha`);
+      return;
+    }
+
+    navigate("/operations-report");
+  }
+
+  async function handleMarkAllNotificationsRead(event) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (!pipelineCount) return;
+
+    try {
+      await markAllNotificationsAsRead();
+      setUserNotifications((prev) =>
+        prev.map((item) => ({
+          ...item,
+          read_at: item.read_at || new Date().toISOString(),
+          read: true,
+        }))
+      );
+      setPipelineCount(0);
+    } catch (error) {
+      // Sem acao: manter estado atual.
+    }
+  }
+
+  const bellTitle = isVendor
+    ? pipelineCount > 0
+      ? `${pipelineCount} notificacoes nao lidas`
+      : "Sem notificacoes novas"
+    : pipelineCount > 0
+    ? `${pipelineCount} operacoes na esteira`
+    : "Sem operacoes na esteira";
+
   return (
     <div className="appShell">
       <aside className="appSidebar">
         <div className="brandBlock">
-          <div className="brandLogo">{displayInitial}</div>
+          <div className="brandLogo">
+            {avatarUrl ? (
+              <img src={avatarUrl} alt={displayName} className="avatarImage" />
+            ) : (
+              displayInitial
+            )}
+          </div>
           <div>
             <h2>JR Cred</h2>
             <span>{roleLabel}</span>
@@ -149,6 +301,14 @@ export default function DashboardLayout() {
             }
           >
             Dashboard
+          </NavLink>
+          <NavLink
+            to="/profile"
+            className={({ isActive }) =>
+              isActive ? "sidebarLink active" : "sidebarLink"
+            }
+          >
+            Meu perfil
           </NavLink>
           <NavLink
             to="/clients"
@@ -211,31 +371,78 @@ export default function DashboardLayout() {
               <IconTheme theme={theme} />
             </button>
 
+            <div className="notificationMenu" ref={notificationMenuRef}>
+              <button
+                type="button"
+                className="iconButton bellButton"
+                onClick={openPipeline}
+                title={bellTitle}
+              >
+                <IconBell />
+                {pipelineCount > 0 && (
+                  <span className="notificationBadge">
+                    {pipelineCount > 99 ? "99+" : pipelineCount}
+                  </span>
+                )}
+              </button>
+
+              {isVendor && notificationsOpen && (
+                <div className="notificationPanel">
+                  <div className="notificationPanelHeader">
+                    <strong>Notificacoes</strong>
+                    <button
+                      type="button"
+                      className="notificationMarkAllBtn"
+                      onClick={handleMarkAllNotificationsRead}
+                      disabled={!pipelineCount}
+                    >
+                      Marcar todas
+                    </button>
+                  </div>
+
+                  {userNotifications.length === 0 ? (
+                    <p className="notificationEmpty">Sem notificacoes no momento.</p>
+                  ) : (
+                    <ul className="notificationList">
+                      {userNotifications.map((notification) => (
+                        <li key={notification.id}>
+                          <button
+                            type="button"
+                            className={`notificationItem${
+                              notification.read_at ? " read" : " unread"
+                            }`}
+                            onClick={() => handleNotificationClick(notification)}
+                          >
+                            <strong>{notification.title || "Atualizacao de operacao"}</strong>
+                            <span>{notification.message || "-"}</span>
+                            <small>{formatDateTime(notification.created_at)}</small>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
+            </div>
+
             <button
               type="button"
-              className="iconButton bellButton"
-              onClick={openPipeline}
-              title={
-                pipelineCount > 0
-                  ? `${pipelineCount} operacoes na esteira`
-                  : "Sem operacoes na esteira"
-              }
+              className="userChip userChipButton"
+              onClick={() => navigate("/profile")}
+              title="Abrir perfil"
             >
-              <IconBell />
-              {pipelineCount > 0 && (
-                <span className="notificationBadge">
-                  {pipelineCount > 99 ? "99+" : pipelineCount}
-                </span>
-              )}
-            </button>
-
-            <div className="userChip">
-              <div className="userChipAvatar">{displayInitial}</div>
+              <div className="userChipAvatar">
+                {avatarUrl ? (
+                  <img src={avatarUrl} alt={displayName} className="avatarImage" />
+                ) : (
+                  displayInitial
+                )}
+              </div>
               <div className="userChipInfo">
                 <strong>{displayName}</strong>
                 <span>{displayEmail || role || "USUARIO"}</span>
               </div>
-            </div>
+            </button>
           </div>
         </header>
 

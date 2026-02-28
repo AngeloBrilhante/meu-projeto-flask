@@ -15,6 +15,7 @@ import DashboardLayout from "./components/DashboardLayout";
 import Pipeline from "./pages/Pipeline";
 import OperationsReport from "./pages/OperationsReport";
 import OperationDossier from "./pages/OperationDossier";
+import Profile from "./pages/Profile";
 
 
 export default function App() {
@@ -33,6 +34,7 @@ export default function App() {
           }
         >
           <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/profile" element={<Profile />} />
           <Route path="/clients" element={<Clients />} />
           <Route path="/clients/new" element={<CreateClient />} />
           <Route path="/pipeline" element={<Pipeline />} />

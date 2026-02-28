@@ -416,6 +416,143 @@ export async function updateDashboardGoal(payload) {
   return data;
 }
 
+export async function getCurrentUserProfile() {
+  const response = await fetch(`${API_URL}/users/me`, {
+    headers: getAuthHeaders(),
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.error || "Erro ao carregar perfil");
+  }
+
+  return data.user || data;
+}
+
+export async function updateCurrentUserProfile(payload) {
+  const response = await fetch(`${API_URL}/users/me`, {
+    method: "PUT",
+    headers: getAuthHeaders(true),
+    body: JSON.stringify(payload),
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.error || "Erro ao atualizar perfil");
+  }
+
+  return data.user || data;
+}
+
+export async function updateCurrentUserPassword(payload) {
+  const response = await fetch(`${API_URL}/users/me/password`, {
+    method: "PUT",
+    headers: getAuthHeaders(true),
+    body: JSON.stringify(payload),
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.error || "Erro ao atualizar senha");
+  }
+
+  return data;
+}
+
+export async function uploadCurrentUserAvatar(file) {
+  const formData = new FormData();
+  formData.append("avatar", file);
+
+  const response = await fetch(`${API_URL}/users/me/avatar`, {
+    method: "POST",
+    headers: getAuthHeaders(false),
+    body: formData,
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.error || "Erro ao atualizar foto");
+  }
+
+  return data.user || data;
+}
+
+export async function deleteCurrentUserAvatar() {
+  const response = await fetch(`${API_URL}/users/me/avatar`, {
+    method: "DELETE",
+    headers: getAuthHeaders(true),
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.error || "Erro ao remover foto");
+  }
+
+  return data.user || data;
+}
+
+export async function getUserNotifications(filters = {}) {
+  const params = new URLSearchParams();
+
+  Object.entries(filters).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== "") {
+      params.set(key, value);
+    }
+  });
+
+  const query = params.toString();
+  const url = query
+    ? `${API_URL}/notifications?${query}`
+    : `${API_URL}/notifications`;
+
+  const response = await fetch(url, {
+    headers: getAuthHeaders(),
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.error || "Erro ao carregar notificacoes");
+  }
+
+  return data;
+}
+
+export async function markNotificationAsRead(notificationId) {
+  const response = await fetch(`${API_URL}/notifications/${notificationId}/read`, {
+    method: "PUT",
+    headers: getAuthHeaders(true),
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.error || "Erro ao marcar notificacao como lida");
+  }
+
+  return data;
+}
+
+export async function markAllNotificationsAsRead() {
+  const response = await fetch(`${API_URL}/notifications/read-all`, {
+    method: "PUT",
+    headers: getAuthHeaders(true),
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.error || "Erro ao marcar notificacoes como lidas");
+  }
+
+  return data;
+}
+
 export async function getDashboardNotifications() {
   const response = await fetch(`${API_URL}/dashboard/notifications`, {
     headers: getAuthHeaders(),

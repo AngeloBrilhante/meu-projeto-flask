@@ -88,6 +88,14 @@
   font-weight: 700;
 }
 
+.avatarImage {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: inherit;
+  display: block;
+}
+
 .sidebarNav {
   display: flex;
   flex-direction: column;
@@ -224,6 +232,110 @@
   padding: 0 4px;
 }
 
+.notificationMenu {
+  position: relative;
+}
+
+.notificationPanel {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  width: min(360px, 92vw);
+  max-height: 420px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  box-shadow: 0 18px 36px rgba(0, 0, 0, 0.28);
+  z-index: 30;
+}
+
+.notificationPanelHeader {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.notificationPanelHeader strong {
+  font-size: 13px;
+}
+
+.notificationMarkAllBtn {
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.notificationMarkAllBtn:disabled {
+  color: var(--text-secondary);
+  cursor: default;
+}
+
+.notificationEmpty {
+  margin: 0;
+  padding: 16px 14px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.notificationList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+}
+
+.notificationItem {
+  width: 100%;
+  border: 0;
+  border-bottom: 1px solid var(--border-color);
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px;
+  cursor: pointer;
+}
+
+.notificationItem:last-child {
+  border-bottom: 0;
+}
+
+.notificationItem strong {
+  font-size: 12px;
+}
+
+.notificationItem span {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.notificationItem small {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.notificationItem.unread {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.notificationItem.read {
+  opacity: 0.82;
+}
+
+.notificationItem:hover {
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--border-color));
+}
+
 .userChip {
   margin-left: 4px;
   display: flex;
@@ -233,6 +345,12 @@
   border: 1px solid var(--border-color);
   border-radius: 999px;
   padding: 5px 12px 5px 5px;
+}
+
+.userChipButton {
+  cursor: pointer;
+  color: inherit;
+  text-align: left;
 }
 
 .userChipAvatar {
@@ -332,6 +450,17 @@
   background: rgba(214, 66, 66, 0.12);
   color: var(--danger);
   border: 1px solid rgba(214, 66, 66, 0.3);
+}
+
+.dashboardScopePill {
+  margin: 0;
+  width: fit-content;
+  padding: 8px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border-color);
+  background: var(--surface);
+  color: var(--text-secondary);
+  font-size: 12px;
 }
 
 .metricGrid {
@@ -528,6 +657,36 @@
   cursor: not-allowed;
 }
 
+.vendorsStatsPanel {
+  padding: 16px 18px;
+}
+
+.vendorsStatsTableWrap {
+  margin-top: 14px;
+  overflow-x: auto;
+}
+
+.vendorsStatsTable {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 620px;
+}
+
+.vendorsStatsTable th,
+.vendorsStatsTable td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border-color);
+  text-align: left;
+  font-size: 13px;
+}
+
+.vendorsStatsTable th {
+  font-size: 12px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
 @media (max-width: 1200px) {
   .dashboardPanels {
     grid-template-columns: 1fr;
@@ -584,6 +743,10 @@
 
   .topActions {
     justify-content: space-between;
+  }
+
+  .notificationPanel {
+    right: -16px;
   }
 
   .metricGrid {
