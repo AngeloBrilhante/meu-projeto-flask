@@ -10,8 +10,11 @@ export default function Login() {
   const [senha, setSenha] = useState("");
   const [erro, setErro] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
-  async function handleLogin() {
+  async function handleLogin(event) {
+    if (event) event.preventDefault();
+
     if (!email || !senha) {
       setErro("Informe email e senha");
       return;
@@ -36,7 +39,7 @@ export default function Login() {
       try {
         data = await response.json();
       } catch {
-        throw new Error("Resposta inválida do servidor");
+        throw new Error("Resposta invalida do servidor");
       }
 
       if (!response.ok) {
@@ -44,19 +47,13 @@ export default function Login() {
         return;
       }
 
-      // salva usuário logado
-      localStorage.setItem("usuario", JSON.stringify(data.user))
+      localStorage.setItem("usuario", JSON.stringify(data.user));
+      localStorage.setItem("token", data.token);
 
-      // salva token JWT
-      localStorage.setItem("token", data.token)
-
-
-      // redireciona
       const normalizedRole = String(data?.user?.role || "").toUpperCase();
       navigate(normalizedRole.startsWith("DIGITADOR") ? "/pipeline" : "/dashboard");
-
     } catch (error) {
-      setErro("Erro de conexão com o servidor");
+      setErro("Erro de conexao com o servidor");
     } finally {
       setLoading(false);
     }
@@ -65,50 +62,81 @@ export default function Login() {
   return (
     <div className="loginPage">
       <div className="loginCard">
-        <div className="loginLeft">
-          <div className="brand">
-            <div className="logo">🪙</div>
-            <h2>Bem-Vindo a</h2>
-            <h1>JR Cred</h1>
-          </div>
-          <p>A solução para o seu bolso.</p>
-        </div>
-
-        <div className="loginRight">
-          <h2>Seja bem-vindo</h2>
-
-          <div className="inputGroup">
-            <label>Email</label>
-            <input
-              type="email"
-              placeholder="Insira seu e-mail"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-            />
+        <section className="loginLeft">
+          <div className="brandLockup" aria-label="Aureon Capital">
+            <h1 className="brandTitle">
+              aure<span>/</span>on
+            </h1>
+            <p className="brandSubtitle">CAPITAL</p>
           </div>
 
-          <div className="inputGroup">
-            <label>Senha</label>
-            <input
-              type="password"
-              placeholder="Insira sua senha"
-              value={senha}
-              onChange={(e) => setSenha(e.target.value)}
-            />
+          <p className="loginIntro">Acesse o sistema com seu usuario corporativo.</p>
+
+          <form className="loginForm" onSubmit={handleLogin}>
+            <div className="inputGroup">
+              <label htmlFor="email">Email</label>
+              <input
+                id="email"
+                type="email"
+                placeholder="seuemail@empresa.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                autoComplete="email"
+              />
+            </div>
+
+            <div className="inputGroup">
+              <label htmlFor="senha">Senha</label>
+              <div className="passwordWrap">
+                <input
+                  id="senha"
+                  type={showPassword ? "text" : "password"}
+                  placeholder="Digite sua senha"
+                  value={senha}
+                  onChange={(e) => setSenha(e.target.value)}
+                  autoComplete="current-password"
+                />
+                <button
+                  type="button"
+                  className="passwordToggle"
+                  onClick={() => setShowPassword((prev) => !prev)}
+                >
+                  {showPassword ? "Ocultar" : "Mostrar"}
+                </button>
+              </div>
+            </div>
+
+            {erro && <p className="error">{erro}</p>}
+
+            <div className="buttons">
+              <button className="btnPrimary" type="submit" disabled={loading}>
+                {loading ? "Entrando..." : "Entrar"}
+              </button>
+            </div>
+          </form>
+        </section>
+
+        <section className="loginRight">
+          <div className="loginRightContent">
+            <p className="eyebrow">Portal Aureon</p>
+            <h2>Sistema de consignado com controle total da operacao.</h2>
+            <p>
+              Acompanhe pipeline, status e produtividade com uma experiencia mais
+              fluida e segura.
+            </p>
           </div>
 
-          {erro && <p className="error">{erro}</p>}
-
-          <div className="buttons">
-            <button
-              className="btnPrimary"
-              onClick={handleLogin}
-              disabled={loading}
-            >
-              {loading ? "Entrando..." : "Entrar"}
-            </button>
+          <div className="illustration" aria-hidden="true">
+            <div className="illusOrb orbA" />
+            <div className="illusOrb orbB" />
+            <div className="illusPanel">
+              <div className="illusPanelHead" />
+              <div className="illusRow" />
+              <div className="illusRow small" />
+              <div className="illusRow" />
+            </div>
           </div>
-        </div>
+        </section>
       </div>
     </div>
   );
