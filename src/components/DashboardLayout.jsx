@@ -288,7 +288,7 @@ export default function DashboardLayout() {
             )}
           </div>
           <div>
-            <h2>JR Cred</h2>
+            <h2>Aureon Capital</h2>
             <span>{roleLabel}</span>
           </div>
         </div>
