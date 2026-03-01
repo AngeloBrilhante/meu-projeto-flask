@@ -4,6 +4,7 @@ import uuid
 
 from flask import (
     Blueprint,
+    Response,
     abort,
     has_request_context,
     jsonify,
@@ -49,11 +50,18 @@ ALLOWED_USER_ROLES = (
 
 EMAIL_REGEX = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 AVATAR_ALLOWED_EXTENSIONS = {"jpg", "jpeg", "png", "webp"}
+AVATAR_MIME_BY_EXT = {
+    "jpg": "image/jpeg",
+    "jpeg": "image/jpeg",
+    "png": "image/png",
+    "webp": "image/webp",
+}
 MAX_NAME_LENGTH = 100
 MAX_EMAIL_LENGTH = 100
 MAX_PHONE_LENGTH = 30
 MAX_BIO_LENGTH = 255
 MIN_PASSWORD_LENGTH = 6
+MAX_AVATAR_BYTES = 5 * 1024 * 1024
 
 STORAGE_ROOT = os.getenv("STORAGE_ROOT", os.path.join(os.getcwd(), "storage"))
 USERS_STORAGE_ROOT = os.path.join(STORAGE_ROOT, "users")
@@ -161,6 +169,14 @@ def ensure_user_profile_columns(cursor, db):
 
     if "foto_arquivo" not in columns:
         cursor.execute("ALTER TABLE usuarios ADD COLUMN foto_arquivo VARCHAR(255) NULL")
+        changed = True
+
+    if "foto_blob" not in columns:
+        cursor.execute("ALTER TABLE usuarios ADD COLUMN foto_blob LONGBLOB NULL")
+        changed = True
+
+    if "foto_mime" not in columns:
+        cursor.execute("ALTER TABLE usuarios ADD COLUMN foto_mime VARCHAR(100) NULL")
         changed = True
 
     if changed:
@@ -684,16 +700,19 @@ def upload_current_user_avatar():
         return jsonify({"error": "Formato de avatar invalido. Use jpg, jpeg, png ou webp"}), 400
 
     ext = avatar.filename.rsplit(".", 1)[1].lower()
+    avatar_mime = AVATAR_MIME_BY_EXT.get(ext, "application/octet-stream")
     avatar_filename = f"avatar_{uuid.uuid4().hex}.{ext}"
-    user_folder = os.path.join(USERS_STORAGE_ROOT, str(user_id))
-    os.makedirs(user_folder, exist_ok=True)
-    avatar_path = os.path.join(user_folder, avatar_filename)
+    avatar_bytes = avatar.read()
+
+    if not avatar_bytes:
+        return jsonify({"error": "Arquivo de avatar vazio"}), 400
+
+    if len(avatar_bytes) > MAX_AVATAR_BYTES:
+        max_mb = int(MAX_AVATAR_BYTES / (1024 * 1024))
+        return jsonify({"error": f"Arquivo muito grande. Limite de {max_mb}MB"}), 400
 
     db = get_db()
     cursor = db.cursor(dictionary=True)
-
-    previous_avatar = None
-    saved_file = False
 
     try:
         ensure_user_profile_columns(cursor, db)
@@ -702,16 +721,26 @@ def upload_current_user_avatar():
             return jsonify({"error": "Usuario nao encontrado"}), 404
 
         previous_avatar = row.get("foto_arquivo")
-        avatar.save(avatar_path)
-        saved_file = True
+
+        # Tenta manter copia local para compatibilidade, mas a fonte de verdade e o banco.
+        user_folder = os.path.join(USERS_STORAGE_ROOT, str(user_id))
+        os.makedirs(user_folder, exist_ok=True)
+        avatar_path = os.path.join(user_folder, avatar_filename)
+        try:
+            with open(avatar_path, "wb") as avatar_file:
+                avatar_file.write(avatar_bytes)
+        except Exception:
+            pass
 
         cursor.execute(
             """
             UPDATE usuarios
-            SET foto_arquivo = %s
+            SET foto_arquivo = %s,
+                foto_blob = %s,
+                foto_mime = %s
             WHERE id = %s
             """,
-            (avatar_filename, user_id),
+            (avatar_filename, avatar_bytes, avatar_mime, user_id),
         )
         db.commit()
 
@@ -722,11 +751,9 @@ def upload_current_user_avatar():
 
         updated = fetch_user_row(cursor, user_id)
         return jsonify({"message": "Foto atualizada com sucesso", "user": serialize_user(updated)}), 200
-    except Exception:
+    except Exception as exc:
         db.rollback()
-        if saved_file and os.path.exists(avatar_path):
-            os.remove(avatar_path)
-        raise
+        return jsonify({"error": f"Nao foi possivel atualizar a foto: {str(exc)}"}), 400
     finally:
         cursor.close()
         db.close()
@@ -754,6 +781,8 @@ def delete_current_user_avatar():
                 """
                 UPDATE usuarios
                 SET foto_arquivo = NULL
+                  ,foto_blob = NULL
+                  ,foto_mime = NULL
                 WHERE id = %s
                 """,
                 (user_id,),
@@ -928,7 +957,42 @@ def serve_user_avatar(user_id, filename):
     user_folder = os.path.join(USERS_STORAGE_ROOT, str(int(user_id)))
     file_path = os.path.join(user_folder, safe_filename)
 
-    if not os.path.exists(file_path):
+    if os.path.exists(file_path):
+        return send_from_directory(user_folder, safe_filename, as_attachment=False)
+
+    db = get_db()
+    cursor = db.cursor(dictionary=True)
+    try:
+        ensure_user_profile_columns(cursor, db)
+        cursor.execute(
+            """
+            SELECT foto_arquivo, foto_blob, foto_mime
+            FROM usuarios
+            WHERE id = %s
+            LIMIT 1
+            """,
+            (int(user_id),),
+        )
+        row = cursor.fetchone()
+    finally:
+        cursor.close()
+        db.close()
+
+    if not row:
         abort(404, description="Arquivo nao encontrado")
 
-    return send_from_directory(user_folder, safe_filename, as_attachment=False)
+    current_filename = os.path.basename(str(row.get("foto_arquivo") or ""))
+    if current_filename and current_filename != safe_filename:
+        abort(404, description="Arquivo nao encontrado")
+
+    avatar_blob = row.get("foto_blob")
+    if not avatar_blob:
+        abort(404, description="Arquivo nao encontrado")
+
+    if isinstance(avatar_blob, memoryview):
+        avatar_blob = avatar_blob.tobytes()
+
+    mime_type = str(row.get("foto_mime") or "").strip() or "application/octet-stream"
+    response = Response(avatar_blob, mimetype=mime_type)
+    response.headers["Cache-Control"] = "public, max-age=60"
+    return response
