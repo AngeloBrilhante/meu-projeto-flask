@@ -19,11 +19,29 @@ from flask_jwt_extended import (
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from app.database import get_db
+from app.utils.security import (
+    add_to_trash,
+    build_otpauth_uri,
+    ensure_audit_logs_table,
+    ensure_trash_bin_table,
+    ensure_user_security_columns,
+    generate_totp_secret,
+    get_twofa_code_from_request,
+    insert_row,
+    log_audit,
+    row_to_insert_dict,
+    verify_totp_code,
+    verify_user_twofa,
+)
 
 users_bp = Blueprint("users", __name__)
 
+ROLE_ADMIN = "ADMIN"
+ROLE_GLOBAL = "GLOBAL"
+
 ALLOWED_USER_ROLES = (
-    "ADMIN",
+    ROLE_ADMIN,
+    ROLE_GLOBAL,
     "VENDEDOR",
     "DIGITADOR_PORT_REFIN",
     "DIGITADOR_NOVO_CARTAO",
@@ -43,6 +61,18 @@ USERS_STORAGE_ROOT = os.path.join(STORAGE_ROOT, "users")
 
 def normalize_role(role):
     return str(role or "").strip().upper()
+
+
+def current_actor_role():
+    return normalize_role((get_jwt() or {}).get("role"))
+
+
+def actor_can_manage_users():
+    return current_actor_role() in {ROLE_ADMIN, ROLE_GLOBAL}
+
+
+def actor_is_global():
+    return current_actor_role() == ROLE_GLOBAL
 
 
 def normalize_email(email):
@@ -136,6 +166,8 @@ def ensure_user_profile_columns(cursor, db):
     if changed:
         db.commit()
 
+    ensure_user_security_columns(cursor, db)
+
 
 def serialize_user(row):
     if not row:
@@ -150,6 +182,7 @@ def serialize_user(row):
         "telefone": row.get("telefone") or "",
         "bio": row.get("bio") or "",
         "foto_url": build_avatar_url(user_id, row.get("foto_arquivo")),
+        "twofa_enabled": bool(row.get("twofa_enabled")),
     }
 
 
@@ -164,7 +197,9 @@ def fetch_user_row(cursor, user_id):
             COALESCE(telefone, '') AS telefone,
             COALESCE(bio, '') AS bio,
             foto_arquivo,
-            senha_hash
+            senha_hash,
+            twofa_secret,
+            COALESCE(twofa_enabled, 0) AS twofa_enabled
         FROM usuarios
         WHERE id = %s
         LIMIT 1
@@ -174,11 +209,18 @@ def fetch_user_row(cursor, user_id):
     return cursor.fetchone()
 
 
+def require_global_twofa(cursor, actor_id):
+    code = get_twofa_code_from_request()
+    valid, error_message = verify_user_twofa(cursor, actor_id, code)
+    if valid:
+        return None
+    return jsonify({"error": error_message}), 403
+
+
 @users_bp.route("/users", methods=["POST"])
 @jwt_required()
 def create_user():
-    claims = get_jwt()
-    if normalize_role(claims.get("role")) != "ADMIN":
+    if not actor_can_manage_users():
         return jsonify({"error": "Acesso nao autorizado"}), 403
 
     data = request.get_json(silent=True) or {}
@@ -274,7 +316,8 @@ def login():
                 role,
                 COALESCE(telefone, '') AS telefone,
                 COALESCE(bio, '') AS bio,
-                foto_arquivo
+                foto_arquivo,
+                COALESCE(twofa_enabled, 0) AS twofa_enabled
             FROM usuarios
             WHERE email = %s
             LIMIT 1
@@ -477,6 +520,157 @@ def update_current_user_password():
         db.close()
 
 
+@users_bp.route("/users/me/2fa/status", methods=["GET"])
+@jwt_required()
+def get_twofa_status():
+    user_id = int(get_jwt_identity())
+
+    db = get_db()
+    cursor = db.cursor(dictionary=True)
+
+    try:
+        ensure_user_profile_columns(cursor, db)
+        row = fetch_user_row(cursor, user_id)
+        if not row:
+            return jsonify({"error": "Usuario nao encontrado"}), 404
+
+        return jsonify({"twofa_enabled": bool(row.get("twofa_enabled"))}), 200
+    finally:
+        cursor.close()
+        db.close()
+
+
+@users_bp.route("/users/me/2fa/setup", methods=["POST"])
+@jwt_required()
+def setup_twofa():
+    user_id = int(get_jwt_identity())
+    data = request.get_json(silent=True) or {}
+    issuer = str(data.get("issuer") or "Aureon Capital").strip() or "Aureon Capital"
+
+    db = get_db()
+    cursor = db.cursor(dictionary=True)
+
+    try:
+        ensure_user_profile_columns(cursor, db)
+        row = fetch_user_row(cursor, user_id)
+        if not row:
+            return jsonify({"error": "Usuario nao encontrado"}), 404
+
+        secret = str(row.get("twofa_secret") or "").strip() or generate_totp_secret()
+        cursor.execute(
+            """
+            UPDATE usuarios
+            SET twofa_secret = %s,
+                twofa_enabled = 0
+            WHERE id = %s
+            """,
+            (secret, user_id),
+        )
+        db.commit()
+
+        return jsonify(
+            {
+                "message": "2FA preparado. Confirme com um codigo para ativar.",
+                "secret": secret,
+                "otpauth_url": build_otpauth_uri(secret, row.get("email"), issuer=issuer),
+                "issuer": issuer,
+                "account": row.get("email") or "",
+            }
+        ), 200
+    finally:
+        cursor.close()
+        db.close()
+
+
+@users_bp.route("/users/me/2fa/enable", methods=["POST"])
+@jwt_required()
+def enable_twofa():
+    user_id = int(get_jwt_identity())
+    data = request.get_json(silent=True) or {}
+    code = str(data.get("code") or "").strip()
+
+    if not code:
+        return jsonify({"error": "code obrigatorio"}), 400
+
+    db = get_db()
+    cursor = db.cursor(dictionary=True)
+
+    try:
+        ensure_user_profile_columns(cursor, db)
+        row = fetch_user_row(cursor, user_id)
+        if not row:
+            return jsonify({"error": "Usuario nao encontrado"}), 404
+
+        secret = str(row.get("twofa_secret") or "").strip()
+        if not secret:
+            return jsonify({"error": "2FA nao configurado. Execute /users/me/2fa/setup primeiro"}), 400
+
+        if not verify_totp_code(secret, code):
+            return jsonify({"error": "Codigo 2FA invalido"}), 400
+
+        cursor.execute(
+            """
+            UPDATE usuarios
+            SET twofa_enabled = 1
+            WHERE id = %s
+            """,
+            (user_id,),
+        )
+        db.commit()
+
+        return jsonify({"message": "2FA ativado com sucesso", "twofa_enabled": True}), 200
+    finally:
+        cursor.close()
+        db.close()
+
+
+@users_bp.route("/users/me/2fa/disable", methods=["POST"])
+@jwt_required()
+def disable_twofa():
+    user_id = int(get_jwt_identity())
+    data = request.get_json(silent=True) or {}
+
+    current_password = data.get("senha_atual") or ""
+    code = str(data.get("code") or "").strip()
+
+    if not current_password or not code:
+        return jsonify({"error": "senha_atual e code sao obrigatorios"}), 400
+
+    db = get_db()
+    cursor = db.cursor(dictionary=True)
+
+    try:
+        ensure_user_profile_columns(cursor, db)
+        row = fetch_user_row(cursor, user_id)
+        if not row:
+            return jsonify({"error": "Usuario nao encontrado"}), 404
+
+        if not check_password_hash(row.get("senha_hash") or "", current_password):
+            return jsonify({"error": "senha_atual invalida"}), 400
+
+        secret = str(row.get("twofa_secret") or "").strip()
+        if not secret or not bool(row.get("twofa_enabled")):
+            return jsonify({"error": "2FA nao esta ativo"}), 400
+
+        if not verify_totp_code(secret, code):
+            return jsonify({"error": "Codigo 2FA invalido"}), 400
+
+        cursor.execute(
+            """
+            UPDATE usuarios
+            SET twofa_enabled = 0
+            WHERE id = %s
+            """,
+            (user_id,),
+        )
+        db.commit()
+
+        return jsonify({"message": "2FA desativado com sucesso", "twofa_enabled": False}), 200
+    finally:
+        cursor.close()
+        db.close()
+
+
 @users_bp.route("/users/me/avatar", methods=["POST"])
 @jwt_required()
 def upload_current_user_avatar():
@@ -572,6 +766,154 @@ def delete_current_user_avatar():
 
         updated = fetch_user_row(cursor, user_id)
         return jsonify({"message": "Foto removida com sucesso", "user": serialize_user(updated)}), 200
+    finally:
+        cursor.close()
+        db.close()
+
+
+@users_bp.route("/users/<int:user_id>", methods=["DELETE"])
+@jwt_required()
+def delete_user(user_id):
+    actor_id = int(get_jwt_identity())
+    actor_role = current_actor_role()
+
+    if not actor_is_global():
+        return jsonify({"error": "Somente GLOBAL pode excluir usuarios"}), 403
+
+    if user_id == actor_id:
+        return jsonify({"error": "Usuario GLOBAL nao pode excluir a propria conta"}), 400
+
+    db = get_db()
+    cursor = db.cursor(dictionary=True)
+
+    try:
+        ensure_user_profile_columns(cursor, db)
+        ensure_trash_bin_table(cursor, db)
+        ensure_audit_logs_table(cursor, db)
+
+        twofa_error = require_global_twofa(cursor, actor_id)
+        if twofa_error:
+            log_audit(
+                cursor,
+                actor_id=actor_id,
+                actor_role=actor_role,
+                action="DELETE_USER",
+                target_type="USUARIO",
+                target_id=user_id,
+                success=False,
+                reason="2FA invalido",
+            )
+            db.commit()
+            return twofa_error
+
+        cursor.execute(
+            """
+            SELECT *
+            FROM usuarios
+            WHERE id = %s
+            LIMIT 1
+            """,
+            (user_id,),
+        )
+        target = cursor.fetchone()
+        if not target:
+            return jsonify({"error": "Usuario nao encontrado"}), 404
+
+        target_role = normalize_role(target.get("role"))
+        if target_role == ROLE_GLOBAL:
+            cursor.execute(
+                """
+                SELECT COUNT(*) AS total_globals
+                FROM usuarios
+                WHERE UPPER(role) = %s
+                """,
+                (ROLE_GLOBAL,),
+            )
+            total_globals = int((cursor.fetchone() or {}).get("total_globals") or 0)
+            if total_globals <= 1:
+                log_audit(
+                    cursor,
+                    actor_id=actor_id,
+                    actor_role=actor_role,
+                    action="DELETE_USER",
+                    target_type="USUARIO",
+                    target_id=user_id,
+                    success=False,
+                    reason="Tentativa de remover ultimo GLOBAL",
+                )
+                db.commit()
+                return jsonify({"error": "Nao e permitido remover o ultimo usuario GLOBAL"}), 409
+
+        cursor.execute(
+            """
+            SELECT COUNT(*) AS clients_count
+            FROM clientes
+            WHERE vendedor_id = %s
+            """,
+            (user_id,),
+        )
+        clients_count = int((cursor.fetchone() or {}).get("clients_count") or 0)
+        if clients_count > 0:
+            log_audit(
+                cursor,
+                actor_id=actor_id,
+                actor_role=actor_role,
+                action="DELETE_USER",
+                target_type="USUARIO",
+                target_id=user_id,
+                success=False,
+                reason="Usuario com clientes vinculados",
+                metadata={"clients_count": clients_count},
+            )
+            db.commit()
+            return jsonify(
+                {
+                    "error": "Usuario possui clientes vinculados. Exclua/realoque os clientes antes de remover o usuario.",
+                    "clients_count": clients_count,
+                }
+            ), 409
+
+        trash_id = add_to_trash(
+            cursor,
+            entity_type="USUARIO",
+            entity_id=user_id,
+            payload={"user": row_to_insert_dict(target)},
+            deleted_by=actor_id,
+            deleted_role=actor_role,
+            reason="Exclusao individual de usuario",
+        )
+
+        cursor.execute(
+            """
+            DELETE FROM usuarios
+            WHERE id = %s
+            """,
+            (user_id,),
+        )
+        log_audit(
+            cursor,
+            actor_id=actor_id,
+            actor_role=actor_role,
+            action="DELETE_USER",
+            target_type="USUARIO",
+            target_id=user_id,
+            success=True,
+            metadata={"trash_id": trash_id},
+        )
+        db.commit()
+
+        return jsonify(
+            {
+                "message": "Usuario excluido com sucesso",
+                "user": {
+                    "id": int(target.get("id")),
+                    "nome": target.get("nome") or "",
+                    "email": target.get("email") or "",
+                    "role": target_role,
+                },
+                "trash_id": int(trash_id),
+            }
+        ), 200
     finally:
         cursor.close()
         db.close()

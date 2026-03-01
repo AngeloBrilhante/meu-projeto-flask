@@ -1,22 +1,33 @@
 from flask_jwt_extended import get_jwt, get_jwt_identity
 from app.database import get_db
 
+ROLE_ADMIN = "ADMIN"
+ROLE_GLOBAL = "GLOBAL"
+
+
+def normalize_role(role):
+    return str(role or "").strip().upper()
+
 
 def current_user_id():
     return int(get_jwt_identity())
 
 
 def current_user_role():
-    return get_jwt().get("role")
+    return normalize_role(get_jwt().get("role"))
 
 
 def is_admin():
-    return current_user_role() == "ADMIN"
+    return current_user_role() in {ROLE_ADMIN, ROLE_GLOBAL}
+
+
+def is_global():
+    return current_user_role() == ROLE_GLOBAL
 
 
 def can_access_client(client_id):
     """
-    ADM: acesso total
+    ADMIN/GLOBAL: acesso total
     VENDEDOR: somente clientes vinculados a ele
     """
     if is_admin():

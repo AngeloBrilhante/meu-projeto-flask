@@ -12,6 +12,15 @@ from app.utils.auth import (
     is_admin,
     can_access_client
 )
+from app.utils.security import (
+    add_to_trash,
+    ensure_audit_logs_table,
+    ensure_trash_bin_table,
+    get_twofa_code_from_request,
+    log_audit,
+    row_to_insert_dict,
+    verify_user_twofa,
+)
 
 clients_bp = Blueprint("clients", __name__)
 
@@ -35,6 +44,7 @@ MONTH_LABELS = [
 ]
 
 ROLE_ADMIN = "ADMIN"
+ROLE_GLOBAL = "GLOBAL"
 ROLE_VENDOR = "VENDEDOR"
 ROLE_DIGITADOR_PORT_REFIN = "DIGITADOR_PORT_REFIN"
 ROLE_DIGITADOR_NOVO_CARTAO = "DIGITADOR_NOVO_CARTAO"
@@ -52,17 +62,20 @@ DIGITADOR_PRODUCT_PERMISSIONS = {
 }
 
 PIPELINE_ALLOWED_ROLES = {
+    ROLE_GLOBAL,
     ROLE_ADMIN,
     *DIGITADOR_PRODUCT_PERMISSIONS.keys(),
 }
 
 REPORT_ALLOWED_ROLES = {
+    ROLE_GLOBAL,
     ROLE_ADMIN,
     ROLE_VENDOR,
     *DIGITADOR_PRODUCT_PERMISSIONS.keys(),
 }
 
 OPERATION_VIEW_ALLOWED_ROLES = {
+    ROLE_GLOBAL,
     ROLE_ADMIN,
     ROLE_VENDOR,
     *DIGITADOR_PRODUCT_PERMISSIONS.keys(),
@@ -287,6 +300,18 @@ def normalize_role(role):
     return (role or "").strip().upper()
 
 
+def is_admin_like_role(role):
+    return normalize_role(role) in {ROLE_ADMIN, ROLE_GLOBAL}
+
+
+def require_global_twofa(cursor, actor_id):
+    code = get_twofa_code_from_request()
+    valid, error_message = verify_user_twofa(cursor, actor_id, code)
+    if valid:
+        return None
+    return jsonify({"error": error_message}), 403
+
+
 def normalize_operation_status(status):
     normalized = (status or "").strip().upper()
     return LEGACY_STATUS_MAP.get(normalized, normalized)
@@ -317,7 +342,7 @@ def allowed_products_for_role(role):
 def role_can_access_operation(role, user_id, operation):
     normalized_role = normalize_role(role)
 
-    if normalized_role == ROLE_ADMIN:
+    if is_admin_like_role(normalized_role):
         return True
 
     if normalized_role == ROLE_VENDOR:
@@ -713,7 +738,7 @@ def create_client():
     role = (current_user_role() or "").upper()
     user_id = current_user_id()
 
-    if role not in {ROLE_ADMIN, ROLE_VENDOR}:
+    if role not in {ROLE_ADMIN, ROLE_GLOBAL, ROLE_VENDOR}:
         return jsonify({"error": "Permissao negada"}), 403
 
     if role == ROLE_VENDOR:
@@ -973,7 +998,7 @@ def create_operation(client_id):
     role = normalize_role(current_user_role())
     user_id = current_user_id()
 
-    if role not in {ROLE_ADMIN, ROLE_VENDOR}:
+    if role not in {ROLE_ADMIN, ROLE_GLOBAL, ROLE_VENDOR}:
         return jsonify({"error": "Acesso nao autorizado"}), 403
 
     if not can_access_client(client_id):
@@ -1448,6 +1473,366 @@ def get_client(client_id):
 # ======================================================
 # ðŸ“¤ UPLOAD DE DOCUMENTOS
 # ======================================================
+@clients_bp.route("/operations/<int:operation_id>", methods=["DELETE"])
+@jwt_required()
+def delete_operation(operation_id):
+    actor_id = current_user_id()
+    role = normalize_role(current_user_role())
+    if role != ROLE_GLOBAL:
+        return jsonify({"error": "Somente GLOBAL pode excluir operacoes"}), 403
+
+    db = get_db()
+    cursor = db.cursor(dictionary=True)
+
+    try:
+        ensure_operation_comments_table(cursor, db)
+        ensure_operation_status_history_table(cursor, db)
+        ensure_operation_notifications_table(cursor, db)
+        ensure_trash_bin_table(cursor, db)
+        ensure_audit_logs_table(cursor, db)
+
+        twofa_error = require_global_twofa(cursor, actor_id)
+        if twofa_error:
+            log_audit(
+                cursor,
+                actor_id=actor_id,
+                actor_role=role,
+                action="DELETE_OPERATION",
+                target_type="OPERACAO",
+                target_id=operation_id,
+                success=False,
+                reason="2FA invalido",
+            )
+            db.commit()
+            return twofa_error
+
+        cursor.execute(
+            """
+            SELECT *
+            FROM operacoes
+            WHERE id = %s
+            LIMIT 1
+            """,
+            (operation_id,),
+        )
+        operation = cursor.fetchone()
+        if not operation:
+            log_audit(
+                cursor,
+                actor_id=actor_id,
+                actor_role=role,
+                action="DELETE_OPERATION",
+                target_type="OPERACAO",
+                target_id=operation_id,
+                success=False,
+                reason="Operacao nao encontrada",
+            )
+            db.commit()
+            return jsonify({"error": "Operacao nao encontrada"}), 404
+
+        cursor.execute(
+            """
+            SELECT *
+            FROM operation_comments
+            WHERE operation_id = %s
+            ORDER BY id ASC
+            """,
+            (operation_id,),
+        )
+        comments = cursor.fetchall()
+
+        cursor.execute(
+            """
+            SELECT *
+            FROM operation_status_history
+            WHERE operation_id = %s
+            ORDER BY id ASC
+            """,
+            (operation_id,),
+        )
+        history = cursor.fetchall()
+
+        cursor.execute(
+            """
+            SELECT *
+            FROM operation_notifications
+            WHERE operation_id = %s
+            ORDER BY id ASC
+            """,
+            (operation_id,),
+        )
+        notifications = cursor.fetchall()
+
+        trash_id = add_to_trash(
+            cursor,
+            entity_type="OPERACAO",
+            entity_id=operation_id,
+            payload={
+                "operation": row_to_insert_dict(operation),
+                "comments": [row_to_insert_dict(item) for item in comments],
+                "status_history": [row_to_insert_dict(item) for item in history],
+                "notifications": [row_to_insert_dict(item) for item in notifications],
+            },
+            deleted_by=actor_id,
+            deleted_role=role,
+            reason="Exclusao individual de operacao",
+        )
+
+        cursor.execute("DELETE FROM operation_comments WHERE operation_id = %s", (operation_id,))
+        cursor.execute(
+            "DELETE FROM operation_status_history WHERE operation_id = %s",
+            (operation_id,),
+        )
+        cursor.execute(
+            "DELETE FROM operation_notifications WHERE operation_id = %s",
+            (operation_id,),
+        )
+        cursor.execute("DELETE FROM operacoes WHERE id = %s", (operation_id,))
+        log_audit(
+            cursor,
+            actor_id=actor_id,
+            actor_role=role,
+            action="DELETE_OPERATION",
+            target_type="OPERACAO",
+            target_id=operation_id,
+            success=True,
+            metadata={"trash_id": trash_id},
+        )
+        db.commit()
+
+        return jsonify(
+            {
+                "message": "Operacao excluida com sucesso",
+                "operation": {
+                    "id": to_int(operation.get("id")),
+                    "cliente_id": to_int(operation.get("cliente_id")),
+                    "status": normalize_operation_status(operation.get("status")),
+                },
+                "trash_id": to_int(trash_id),
+            }
+        ), 200
+    except Exception:
+        db.rollback()
+        return jsonify({"error": "Nao foi possivel excluir a operacao"}), 500
+    finally:
+        cursor.close()
+        db.close()
+
+
+@clients_bp.route("/clients/<int:client_id>", methods=["DELETE"])
+@jwt_required()
+def delete_client(client_id):
+    actor_id = current_user_id()
+    role = normalize_role(current_user_role())
+    if role != ROLE_GLOBAL:
+        return jsonify({"error": "Somente GLOBAL pode excluir clientes"}), 403
+
+    db = get_db()
+    cursor = db.cursor(dictionary=True)
+
+    try:
+        ensure_operation_comments_table(cursor, db)
+        ensure_operation_status_history_table(cursor, db)
+        ensure_operation_notifications_table(cursor, db)
+        ensure_trash_bin_table(cursor, db)
+        ensure_audit_logs_table(cursor, db)
+
+        twofa_error = require_global_twofa(cursor, actor_id)
+        if twofa_error:
+            log_audit(
+                cursor,
+                actor_id=actor_id,
+                actor_role=role,
+                action="DELETE_CLIENT",
+                target_type="CLIENTE",
+                target_id=client_id,
+                success=False,
+                reason="2FA invalido",
+            )
+            db.commit()
+            return twofa_error
+
+        cursor.execute(
+            """
+            SELECT *
+            FROM clientes
+            WHERE id = %s
+            LIMIT 1
+            """,
+            (client_id,),
+        )
+        client = cursor.fetchone()
+        if not client:
+            log_audit(
+                cursor,
+                actor_id=actor_id,
+                actor_role=role,
+                action="DELETE_CLIENT",
+                target_type="CLIENTE",
+                target_id=client_id,
+                success=False,
+                reason="Cliente nao encontrado",
+            )
+            db.commit()
+            return jsonify({"error": "Cliente nao encontrado"}), 404
+
+        cursor.execute(
+            """
+            SELECT *
+            FROM operacoes
+            WHERE cliente_id = %s
+            ORDER BY id ASC
+            """,
+            (client_id,),
+        )
+        operation_rows = cursor.fetchall()
+        operation_ids = [
+            to_int(item.get("id"))
+            for item in operation_rows
+            if to_int(item.get("id")) > 0
+        ]
+
+        operation_comments = []
+        operation_history = []
+        operation_notifications = []
+
+        if operation_ids:
+            placeholders = ", ".join(["%s"] * len(operation_ids))
+            cursor.execute(
+                f"""
+                SELECT *
+                FROM operation_comments
+                WHERE operation_id IN ({placeholders})
+                ORDER BY id ASC
+                """,
+                tuple(operation_ids),
+            )
+            operation_comments = cursor.fetchall()
+
+            cursor.execute(
+                f"""
+                SELECT *
+                FROM operation_status_history
+                WHERE operation_id IN ({placeholders})
+                ORDER BY id ASC
+                """,
+                tuple(operation_ids),
+            )
+            operation_history = cursor.fetchall()
+
+            cursor.execute(
+                f"""
+                SELECT *
+                FROM operation_notifications
+                WHERE operation_id IN ({placeholders})
+                ORDER BY id ASC
+                """,
+                tuple(operation_ids),
+            )
+            operation_notifications = cursor.fetchall()
+
+        cursor.execute(
+            """
+            SELECT 1
+            FROM INFORMATION_SCHEMA.TABLES
+            WHERE TABLE_SCHEMA = DATABASE()
+              AND TABLE_NAME = 'documentos'
+            LIMIT 1
+            """
+        )
+        has_documents_table = cursor.fetchone() is not None
+
+        documents = []
+        if has_documents_table:
+            cursor.execute(
+                """
+                SELECT *
+                FROM documentos
+                WHERE client_id = %s OR id = %s
+                ORDER BY id ASC
+                """,
+                (client_id, client_id),
+            )
+            documents = cursor.fetchall()
+
+        trash_id = add_to_trash(
+            cursor,
+            entity_type="CLIENTE",
+            entity_id=client_id,
+            payload={
+                "client": row_to_insert_dict(client),
+                "operations": [row_to_insert_dict(item) for item in operation_rows],
+                "operation_comments": [row_to_insert_dict(item) for item in operation_comments],
+                "operation_status_history": [row_to_insert_dict(item) for item in operation_history],
+                "operation_notifications": [
+                    row_to_insert_dict(item) for item in operation_notifications
+                ],
+                "documents": [row_to_insert_dict(item) for item in documents],
+            },
+            deleted_by=actor_id,
+            deleted_role=role,
+            reason="Exclusao individual de cliente",
+        )
+
+        if operation_ids:
+            placeholders = ", ".join(["%s"] * len(operation_ids))
+            cursor.execute(
+                f"DELETE FROM operation_comments WHERE operation_id IN ({placeholders})",
+                tuple(operation_ids),
+            )
+            cursor.execute(
+                f"DELETE FROM operation_status_history WHERE operation_id IN ({placeholders})",
+                tuple(operation_ids),
+            )
+            cursor.execute(
+                f"DELETE FROM operation_notifications WHERE operation_id IN ({placeholders})",
+                tuple(operation_ids),
+            )
+
+        cursor.execute("DELETE FROM operacoes WHERE cliente_id = %s", (client_id,))
+
+        if has_documents_table:
+            cursor.execute(
+                """
+                DELETE FROM documentos
+                WHERE client_id = %s OR id = %s
+                """,
+                (client_id, client_id),
+            )
+
+        cursor.execute("DELETE FROM clientes WHERE id = %s", (client_id,))
+        log_audit(
+            cursor,
+            actor_id=actor_id,
+            actor_role=role,
+            action="DELETE_CLIENT",
+            target_type="CLIENTE",
+            target_id=client_id,
+            success=True,
+            metadata={"trash_id": trash_id, "operations_count": len(operation_ids)},
+        )
+        db.commit()
+        return jsonify(
+            {
+                "message": "Cliente excluido com sucesso",
+                "client": {
+                    "id": to_int(client.get("id")),
+                    "nome": client.get("nome") or "",
+                    "cpf": client.get("cpf") or "",
+                    "vendedor_id": to_int(client.get("vendedor_id")),
+                },
+                "removed_operations": len(operation_ids),
+                "trash_id": to_int(trash_id),
+            }
+        ), 200
+    except Exception:
+        db.rollback()
+        return jsonify({"error": "Nao foi possivel excluir o cliente"}), 500
+    finally:
+        cursor.close()
+        db.close()
+
+
 @clients_bp.route("/clients/upload", methods=["POST", "OPTIONS"])
 @jwt_required(optional=True)
 def upload_document():
@@ -1684,7 +2069,7 @@ def update_operation(operation_id):
                 "error": "Sem permissao para editar operacao neste status"
             }), 403
 
-    elif role == ROLE_ADMIN or is_digitador_role(role):
+    elif is_admin_like_role(role) or is_digitador_role(role):
         if is_digitador_role(role) and not role_can_access_operation(role, user_id, operation):
             cursor.close()
             db.close()
@@ -1890,7 +2275,7 @@ def send_operation_to_pipeline(operation_id):
         role = normalize_role(current_user_role())
         user_id = current_user_id()
 
-        if role not in {ROLE_ADMIN, ROLE_VENDOR}:
+        if role not in {ROLE_ADMIN, ROLE_GLOBAL, ROLE_VENDOR}:
             return jsonify({"error": "Usuario sem permissao"}), 403
 
         conn = get_db()
@@ -2014,7 +2399,7 @@ def update_client_fase(client_id):
 
     if not is_admin():
         return jsonify({
-            "error": "Somente ADMIN pode alterar fase"
+            "error": "Somente ADMIN/GLOBAL pode alterar fase"
         }), 403
 
     data = request.get_json() or {}
@@ -2133,7 +2518,7 @@ def get_operations_report():
     date_to = (request.args.get("date_to") or "").strip()
     search = (request.args.get("search") or "").strip()
 
-    if role == ROLE_ADMIN:
+    if is_admin_like_role(role):
         vendedor_id = requested_vendedor_id
     elif role == ROLE_VENDOR:
         vendedor_id = user_id
@@ -2228,7 +2613,7 @@ def get_operations_report():
     operations = cursor.fetchall()
 
     vendors = []
-    if role == ROLE_ADMIN:
+    if is_admin_like_role(role):
         cursor.execute(
             """
             SELECT DISTINCT
@@ -2326,7 +2711,7 @@ def get_dashboard_summary():
         return jsonify({"error": period_error}), 400
 
     role = normalize_role(current_user_role())
-    if role == ROLE_ADMIN or is_digitador_role(role):
+    if is_admin_like_role(role) or is_digitador_role(role):
         selected_vendor_id = requested_vendor_id
     else:
         selected_vendor_id = current_user_id()
@@ -2493,7 +2878,7 @@ def get_dashboard_summary():
         ]
 
         vendors = []
-        if role == ROLE_ADMIN:
+        if is_admin_like_role(role):
             cursor.execute(
                 """
                 SELECT id, nome
@@ -2647,7 +3032,7 @@ def get_dashboard_summary():
         progress = round((approved_value / goal_target) * 100, 2) if goal_target else 0
         scope = "INDIVIDUAL"
 
-        if role == ROLE_ADMIN and not selected_vendor_id:
+        if is_admin_like_role(role) and not selected_vendor_id:
             scope = "GERAL"
         elif is_digitador_role(role) and not selected_vendor_id:
             scope = "PRODUTO"
@@ -2696,7 +3081,7 @@ def get_dashboard_summary():
 @jwt_required()
 def upsert_dashboard_goal():
     if not is_admin():
-        return jsonify({"error": "Somente ADMIN pode alterar a meta"}), 403
+        return jsonify({"error": "Somente ADMIN/GLOBAL pode alterar a meta"}), 403
 
     data = request.get_json() or {}
     now = datetime.now()
@@ -2973,7 +3358,7 @@ def mark_all_user_notifications_as_read():
 def get_dashboard_notifications():
     role = normalize_role(current_user_role())
 
-    if role == ROLE_ADMIN:
+    if is_admin_like_role(role):
         vendor_id = None
     elif role == ROLE_VENDOR:
         vendor_id = current_user_id()
