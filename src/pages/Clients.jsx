@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { listClients, getOperationStats } from "../services/api";
+import { deleteClient, getOperationStats, listClients } from "../services/api";
 import "./Clients.css";
 
 const LEGACY_STATUS_MAP = {
@@ -37,6 +37,17 @@ function statusLabel(value) {
   return STATUS_LABELS[normalized] || normalized.replaceAll("_", " ");
 }
 
+function getStoredRole() {
+  try {
+    const raw = localStorage.getItem("usuario");
+    if (!raw) return "";
+    const parsed = JSON.parse(raw);
+    return String(parsed?.role || "").toUpperCase();
+  } catch {
+    return "";
+  }
+}
+
 export default function Clients() {
   const [clients, setClients] = useState([]);
   const [search, setSearch] = useState("");
@@ -46,8 +57,11 @@ export default function Clients() {
     reprovados: 0,
   });
   const [period, setPeriod] = useState("day");
+  const [removingClientId, setRemovingClientId] = useState(null);
 
   const navigate = useNavigate();
+  const role = getStoredRole();
+  const isGlobal = role === "GLOBAL";
 
   useEffect(() => {
     fetchClients();
@@ -85,6 +99,32 @@ export default function Clients() {
       .toLowerCase()
       .includes(search.toLowerCase())
   );
+
+  async function handleDeleteClient(event, client) {
+    event.stopPropagation();
+
+    const confirmed = window.confirm(
+      `Deseja realmente excluir o cliente ${client.nome || `#${client.id}`}?`
+    );
+    if (!confirmed) return;
+
+    const twofaCode = window.prompt(
+      "Digite o codigo 2FA (6 digitos) para confirmar a exclusao:"
+    );
+    if (!twofaCode) return;
+
+    try {
+      setRemovingClientId(client.id);
+      await deleteClient(client.id, twofaCode);
+      await fetchClients();
+      window.dispatchEvent(new Event("pipeline:changed"));
+      alert("Cliente excluido com sucesso.");
+    } catch (error) {
+      alert(error.message || "Nao foi possivel excluir o cliente.");
+    } finally {
+      setRemovingClientId(null);
+    }
+  }
 
   return (
     <div className="clientsView">
@@ -149,6 +189,7 @@ export default function Clients() {
                 <th>CPF</th>
                 <th>Beneficio</th>
                 <th>Esteira</th>
+                {isGlobal && <th>Acoes</th>}
               </tr>
             </thead>
             <tbody>
@@ -168,13 +209,25 @@ export default function Clients() {
                         {statusLabel(status)}
                       </span>
                     </td>
+                    {isGlobal && (
+                      <td>
+                        <button
+                          type="button"
+                          className="clientGhostButton"
+                          disabled={removingClientId === client.id}
+                          onClick={(event) => handleDeleteClient(event, client)}
+                        >
+                          {removingClientId === client.id ? "Excluindo..." : "Excluir"}
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 );
               })}
 
               {filteredClients.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="clientsEmpty">
+                  <td colSpan={isGlobal ? 5 : 4} className="clientsEmpty">
                     Nenhum cliente encontrado.
                   </td>
                 </tr>

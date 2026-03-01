@@ -79,7 +79,7 @@ export default function Dashboard() {
   const [error, setError] = useState("");
 
   const role = getStoredRole();
-  const isAdmin = role === "ADMIN";
+  const isAdmin = role === "ADMIN" || role === "GLOBAL";
   const isDigitador = role.startsWith("DIGITADOR");
   const canFilterByVendor = isAdmin || isDigitador;
 

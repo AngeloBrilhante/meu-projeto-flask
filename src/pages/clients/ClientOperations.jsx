@@ -8,6 +8,7 @@ import {
 } from "../../constants/operationSchemas";
 import {
   createOperation,
+  deleteOperation,
   listClientOperations,
   sendOperationToPipeline,
   updateOperation,
@@ -95,8 +96,11 @@ export default function ClientOperations() {
   const [loading, setLoading] = useState(false);
   const [editingOperationId, setEditingOperationId] = useState(null);
   const [form, setForm] = useState(EMPTY_FORM);
+  const [removingOperationId, setRemovingOperationId] = useState(null);
 
   const user = useMemo(() => getStoredUser(), []);
+  const role = String(user?.role || "").toUpperCase();
+  const isGlobal = role === "GLOBAL";
   const formSchema = getOperationSchema(form.produto);
 
   async function loadOperations() {
@@ -252,6 +256,30 @@ export default function ClientOperations() {
 
   function openFicha(operationId) {
     navigate(`/operations/${operationId}/ficha`);
+  }
+
+  async function handleDelete(operation) {
+    const confirmed = window.confirm(
+      `Deseja realmente excluir a operacao #${operation.id}?`
+    );
+    if (!confirmed) return;
+
+    const twofaCode = window.prompt(
+      "Digite o codigo 2FA (6 digitos) para confirmar a exclusao:"
+    );
+    if (!twofaCode) return;
+
+    try {
+      setRemovingOperationId(operation.id);
+      await deleteOperation(operation.id, twofaCode);
+      await loadOperations();
+      window.dispatchEvent(new Event("pipeline:changed"));
+      alert("Operacao excluida com sucesso.");
+    } catch (error) {
+      alert(error.message || "Nao foi possivel excluir a operacao.");
+    } finally {
+      setRemovingOperationId(null);
+    }
   }
 
   const sortedOperations = useMemo(() => {
@@ -446,6 +474,19 @@ export default function ClientOperations() {
                               : normalizedStatus === "AGUARDANDO_FORMALIZACAO"
                               ? "Enviar para analise do banco"
                               : "Reenviar para analise"}
+                          </button>
+                        )}
+
+                        {isGlobal && (
+                          <button
+                            type="button"
+                            className="clientGhostButton"
+                            onClick={() => handleDelete(operation)}
+                            disabled={removingOperationId === operation.id}
+                          >
+                            {removingOperationId === operation.id
+                              ? "Excluindo..."
+                              : "Excluir"}
                           </button>
                         )}
                       </div>

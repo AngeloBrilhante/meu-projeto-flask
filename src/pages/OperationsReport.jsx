@@ -55,7 +55,7 @@ export default function OperationsReport() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const role = useMemo(() => getStoredRole(), []);
-  const isAdmin = role === "ADMIN";
+  const isAdmin = role === "ADMIN" || role === "GLOBAL";
   const isVendor = role === "VENDEDOR";
 
   const subtitle = isAdmin

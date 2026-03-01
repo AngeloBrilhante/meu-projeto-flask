@@ -10,6 +10,7 @@ import "./Profile.css";
 
 function roleLabel(role) {
   const normalized = String(role || "").toUpperCase();
+  if (normalized === "GLOBAL") return "Global";
   if (normalized === "ADMIN") return "Administrador";
   if (normalized === "VENDEDOR") return "Vendedor";
   if (normalized === "DIGITADOR_PORT_REFIN") return "Digitador Port/Refin";

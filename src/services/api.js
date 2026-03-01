@@ -567,3 +567,45 @@ export async function getDashboardNotifications() {
   return data;
 }
 
+export async function deleteOperation(operationId, twofaCode) {
+  const payload = {};
+  if (twofaCode) {
+    payload.twofa_code = String(twofaCode).trim();
+  }
+
+  const response = await fetch(`${API_URL}/operations/${operationId}`, {
+    method: "DELETE",
+    headers: getAuthHeaders(true),
+    body: JSON.stringify(payload),
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.error || "Erro ao excluir operacao");
+  }
+
+  return data;
+}
+
+export async function deleteClient(clientId, twofaCode) {
+  const payload = {};
+  if (twofaCode) {
+    payload.twofa_code = String(twofaCode).trim();
+  }
+
+  const response = await fetch(`${API_URL}/clients/${clientId}`, {
+    method: "DELETE",
+    headers: getAuthHeaders(true),
+    body: JSON.stringify(payload),
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.error || "Erro ao excluir cliente");
+  }
+
+  return data;
+}
+

@@ -66,13 +66,16 @@ export default function DashboardLayout() {
   const notificationMenuRef = useRef(null);
 
   const role = (user?.role || "").toUpperCase();
-  const isAdmin = role === "ADMIN";
+  const isGlobal = role === "GLOBAL";
+  const isAdmin = role === "ADMIN" || isGlobal;
   const isVendor = role === "VENDEDOR";
   const isDigitador = role.startsWith("DIGITADOR");
   const canAccessPipeline = isAdmin || isDigitador;
   const canAccessReport = isAdmin || isVendor || isDigitador;
 
-  const roleLabel = isAdmin
+  const roleLabel = isGlobal
+    ? "Painel global"
+    : isAdmin
     ? "Painel admin"
     : isDigitador
     ? "Painel digitador"
