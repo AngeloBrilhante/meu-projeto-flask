@@ -132,6 +132,15 @@ function formatDateTime(value) {
   return date.toLocaleString("pt-BR");
 }
 
+function formatCurrency(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return "-";
+  return number.toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+  });
+}
+
 function formatHistoryTransition(item) {
   const nextLabel = getStatusLabel(item.next_status);
 
@@ -193,7 +202,9 @@ export default function Pipeline() {
         list.forEach((operation) => {
           const serverDraft = toDraft(operation);
           const editors = openEditorsRef.current[operation.id] || {};
-          const keepLocalDraft = Boolean(editors.pendencia || editors.reprovacao);
+          const keepLocalDraft = Boolean(
+            editors.pendencia || editors.reprovacao || editors.formalizacao
+          );
 
           next[operation.id] = keepLocalDraft
             ? { ...serverDraft, ...(prev[operation.id] || {}) }
@@ -280,6 +291,7 @@ export default function Pipeline() {
     setOpenEditors((prev) => ({
       ...prev,
       [operationId]: {
+        ...prev[operationId],
         pendencia: false,
         reprovacao: false,
         [editorKey]: !prev[operationId]?.[editorKey],
@@ -291,11 +303,26 @@ export default function Pipeline() {
     setOpenEditors((prev) => ({
       ...prev,
       [operationId]: {
+        ...prev[operationId],
         pendencia: false,
         reprovacao: false,
         [editorKey]: true,
       },
     }));
+  }
+
+  function toggleFormalizacaoEditor(operationId) {
+    setOpenEditors((prev) => ({
+      ...prev,
+      [operationId]: {
+        ...prev[operationId],
+        formalizacao: !prev[operationId]?.formalizacao,
+      },
+    }));
+  }
+
+  function isFormalizacaoEditorOpen(operationId) {
+    return Boolean(openEditors[operationId]?.formalizacao);
   }
 
   function isEditorOpen(operationId, editorKey) {
@@ -383,6 +410,7 @@ export default function Pipeline() {
         [operation.id]: {
           pendencia: false,
           reprovacao: false,
+          formalizacao: false,
         },
       }));
       await fetchPipeline();
@@ -637,6 +665,7 @@ export default function Pipeline() {
                 const isSaving = savingOperationId === operation.id;
                 const pendenciaAberta = isEditorOpen(operation.id, "pendencia");
                 const reprovacaoAberta = isEditorOpen(operation.id, "reprovacao");
+                const formalizacaoAberta = isFormalizacaoEditorOpen(operation.id);
                 const historyOpen = Boolean(openHistory[operation.id]);
                 const historyItems = historyByOperation[operation.id] || [];
                 const historyLoading = loadingHistoryOperationId === operation.id;
@@ -677,63 +706,107 @@ export default function Pipeline() {
                       )}
                     </td>
                     <td>
-                      <div className="proposalStackField">
-                        <input
-                          type="text"
-                          className="proposalInput"
-                          placeholder="Numero da proposta"
-                          value={draft.numero_proposta}
-                          onChange={(event) =>
-                            handleDraftChange(
-                              operation.id,
-                              "numero_proposta",
-                              event.target.value
-                            )
-                          }
-                        />
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          className="proposalInput"
-                          placeholder="Valor liberado"
-                          value={draft.valor_liberado}
-                          onChange={(event) =>
-                            handleDraftChange(
-                              operation.id,
-                              "valor_liberado",
-                              event.target.value
-                            )
-                          }
-                        />
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          className="proposalInput"
-                          placeholder="Parcela liberada"
-                          value={draft.parcela_liberada}
-                          onChange={(event) =>
-                            handleDraftChange(
-                              operation.id,
-                              "parcela_liberada",
-                              event.target.value
-                            )
-                          }
-                        />
-                        <input
-                          type="url"
-                          className="proposalInput proposalLinkInput"
-                          placeholder="https://..."
-                          value={draft.link_formalizacao}
-                          onChange={(event) =>
-                            handleDraftChange(
-                              operation.id,
-                              "link_formalizacao",
-                              event.target.value
-                            )
-                          }
-                        />
+                      <div className="formalizacaoBox">
+                        <div className="formalizacaoSummaryGrid">
+                          <div className="formalizacaoSummaryItem">
+                            <span>Proposta</span>
+                            <strong>{draft.numero_proposta || "-"}</strong>
+                          </div>
+                          <div className="formalizacaoSummaryItem">
+                            <span>Valor liberado</span>
+                            <strong>{formatCurrency(draft.valor_liberado)}</strong>
+                          </div>
+                          <div className="formalizacaoSummaryItem">
+                            <span>Parcela liberada</span>
+                            <strong>{formatCurrency(draft.parcela_liberada)}</strong>
+                          </div>
+                          <div className="formalizacaoSummaryItem link">
+                            <span>Link</span>
+                            <strong>
+                              {draft.link_formalizacao ? (
+                                <a
+                                  href={draft.link_formalizacao}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                >
+                                  Abrir
+                                </a>
+                              ) : (
+                                "-"
+                              )}
+                            </strong>
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          className={`toggleFormButton${formalizacaoAberta ? " active" : ""}`}
+                          disabled={isSaving}
+                          onClick={() => toggleFormalizacaoEditor(operation.id)}
+                        >
+                          {formalizacaoAberta ? "Fechar edicao" : "Editar dados"}
+                        </button>
+
+                        {formalizacaoAberta && (
+                          <div className="proposalStackField">
+                            <input
+                              type="text"
+                              className="proposalInput"
+                              placeholder="Numero da proposta"
+                              value={draft.numero_proposta}
+                              onChange={(event) =>
+                                handleDraftChange(
+                                  operation.id,
+                                  "numero_proposta",
+                                  event.target.value
+                                )
+                              }
+                            />
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              className="proposalInput"
+                              placeholder="Valor liberado"
+                              value={draft.valor_liberado}
+                              onChange={(event) =>
+                                handleDraftChange(
+                                  operation.id,
+                                  "valor_liberado",
+                                  event.target.value
+                                )
+                              }
+                            />
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              className="proposalInput"
+                              placeholder="Parcela liberada"
+                              value={draft.parcela_liberada}
+                              onChange={(event) =>
+                                handleDraftChange(
+                                  operation.id,
+                                  "parcela_liberada",
+                                  event.target.value
+                                )
+                              }
+                            />
+                            <input
+                              type="url"
+                              className="proposalInput proposalLinkInput"
+                              placeholder="https://..."
+                              value={draft.link_formalizacao}
+                              onChange={(event) =>
+                                handleDraftChange(
+                                  operation.id,
+                                  "link_formalizacao",
+                                  event.target.value
+                                )
+                              }
+                            />
+                          </div>
+                        )}
                       </div>
                     </td>
                     <td className="pipelineFlowCell">

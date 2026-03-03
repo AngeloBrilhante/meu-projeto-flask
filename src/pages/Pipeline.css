@@ -239,6 +239,72 @@
   gap: 8px;
 }
 
+.formalizacaoBox {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: 1px solid rgba(79, 117, 255, 0.28);
+  border-radius: 10px;
+  background: rgba(13, 31, 78, 0.45);
+  padding: 8px;
+}
+
+.formalizacaoSummaryGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(120px, 1fr));
+  gap: 6px;
+}
+
+.formalizacaoSummaryItem {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.formalizacaoSummaryItem span {
+  font-size: 11px;
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.formalizacaoSummaryItem strong {
+  font-size: 12px;
+  color: var(--text-primary);
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.formalizacaoSummaryItem.link strong a {
+  color: #9fc2ff;
+  text-decoration: none;
+}
+
+.formalizacaoSummaryItem.link strong a:hover {
+  text-decoration: underline;
+}
+
+.toggleFormButton {
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  min-height: 32px;
+  background: var(--surface-strong);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.toggleFormButton.active {
+  border-color: rgba(79, 117, 255, 0.45);
+  color: #cfe0ff;
+}
+
+.toggleFormButton:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .pipelineFlowCell {
   min-width: 380px;
 }

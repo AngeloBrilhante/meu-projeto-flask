@@ -109,7 +109,7 @@ export default function OperationsReport() {
       "Vendedor",
       "Produto",
       "Banco",
-      "Valor Solicitado",
+      "Valor Liberado",
       "Prazo",
       "Status",
       "Criado Em",
@@ -122,7 +122,7 @@ export default function OperationsReport() {
       op.vendedor_nome,
       op.produto,
       op.banco_digitacao,
-      op.valor_solicitado,
+      op.valor_liberado,
       op.prazo,
       op.status,
       formatDate(op.criado_em),
@@ -251,7 +251,7 @@ export default function OperationsReport() {
               <th>Vendedor</th>
               <th>Produto</th>
               <th>Banco</th>
-              <th>Valor</th>
+              <th>Valor liberado</th>
               <th>Prazo</th>
               <th>Status</th>
               <th>Criado em</th>
@@ -279,7 +279,7 @@ export default function OperationsReport() {
                   <td>{op.vendedor_nome}</td>
                   <td>{op.produto}</td>
                   <td>{op.banco_digitacao}</td>
-                  <td>{formatCurrency(op.valor_solicitado)}</td>
+                  <td>{formatCurrency(op.valor_liberado)}</td>
                   <td>{op.prazo}x</td>
                   <td>
                     <span

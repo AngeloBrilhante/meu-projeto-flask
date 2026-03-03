@@ -2757,8 +2757,8 @@ def get_operations_report():
             COALESCE(u.nome, '-') AS vendedor_nome,
             o.produto,
             o.banco_digitacao,
-            o.valor_solicitado,
-            o.parcela_solicitada,
+            o.valor_liberado,
+            o.parcela_liberada,
             o.prazo,
             o.status,
             o.criado_em
