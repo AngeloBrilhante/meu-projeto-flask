@@ -4,6 +4,21 @@
   { value: "SALARIO", label: "Salário" },
 ];
 
+const BANK_OPTIONS = [
+  "C6 BANK",
+  "BMG",
+  "FACTA",
+  "PAN",
+  "DAYCOVAL",
+  "BRB",
+  "PICPAY",
+  "FINANTO",
+  "QUERO +",
+  "CAPITAL",
+  "BANRISUL",
+  "NOSSA FINTECH",
+].map((bank) => ({ value: bank, label: bank }));
+
 export const OPERATION_SCHEMAS = {
   PORTABILIDADE: {
     title: "Ficha para Portabilidade",
@@ -12,7 +27,12 @@ export const OPERATION_SCHEMAS = {
         title: "Dados gerais",
         fields: [
           { name: "vendedor_nome", label: "Nome do vendedor", required: true },
-          { name: "banco_nome", label: "Nome do banco", required: true },
+          {
+            name: "banco_nome",
+            label: "Nome do banco",
+            required: true,
+            options: BANK_OPTIONS,
+          },
           { name: "cliente_negativo", label: "Negativo do cliente (se tiver)" },
         ],
       },
@@ -40,7 +60,7 @@ export const OPERATION_SCHEMAS = {
         fields: [
           { name: "conta", label: "Conta", required: true },
           { name: "agencia", label: "Agência", required: true },
-          { name: "banco", label: "Banco", required: true },
+          { name: "banco", label: "Banco", required: true, options: BANK_OPTIONS },
           {
             name: "tipo_conta",
             label: "Tipo de conta",
@@ -61,8 +81,6 @@ export const OPERATION_SCHEMAS = {
           { name: "valor_parcela", label: "Valor da parcela", type: "number", min: 0, step: "0.01", required: true },
           { name: "prazo", label: "Prazo", type: "number", min: 0 },
           { name: "margem", label: "Margem", type: "number", min: 0, step: "0.01" },
-          { name: "valor_solicitado", label: "Valor solicitado", type: "number", min: 0, step: "0.01" },
-          { name: "parcela_solicitada", label: "Parcela solicitada", type: "number", min: 0, step: "0.01" },
         ],
       },
     ],
@@ -73,10 +91,13 @@ export const OPERATION_SCHEMAS = {
       {
         title: "Dados gerais",
         fields: [
-          { name: "banco_para_digitar", label: "Banco pra digitar", required: true },
+          {
+            name: "banco_para_digitar",
+            label: "Banco pra digitar",
+            required: true,
+            options: BANK_OPTIONS,
+          },
           { name: "vendedor_nome", label: "Nome do vendedor", required: true },
-          { name: "valor_solicitado", label: "Valor solicitado", type: "number", min: 0, step: "0.01" },
-          { name: "parcela_solicitada", label: "Parcela solicitada", type: "number", min: 0, step: "0.01" },
           { name: "margem", label: "Margem", type: "number", min: 0, step: "0.01", required: true },
           { name: "prazo", label: "Prazo", type: "number", min: 0, required: true },
         ],
@@ -133,8 +154,12 @@ export const OPERATION_SCHEMAS = {
         fields: [
           { name: "titulo_produto", label: "Produto", required: true },
           { name: "vendedor_nome", label: "Nome do vendedor", required: true },
-          { name: "valor_solicitado", label: "Valor solicitado", type: "number", min: 0, step: "0.01" },
-          { name: "parcela_solicitada", label: "Parcela solicitada", type: "number", min: 0, step: "0.01" },
+          {
+            name: "banco_para_digitar",
+            label: "Banco pra digitar",
+            required: true,
+            options: BANK_OPTIONS,
+          },
           { name: "margem", label: "Margem", type: "number", min: 0, step: "0.01", required: true },
           { name: "prazo", label: "Prazo", type: "number", min: 0 },
         ],
@@ -261,8 +286,6 @@ export function buildOperationFichaDefaults(product, client, user, seed = {}) {
     tipo_conta: "CORRENTE",
     margem: seed.margem || "",
     prazo: seed.prazo || "",
-    valor_solicitado: seed.valor_solicitado || "",
-    parcela_solicitada: seed.parcela_solicitada || "",
   };
 }
 
@@ -349,16 +372,6 @@ export function buildOperationPayloadFromFicha(product, fichaPayload, fallback =
     ),
     margem,
     prazo,
-    valor_solicitado: toNullableNumber(
-      ficha.valor_solicitado,
-      ficha.saldo_quitacao,
-      fallback.valor_solicitado
-    ),
-    parcela_solicitada: toNullableNumber(
-      ficha.parcela_solicitada,
-      ficha.valor_parcela,
-      fallback.parcela_solicitada
-    ),
     ficha_portabilidade: Object.keys(ficha).length ? ficha : null,
   };
 }

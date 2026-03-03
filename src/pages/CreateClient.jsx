@@ -18,6 +18,7 @@ const INITIAL_FORM = {
   rg_data_emissao: "",
   naturalidade: "",
   telefone: "",
+  email: "",
   cep: "",
   rua: "",
   numero: "",
@@ -269,6 +270,17 @@ export default function CreateClient() {
                 name="telefone"
                 value={form.telefone}
                 onChange={handleChange}
+              />
+            </label>
+
+            <label className="createField">
+              <span>E-mail</span>
+              <input
+                type="email"
+                name="email"
+                value={form.email}
+                onChange={handleChange}
+                placeholder="cliente@email.com"
               />
             </label>
 

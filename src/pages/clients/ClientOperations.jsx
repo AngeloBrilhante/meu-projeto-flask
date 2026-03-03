@@ -68,8 +68,6 @@ function getOperationSeed(operation = {}) {
     banco_digitacao: operation.banco_digitacao || "",
     margem: operation.margem || "",
     prazo: operation.prazo || "",
-    valor_solicitado: operation.valor_solicitado || "",
-    parcela_solicitada: operation.parcela_solicitada || "",
   };
 }
 
@@ -407,10 +405,14 @@ export default function ClientOperations() {
               <tr>
                 <th>Produto</th>
                 <th>Banco</th>
-                <th>Valor</th>
+                <th>Valor liberado</th>
+                <th>Parcela liberada</th>
                 <th>Prazo</th>
                 <th>Ficha</th>
                 <th>Status</th>
+                <th>Digitador</th>
+                <th>N. proposta</th>
+                <th>Link formalizacao</th>
                 <th>Pendência banco</th>
                 <th>Ação</th>
               </tr>
@@ -432,7 +434,8 @@ export default function ClientOperations() {
                   <tr key={operation.id}>
                     <td>{operation.produto}</td>
                     <td>{operation.banco_digitacao || "-"}</td>
-                    <td>{formatCurrency(operation.valor_solicitado)}</td>
+                    <td>{formatCurrency(operation.valor_liberado)}</td>
+                    <td>{formatCurrency(operation.parcela_liberada)}</td>
                     <td>{operation.prazo || "-"}</td>
                     <td>
                       <button
@@ -449,6 +452,22 @@ export default function ClientOperations() {
                       <span className={`operationStatusBadge ${normalizedStatus}`}>
                         {formatStatus(normalizedStatus)}
                       </span>
+                    </td>
+                    <td>{operation.digitador_nome || "-"}</td>
+                    <td>{operation.numero_proposta || "-"}</td>
+                    <td>
+                      {operation.link_formalizacao ? (
+                        <a
+                          className="clientLinkButton"
+                          href={operation.link_formalizacao}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          Abrir link
+                        </a>
+                      ) : (
+                        "-"
+                      )}
                     </td>
                     <td>{operation.pendencia_motivo || "-"}</td>
                     <td>

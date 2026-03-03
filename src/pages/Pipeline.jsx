@@ -65,6 +65,15 @@ function getStatusLabel(status) {
 function toDraft(operation) {
   return {
     link_formalizacao: operation.link_formalizacao || "",
+    numero_proposta: operation.numero_proposta || "",
+    valor_liberado:
+      operation.valor_liberado === null || operation.valor_liberado === undefined
+        ? ""
+        : String(operation.valor_liberado),
+    parcela_liberada:
+      operation.parcela_liberada === null || operation.parcela_liberada === undefined
+        ? ""
+        : String(operation.parcela_liberada),
     pendencia_tipo: operation.pendencia_tipo || "",
     pendencia_motivo: operation.pendencia_motivo || "",
     motivo_reprovacao: operation.motivo_reprovacao || "",
@@ -157,6 +166,13 @@ export default function Pipeline() {
   const [historyByOperation, setHistoryByOperation] = useState({});
   const [loadingHistoryOperationId, setLoadingHistoryOperationId] = useState(null);
   const [nowMs, setNowMs] = useState(Date.now());
+  const [filters, setFilters] = useState({
+    status: "",
+    date_from: "",
+    date_to: "",
+    vendedor: "",
+    priority: "",
+  });
   const openEditorsRef = useRef({});
 
   useEffect(() => {
@@ -297,6 +313,13 @@ export default function Pipeline() {
       status: nextStatus,
       ...payloadOverrides,
     };
+    const numeroProposta = String(draft.numero_proposta || "").trim();
+    const valorLiberadoInput = String(draft.valor_liberado || "").trim();
+    const parcelaLiberadaInput = String(draft.parcela_liberada || "").trim();
+
+    if (numeroProposta) payload.numero_proposta = numeroProposta;
+    if (valorLiberadoInput) payload.valor_liberado = valorLiberadoInput;
+    if (parcelaLiberadaInput) payload.parcela_liberada = parcelaLiberadaInput;
 
     if (clearPendencia) {
       payload.pendencia_tipo = "";
@@ -306,6 +329,29 @@ export default function Pipeline() {
     if (nextStatus === "AGUARDANDO_FORMALIZACAO" && !payload.link_formalizacao) {
       alert("Informe o link de formalizacao para devolver ao vendedor.");
       return;
+    }
+
+    if (nextStatus === "AGUARDANDO_FORMALIZACAO" && !payload.numero_proposta) {
+      alert("Informe o numero da proposta.");
+      return;
+    }
+
+    if (nextStatus === "AGUARDANDO_FORMALIZACAO") {
+      const valorLiberado = Number(String(payload.valor_liberado || "").replace(",", "."));
+      const parcelaLiberada = Number(String(payload.parcela_liberada || "").replace(",", "."));
+
+      if (!Number.isFinite(valorLiberado) || valorLiberado <= 0) {
+        alert("Informe um valor liberado valido.");
+        return;
+      }
+
+      if (!Number.isFinite(parcelaLiberada) || parcelaLiberada <= 0) {
+        alert("Informe uma parcela liberada valida.");
+        return;
+      }
+
+      payload.valor_liberado = valorLiberado;
+      payload.parcela_liberada = parcelaLiberada;
     }
 
     if (nextStatus === "PENDENCIA" && !payload.pendencia_motivo) {
@@ -413,22 +459,67 @@ export default function Pipeline() {
     }
   }
 
-  const rows = useMemo(
-    () =>
-      [...operations]
-        .map((operation) => ({
-          ...operation,
-          normalizedStatus: normalizeStatus(operation.status),
-          priority: getPriorityMeta(operation.criado_em, nowMs),
-        }))
-        .sort((a, b) => {
-          if (a.priority.createdMs !== b.priority.createdMs) {
-            return a.priority.createdMs - b.priority.createdMs;
+  const vendorOptions = useMemo(() => {
+    const names = Array.from(
+      new Set(
+        operations
+          .map((operation) => String(operation.vendedor_nome || "").trim())
+          .filter(Boolean)
+      )
+    );
+    return names.sort((a, b) => a.localeCompare(b, "pt-BR"));
+  }, [operations]);
+
+  const rows = useMemo(() => {
+    const fromDate = filters.date_from ? new Date(`${filters.date_from}T00:00:00`) : null;
+    const toDate = filters.date_to ? new Date(`${filters.date_to}T23:59:59.999`) : null;
+
+    return [...operations]
+      .map((operation) => ({
+        ...operation,
+        normalizedStatus: normalizeStatus(operation.status),
+        priority: getPriorityMeta(operation.criado_em, nowMs),
+      }))
+      .filter((operation) => {
+        if (filters.status && operation.normalizedStatus !== filters.status) {
+          return false;
+        }
+
+        if (filters.vendedor) {
+          const vendorName = String(operation.vendedor_nome || "").trim();
+          if (vendorName !== filters.vendedor) {
+            return false;
           }
-          return Number(a.id || 0) - Number(b.id || 0);
-        }),
-    [operations, nowMs]
-  );
+        }
+
+        if (filters.priority && operation.priority.tone !== filters.priority) {
+          return false;
+        }
+
+        if (fromDate || toDate) {
+          const createdAt = new Date(operation.criado_em || "");
+          if (Number.isNaN(createdAt.getTime())) {
+            return false;
+          }
+
+          if (fromDate && createdAt < fromDate) {
+            return false;
+          }
+
+          if (toDate && createdAt > toDate) {
+            return false;
+          }
+        }
+
+        return true;
+      })
+      .sort((a, b) => {
+        if (a.priority.createdMs !== b.priority.createdMs) {
+          return a.priority.createdMs - b.priority.createdMs;
+        }
+        return Number(a.id || 0) - Number(b.id || 0);
+      });
+  }, [operations, nowMs, filters]);
 
   function openOperationFicha(operation, event) {
     const interactive = event.target.closest(
@@ -439,11 +530,87 @@ export default function Pipeline() {
     navigate(`/operations/${operation.id}/ficha`);
   }
 
+  function handleFilterChange(field, value) {
+    setFilters((prev) => ({
+      ...prev,
+      [field]: value,
+    }));
+  }
+
+  function openOperationComments(operation) {
+    navigate(
+      `/clients/${operation.cliente_id}/comentarios?operation_id=${operation.id}`
+    );
+  }
+
   return (
     <div className="pipelineContainer">
       <div className="pipelineHeader">
         <h2>Esteira de Operacoes</h2>
         <p>Fluxo: pronta para digitar, digitacao, formalizacao, analise banco e pendencias.</p>
+      </div>
+
+      <div className="pipelineFilters">
+        <label className="pipelineFilterField">
+          <span>Status</span>
+          <select
+            value={filters.status}
+            onChange={(event) => handleFilterChange("status", event.target.value)}
+          >
+            <option value="">Todos</option>
+            {Object.entries(STATUS_LABELS).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="pipelineFilterField">
+          <span>Data inicial</span>
+          <input
+            type="date"
+            value={filters.date_from}
+            onChange={(event) => handleFilterChange("date_from", event.target.value)}
+          />
+        </label>
+
+        <label className="pipelineFilterField">
+          <span>Data final</span>
+          <input
+            type="date"
+            value={filters.date_to}
+            onChange={(event) => handleFilterChange("date_to", event.target.value)}
+          />
+        </label>
+
+        <label className="pipelineFilterField">
+          <span>Vendedor</span>
+          <select
+            value={filters.vendedor}
+            onChange={(event) => handleFilterChange("vendedor", event.target.value)}
+          >
+            <option value="">Todos</option>
+            {vendorOptions.map((name) => (
+              <option key={name} value={name}>
+                {name}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="pipelineFilterField">
+          <span>Prioridade</span>
+          <select
+            value={filters.priority}
+            onChange={(event) => handleFilterChange("priority", event.target.value)}
+          >
+            <option value="">Todas</option>
+            <option value="red">Urgente (&gt; 24h)</option>
+            <option value="yellow">Atencao (&gt; 5h)</option>
+            <option value="green">Normal</option>
+          </select>
+        </label>
       </div>
 
       {loading && <p className="pipelineMessage">Carregando...</p>}
@@ -457,9 +624,10 @@ export default function Pipeline() {
               <tr>
                 <th>Prioridade</th>
                 <th>Cliente</th>
+                <th>Vendedor</th>
                 <th>Produto</th>
                 <th>Status</th>
-                <th>Link formalizacao</th>
+                <th>Dados formalizacao</th>
                 <th>Fluxo</th>
               </tr>
             </thead>
@@ -494,24 +662,79 @@ export default function Pipeline() {
                       <div className="pipelineHint">{operation.cpf}</div>
                     </td>
                     <td>
+                      <strong>{operation.vendedor_nome || "-"}</strong>
+                    </td>
+                    <td>
                       <strong>{operation.produto || "-"}</strong>
                       <div className="pipelineHint">{operation.banco_digitacao || "-"}</div>
                     </td>
-                    <td>{getStatusBadge(operation.normalizedStatus)}</td>
                     <td>
-                      <input
-                        type="url"
-                        className="proposalInput proposalLinkInput"
-                        placeholder="https://..."
-                        value={draft.link_formalizacao}
-                        onChange={(event) =>
-                          handleDraftChange(
-                            operation.id,
-                            "link_formalizacao",
-                            event.target.value
-                          )
-                        }
-                      />
+                      {getStatusBadge(operation.normalizedStatus)}
+                      {operation.digitador_nome && (
+                        <div className="pipelineHint">
+                          Digitando: {operation.digitador_nome}
+                        </div>
+                      )}
+                    </td>
+                    <td>
+                      <div className="proposalStackField">
+                        <input
+                          type="text"
+                          className="proposalInput"
+                          placeholder="Numero da proposta"
+                          value={draft.numero_proposta}
+                          onChange={(event) =>
+                            handleDraftChange(
+                              operation.id,
+                              "numero_proposta",
+                              event.target.value
+                            )
+                          }
+                        />
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          className="proposalInput"
+                          placeholder="Valor liberado"
+                          value={draft.valor_liberado}
+                          onChange={(event) =>
+                            handleDraftChange(
+                              operation.id,
+                              "valor_liberado",
+                              event.target.value
+                            )
+                          }
+                        />
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          className="proposalInput"
+                          placeholder="Parcela liberada"
+                          value={draft.parcela_liberada}
+                          onChange={(event) =>
+                            handleDraftChange(
+                              operation.id,
+                              "parcela_liberada",
+                              event.target.value
+                            )
+                          }
+                        />
+                        <input
+                          type="url"
+                          className="proposalInput proposalLinkInput"
+                          placeholder="https://..."
+                          value={draft.link_formalizacao}
+                          onChange={(event) =>
+                            handleDraftChange(
+                              operation.id,
+                              "link_formalizacao",
+                              event.target.value
+                            )
+                          }
+                        />
+                      </div>
                     </td>
                     <td className="pipelineFlowCell">
                       <div className="pipelineActions">
@@ -597,6 +820,15 @@ export default function Pipeline() {
                             </button>
                           </>
                         )}
+
+                        <button
+                          type="button"
+                          className="ghostPipelineBtn"
+                          disabled={isSaving}
+                          onClick={() => openOperationComments(operation)}
+                        >
+                          Comentarios
+                        </button>
 
                         <button
                           type="button"

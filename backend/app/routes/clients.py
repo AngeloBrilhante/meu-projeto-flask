@@ -112,19 +112,22 @@ def normalize_text(value):
     return str(value or "").strip()
 
 
+EMAIL_REGEX = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
 PENDING_OPERATION_FIELDS = {
     "produto",
     "banco_digitacao",
     "margem",
     "prazo",
-    "valor_solicitado",
-    "parcela_solicitada",
     "ficha_portabilidade",
 }
 
 PIPELINE_OPERATION_FIELDS = PENDING_OPERATION_FIELDS | {
     "valor_liberado",
     "parcela_liberada",
+    "digitador_id",
+    "numero_proposta",
     "status",
     "data_pagamento",
     "link_formalizacao",
@@ -382,6 +385,15 @@ def parse_dashboard_period(month, year):
     return period_start, period_end, None
 
 
+def normalize_optional_email(value):
+    email = normalize_text(value).lower()
+    if not email:
+        return ""
+    if not EMAIL_REGEX.match(email):
+        raise ValueError("email invalido")
+    return email
+
+
 def ensure_dashboard_goals_table(cursor, db):
     cursor.execute(
         """
@@ -398,6 +410,40 @@ def ensure_dashboard_goals_table(cursor, db):
         """
     )
     db.commit()
+
+
+def ensure_clients_extra_columns(cursor, db):
+    cursor.execute(
+        """
+        SELECT
+            COLUMN_NAME,
+            DATA_TYPE,
+            CHARACTER_MAXIMUM_LENGTH
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'clientes'
+          AND COLUMN_NAME IN ('email')
+        """
+    )
+
+    existing = {row["COLUMN_NAME"]: row for row in cursor.fetchall()}
+    changed = False
+    email_column = existing.get("email")
+
+    if not email_column:
+        cursor.execute(
+            "ALTER TABLE clientes ADD COLUMN email VARCHAR(180) NULL AFTER telefone"
+        )
+        changed = True
+    else:
+        email_type = str(email_column.get("DATA_TYPE") or "").lower()
+        email_len = email_column.get("CHARACTER_MAXIMUM_LENGTH") or 0
+        if email_type != "varchar" or email_len < 180:
+            cursor.execute("ALTER TABLE clientes MODIFY COLUMN email VARCHAR(180) NULL")
+            changed = True
+
+    if changed:
+        db.commit()
 
 
 def ensure_operations_extra_columns(cursor, db):
@@ -422,7 +468,9 @@ def ensure_operations_extra_columns(cursor, db):
               'pendencia_aberta_em',
               'pendencia_resposta_vendedor',
               'pendencia_respondida_em',
-              'motivo_reprovacao'
+              'motivo_reprovacao',
+              'digitador_id',
+              'numero_proposta'
           )
         """
     )
@@ -505,6 +553,14 @@ def ensure_operations_extra_columns(cursor, db):
         cursor.execute(
             "ALTER TABLE operacoes ADD COLUMN motivo_reprovacao TEXT NULL"
         )
+        changed = True
+
+    if "digitador_id" not in existing:
+        cursor.execute("ALTER TABLE operacoes ADD COLUMN digitador_id INT NULL")
+        changed = True
+
+    if "numero_proposta" not in existing:
+        cursor.execute("ALTER TABLE operacoes ADD COLUMN numero_proposta VARCHAR(120) NULL")
         changed = True
 
     if changed:
@@ -643,16 +699,31 @@ def notify_vendor_status_change(
     if changed_by and vendedor_id == to_int(changed_by):
         return
 
+    actor_name = ""
+    if changed_by:
+        cursor.execute(
+            """
+            SELECT COALESCE(nome, 'Usuario') AS nome
+            FROM usuarios
+            WHERE id = %s
+            LIMIT 1
+            """,
+            (changed_by,),
+        )
+        actor = cursor.fetchone() or {}
+        actor_name = str(actor.get("nome") or "").strip()
+
     cliente_nome = str(operation.get("cliente_nome") or "Cliente").strip() or "Cliente"
     produto = normalize_product_name(operation.get("produto")) or "OPERACAO"
     previous_label = format_operation_status_label(normalized_previous)
     next_label = format_operation_status_label(normalized_next)
+    actor_suffix = f" por {actor_name}" if actor_name else ""
 
     title = f"Status da operacao #{operation_id} atualizado"
     message = (
-        f"{cliente_nome} ({produto}): {previous_label} -> {next_label}"
+        f"{cliente_nome} ({produto}): {previous_label} -> {next_label}{actor_suffix}"
         if normalized_previous
-        else f"{cliente_nome} ({produto}): {next_label}"
+        else f"{cliente_nome} ({produto}): {next_label}{actor_suffix}"
     )
 
     cursor.execute(
@@ -821,6 +892,10 @@ def create_client():
     rg_orgao_exp = normalize_text(data.get("rg_orgao_exp"))
     naturalidade = normalize_text(data.get("naturalidade"))
     telefone = only_digits(data.get("telefone"))
+    try:
+        email = normalize_optional_email(data.get("email"))
+    except ValueError:
+        return jsonify({"error": "email invalido"}), 400
     rua = normalize_text(data.get("rua"))
     numero = normalize_text(data.get("numero"))
     bairro = normalize_text(data.get("bairro"))
@@ -832,6 +907,7 @@ def create_client():
     cursor = db.cursor(dictionary=True)
 
     try:
+        ensure_clients_extra_columns(cursor, db)
         cursor.execute(
             """
             SELECT
@@ -863,6 +939,7 @@ def create_client():
             "rg_data_emissao",
             "naturalidade",
             "telefone",
+            "email",
             "cep",
         ]
         missing_base_columns = [
@@ -905,6 +982,7 @@ def create_client():
             "rg_uf": rg_uf,
             "naturalidade": naturalidade,
             "telefone": telefone,
+            "email": email,
             "cep": cep,
             **dict(zip(address_columns, address_values)),
         }
@@ -933,6 +1011,7 @@ def create_client():
             rg_data_emissao,
             naturalidade,
             telefone,
+            email or None,
             cep,
             *address_values,
         ]
@@ -1070,6 +1149,7 @@ def create_operation(client_id):
 def list_clients():
     db = get_db()
     cursor = db.cursor(dictionary=True)
+    ensure_clients_extra_columns(cursor, db)
 
     if is_admin():
         cursor.execute("""
@@ -1123,12 +1203,24 @@ def list_operations(client_id):
 
     db = get_db()
     cursor = db.cursor(dictionary=True)
+    ensure_operations_extra_columns(cursor, db)
 
-    cursor.execute("""
-        SELECT * FROM operacoes
-        WHERE cliente_id=%s
-        ORDER BY criado_em DESC
-    """, (client_id,))
+    cursor.execute(
+        """
+        SELECT
+            o.*,
+            c.vendedor_id,
+            COALESCE(v.nome, '-') AS vendedor_nome,
+            COALESCE(d.nome, '-') AS digitador_nome
+        FROM operacoes o
+        JOIN clientes c ON c.id = o.cliente_id
+        LEFT JOIN usuarios v ON v.id = c.vendedor_id
+        LEFT JOIN usuarios d ON d.id = o.digitador_id
+        WHERE o.cliente_id = %s
+        ORDER BY o.criado_em DESC
+        """,
+        (client_id,),
+    )
 
     operations = [
         hydrate_operation_payload(operation)
@@ -1164,10 +1256,12 @@ def get_operation_dossier(operation_id):
             o.*,
             c.id AS cliente_id,
             c.vendedor_id,
-            COALESCE(u.nome, '-') AS vendedor_nome
+            COALESCE(u.nome, '-') AS vendedor_nome,
+            COALESCE(d.nome, '-') AS digitador_nome
         FROM operacoes o
         JOIN clientes c ON c.id = o.cliente_id
         LEFT JOIN usuarios u ON u.id = c.vendedor_id
+        LEFT JOIN usuarios d ON d.id = o.digitador_id
         WHERE o.id = %s
         LIMIT 1
         """,
@@ -1452,6 +1546,7 @@ def get_client(client_id):
 
     db = get_db()
     cursor = db.cursor(dictionary=True)
+    ensure_clients_extra_columns(cursor, db)
 
     cursor.execute(
         "SELECT * FROM clientes WHERE id = %s",
@@ -2001,6 +2096,7 @@ def update_operation(operation_id):
             o.enviada_esteira_em,
             o.pendencia_motivo,
             o.produto,
+            o.digitador_id,
             c.vendedor_id
         FROM operacoes o
         JOIN clientes c ON c.id = o.cliente_id
@@ -2018,6 +2114,7 @@ def update_operation(operation_id):
     current_status = normalize_operation_status(operation.get("status"))
     original_status = current_status
     next_status_for_history = current_status
+    history_note = None
     sent_to_pipeline = operation.get("enviada_esteira_em") is not None
     allowed_fields = set()
 
@@ -2142,6 +2239,26 @@ def update_operation(operation_id):
                     }), 400
 
                 data["status"] = next_status
+                next_status_for_history = next_status
+
+                if next_status == "EM_DIGITACAO":
+                    data["digitador_id"] = user_id
+                    cursor.execute(
+                        """
+                        SELECT COALESCE(nome, 'Digitador') AS nome
+                        FROM usuarios
+                        WHERE id = %s
+                        LIMIT 1
+                        """,
+                        (user_id,),
+                    )
+                    actor = cursor.fetchone() or {}
+                    actor_name = str(actor.get("nome") or "").strip()
+                    history_note = (
+                        f"Digitacao iniciada por {actor_name}"
+                        if actor_name
+                        else "Digitacao iniciada"
+                    )
 
                 if next_status == "AGUARDANDO_FORMALIZACAO":
                     link = str(data.get("link_formalizacao") or "").strip()
@@ -2151,7 +2268,43 @@ def update_operation(operation_id):
                         return jsonify({
                             "error": "Informe o link_formalizacao para devolver ao vendedor"
                         }), 400
+
+                    proposal_number = str(data.get("numero_proposta") or "").strip()
+                    if not proposal_number:
+                        cursor.close()
+                        db.close()
+                        return jsonify({
+                            "error": "Informe o numero_proposta para devolver ao vendedor"
+                        }), 400
+
+                    try:
+                        valor_liberado = float(str(data.get("valor_liberado") or "").replace(",", "."))
+                    except (TypeError, ValueError):
+                        cursor.close()
+                        db.close()
+                        return jsonify({"error": "valor_liberado invalido"}), 400
+
+                    try:
+                        parcela_liberada = float(str(data.get("parcela_liberada") or "").replace(",", "."))
+                    except (TypeError, ValueError):
+                        cursor.close()
+                        db.close()
+                        return jsonify({"error": "parcela_liberada invalida"}), 400
+
+                    if valor_liberado <= 0:
+                        cursor.close()
+                        db.close()
+                        return jsonify({"error": "valor_liberado deve ser maior que zero"}), 400
+
+                    if parcela_liberada <= 0:
+                        cursor.close()
+                        db.close()
+                        return jsonify({"error": "parcela_liberada deve ser maior que zero"}), 400
+
                     data["link_formalizacao"] = link
+                    data["numero_proposta"] = proposal_number
+                    data["valor_liberado"] = round(valor_liberado, 2)
+                    data["parcela_liberada"] = round(parcela_liberada, 2)
                     data["devolvida_em"] = now_str
 
                 if (
@@ -2198,6 +2351,9 @@ def update_operation(operation_id):
             if "link_formalizacao" in data and data.get("link_formalizacao") is not None:
                 data["link_formalizacao"] = str(data.get("link_formalizacao") or "").strip()
 
+            if "numero_proposta" in data and data.get("numero_proposta") is not None:
+                data["numero_proposta"] = str(data.get("numero_proposta") or "").strip()
+
             if "pendencia_tipo" in data and data.get("pendencia_tipo") is not None:
                 data["pendencia_tipo"] = str(data.get("pendencia_tipo") or "").strip().upper()
 
@@ -2233,6 +2389,7 @@ def update_operation(operation_id):
             next_status_for_history,
             changed_by=user_id,
             changed_by_role=role,
+            note=history_note,
         )
         notify_vendor_status_change(
             cursor,
@@ -2459,6 +2616,7 @@ def get_pipeline():
             o.parcela_solicitada,
             o.valor_liberado,
             o.parcela_liberada,
+            o.numero_proposta,
             o.enviada_esteira_em,
             o.link_formalizacao,
             o.devolvida_em,
@@ -2472,15 +2630,18 @@ def get_pipeline():
             o.ficha_portabilidade,
             o.prazo,
             o.status,
+            o.digitador_id,
             o.criado_em,
             c.id as cliente_id,
             c.nome,
             c.cpf,
             c.vendedor_id,
-            COALESCE(u.nome, '-') AS vendedor_nome
+            COALESCE(u.nome, '-') AS vendedor_nome,
+            COALESCE(d.nome, '-') AS digitador_nome
         FROM operacoes o
         JOIN clientes c ON c.id = o.cliente_id
         LEFT JOIN usuarios u ON u.id = c.vendedor_id
+        LEFT JOIN usuarios d ON d.id = o.digitador_id
         WHERE {where_clause}
         ORDER BY o.criado_em ASC
     """, tuple(params))

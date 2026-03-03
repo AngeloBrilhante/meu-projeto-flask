@@ -63,15 +63,19 @@ export default function ClientLayout() {
             <strong>{client.telefone || "-"}</strong>
           </article>
           <article>
-            <span>Salário</span>
+            <span>E-mail</span>
+            <strong>{client.email || "-"}</strong>
+          </article>
+          <article>
+            <span>Salario</span>
             <strong>{formatCurrency(client.salario)}</strong>
           </article>
           <article>
-            <span>Espécie</span>
+            <span>Especie</span>
             <strong>{client.especie || "-"}</strong>
           </article>
           <article className="full">
-            <span>Endereço</span>
+            <span>Endereco</span>
             <strong>
               {client.rua || "-"}, {client.numero || "-"} - {client.bairro || "-"}
             </strong>
@@ -93,7 +97,7 @@ export default function ClientLayout() {
           className={isActive("operacoes") ? "clientTabButton active" : "clientTabButton"}
           onClick={() => navigate("operacoes")}
         >
-          Operações
+          Operacoes
         </button>
 
         <button
@@ -103,7 +107,7 @@ export default function ClientLayout() {
           }
           onClick={() => navigate("comentarios")}
         >
-          Comentários
+          Comentarios
         </button>
       </div>
 
