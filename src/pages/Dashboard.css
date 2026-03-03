@@ -521,6 +521,32 @@
   color: var(--text-secondary);
 }
 
+.panelHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.chartTypeField {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  min-width: 180px;
+}
+
+.chartTypeField select {
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  height: 36px;
+  padding: 0 10px;
+  background: var(--surface-strong);
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
 .barsChart {
   margin-top: 18px;
   min-height: 260px;
@@ -557,6 +583,155 @@
 
 .barItem span {
   font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.chartEmpty {
+  margin: 18px 0 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px dashed var(--border-color);
+  color: var(--text-secondary);
+  background: var(--surface-strong);
+}
+
+.pieChartWrap {
+  margin-top: 16px;
+  display: grid;
+  grid-template-columns: minmax(220px, 280px) 1fr;
+  gap: 14px;
+  align-items: center;
+}
+
+.pieChart {
+  margin: 0 auto;
+  width: min(260px, 100%);
+  aspect-ratio: 1 / 1;
+  border-radius: 50%;
+  position: relative;
+  background: var(--pie-gradient, var(--surface-soft));
+  border: 1px solid var(--border-color);
+}
+
+.pieChart::before {
+  content: "";
+  position: absolute;
+  inset: 20%;
+  border-radius: 50%;
+  background: var(--surface);
+  border: 1px solid var(--border-color);
+}
+
+.pieChartCenter {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  text-align: center;
+  z-index: 1;
+  padding: 0 28px;
+}
+
+.pieChartCenter strong {
+  font-size: 18px;
+  line-height: 1.1;
+}
+
+.pieChartCenter span {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.pieLegend {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.pieLegend li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border-color);
+  background: var(--surface-strong);
+}
+
+.pieLegendColor {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  margin-top: 4px;
+  flex-shrink: 0;
+}
+
+.pieLegendContent {
+  min-width: 0;
+}
+
+.pieLegendContent strong {
+  display: block;
+  font-size: 13px;
+}
+
+.pieLegendContent small {
+  display: block;
+  margin-top: 2px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.rankingChart {
+  margin-top: 16px;
+  display: grid;
+  gap: 10px;
+}
+
+.rankingItem {
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: var(--surface-strong);
+  padding: 10px;
+}
+
+.rankingItemHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+.rankingItemHead strong {
+  font-size: 13px;
+}
+
+.rankingItemHead span {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.rankingTrack {
+  margin-top: 8px;
+  height: 9px;
+  border-radius: 999px;
+  background: var(--surface-soft);
+  overflow: hidden;
+}
+
+.rankingValue {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #7893ff, var(--accent));
+}
+
+.rankingItem small {
+  display: block;
+  margin-top: 8px;
+  font-size: 12px;
   color: var(--text-secondary);
 }
 
@@ -755,5 +930,18 @@
 
   .dashboardHead {
     flex-direction: column;
+  }
+
+  .panelHeader {
+    flex-direction: column;
+  }
+
+  .chartTypeField {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .pieChartWrap {
+    grid-template-columns: 1fr;
   }
 }

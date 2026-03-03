@@ -3038,6 +3038,52 @@ def get_dashboard_summary():
             for i in range(1, 13)
         ]
 
+        approved_by_product_params = [period_start, period_end]
+        approved_by_product_vendor_clause = ""
+
+        if selected_vendor_id:
+            approved_by_product_vendor_clause = " AND c.vendedor_id = %s"
+            approved_by_product_params.append(selected_vendor_id)
+
+        approved_by_product_params.extend(role_product_params)
+
+        cursor.execute(
+            f"""
+            SELECT
+                UPPER(TRIM(COALESCE(o.produto, ''))) AS product_key,
+                COALESCE(NULLIF(TRIM(o.produto), ''), 'SEM_PRODUTO') AS product_label,
+                COUNT(*) AS approved_operations,
+                COALESCE(
+                    SUM(
+                        COALESCE(o.valor_liberado, o.valor_solicitado, 0)
+                    ),
+                    0
+                ) AS approved_value
+            FROM operacoes o
+            JOIN clientes c ON c.id = o.cliente_id
+            WHERE o.status = 'APROVADO'
+              AND COALESCE(o.data_pagamento, o.criado_em) >= %s
+              AND COALESCE(o.data_pagamento, o.criado_em) < %s
+              {approved_by_product_vendor_clause}
+              {role_product_clause}
+            GROUP BY
+                UPPER(TRIM(COALESCE(o.produto, ''))),
+                COALESCE(NULLIF(TRIM(o.produto), ''), 'SEM_PRODUTO')
+            ORDER BY approved_value DESC, product_label ASC
+            """,
+            tuple(approved_by_product_params),
+        )
+        approved_by_product_rows = cursor.fetchall()
+        approved_by_product = [
+            {
+                "product_key": row.get("product_key") or "SEM_PRODUTO",
+                "product_label": row.get("product_label") or "SEM_PRODUTO",
+                "approved": to_int(row.get("approved_operations")),
+                "approved_value": round(to_number(row.get("approved_value")), 2),
+            }
+            for row in approved_by_product_rows
+        ]
+
         vendors = []
         if is_admin_like_role(role):
             cursor.execute(
@@ -3227,6 +3273,7 @@ def get_dashboard_summary():
                 "vendors": vendors,
                 "vendors_product_stats": vendors_product_stats,
                 "monthly_approved": monthly_approved,
+                "approved_by_product": approved_by_product,
             }
         ), 200
     finally:

@@ -46,6 +46,130 @@ function formatProductLabel(product) {
     .replace(/(^\w)|(\s\w)/g, (char) => char.toUpperCase());
 }
 
+const CHART_COLORS = [
+  "#5A78FF",
+  "#22C55E",
+  "#F59E0B",
+  "#EF4444",
+  "#06B6D4",
+  "#8B5CF6",
+  "#14B8A6",
+  "#F97316",
+];
+
+function buildPieDataset(rawItems) {
+  const normalized = (Array.isArray(rawItems) ? rawItems : [])
+    .map((item) => ({
+      label: formatProductLabel(item?.product_label || item?.product_key || "Sem produto"),
+      value: Number(item?.approved_value || 0),
+      approved: Number(item?.approved || 0),
+    }))
+    .filter((item) => Number.isFinite(item.value) && item.value > 0)
+    .sort((a, b) => b.value - a.value);
+
+  if (normalized.length === 0) return [];
+
+  const topItems = normalized.slice(0, 6);
+  const remaining = normalized.slice(6);
+
+  if (remaining.length > 0) {
+    topItems.push({
+      label: "Outros",
+      value: remaining.reduce((sum, item) => sum + item.value, 0),
+      approved: remaining.reduce((sum, item) => sum + item.approved, 0),
+    });
+  }
+
+  const total = topItems.reduce((sum, item) => sum + item.value, 0);
+  let cursor = 0;
+
+  return topItems.map((item, index) => {
+    const percentage = total > 0 ? (item.value / total) * 100 : 0;
+    const start = cursor;
+    cursor += percentage;
+    const end = index === topItems.length - 1 ? 100 : cursor;
+
+    return {
+      ...item,
+      color: CHART_COLORS[index % CHART_COLORS.length],
+      percentage: Math.max(0, percentage),
+      start: Math.max(0, start),
+      end: Math.min(100, end),
+    };
+  });
+}
+
+function ProductPieChart({ items }) {
+  if (!items.length) {
+    return <p className="chartEmpty">Sem aprovacoes no periodo para exibir por produto.</p>;
+  }
+
+  const total = items.reduce((sum, item) => sum + item.value, 0);
+  const gradient = items
+    .map((item) => `${item.color} ${item.start.toFixed(2)}% ${item.end.toFixed(2)}%`)
+    .join(", ");
+
+  return (
+    <div className="pieChartWrap">
+      <div
+        className="pieChart"
+        style={{
+          "--pie-gradient": `conic-gradient(${gradient})`,
+        }}
+      >
+        <div className="pieChartCenter">
+          <strong>{formatCurrency(total)}</strong>
+          <span>Total aprovado</span>
+        </div>
+      </div>
+
+      <ul className="pieLegend">
+        {items.map((item) => (
+          <li key={item.label}>
+            <span className="pieLegendColor" style={{ background: item.color }} />
+            <div className="pieLegendContent">
+              <strong>{item.label}</strong>
+              <small>
+                {formatCurrency(item.value)} ({item.percentage.toFixed(1)}%)
+              </small>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function VendorRankingChart({ items }) {
+  if (!items.length) {
+    return <p className="chartEmpty">Sem aprovacoes no periodo para exibir ranking.</p>;
+  }
+
+  const maxValue = Math.max(1, ...items.map((item) => Number(item.approved_value || 0)));
+
+  return (
+    <div className="rankingChart">
+      {items.map((item) => {
+        const approvedValue = Number(item.approved_value || 0);
+        const width = Math.max((approvedValue / maxValue) * 100, approvedValue > 0 ? 8 : 0);
+
+        return (
+          <div className="rankingItem" key={`${item.vendedor_id}-${item.vendedor_nome}`}>
+            <div className="rankingItemHead">
+              <strong>{item.vendedor_nome || "-"}</strong>
+              <span>{formatCurrency(approvedValue)}</span>
+            </div>
+            <div className="rankingTrack">
+              <div className="rankingValue" style={{ width: `${width}%` }} />
+            </div>
+            <small>{Number(item.approved || 0)} aprovadas</small>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function GoalGauge({ percentage }) {
   const normalized = Math.min(Math.max(Number(percentage || 0), 0), 100);
 
@@ -77,6 +201,7 @@ export default function Dashboard() {
   const [savingGoal, setSavingGoal] = useState(false);
   const [goalInput, setGoalInput] = useState("");
   const [error, setError] = useState("");
+  const [chartType, setChartType] = useState("monthly_bar");
 
   const role = getStoredRole();
   const isAdmin = role === "ADMIN" || role === "GLOBAL";
@@ -144,11 +269,46 @@ export default function Dashboard() {
     ? summary.product_scope
     : [];
   const monthlyApproved = summary?.monthly_approved || [];
+  const approvedByProduct = summary?.approved_by_product || [];
 
   const chartMax = Math.max(
     1,
     ...monthlyApproved.map((item) => Number(item?.approved_value || 0))
   );
+
+  const pieDataset = useMemo(
+    () => buildPieDataset(approvedByProduct),
+    [approvedByProduct]
+  );
+
+  const vendorRanking = useMemo(
+    () =>
+      [...vendorsProductStats]
+        .sort((a, b) => Number(b?.approved_value || 0) - Number(a?.approved_value || 0))
+        .slice(0, 8),
+    [vendorsProductStats]
+  );
+
+  const chartConfig = useMemo(() => {
+    if (chartType === "product_pie") {
+      return {
+        title: "Aprovacoes por produto",
+        description: "Distribuicao do valor aprovado por produto no periodo selecionado.",
+      };
+    }
+
+    if (chartType === "vendor_rank") {
+      return {
+        title: "Ranking de vendedores",
+        description: "Comparativo do valor aprovado por vendedor no periodo selecionado.",
+      };
+    }
+
+    return {
+      title: "Aprovadas por mes",
+      description: "Historico anual do valor aprovado.",
+    };
+  }, [chartType]);
 
   const scopeLabel = useMemo(() => {
     if (summary?.scope === "GERAL") {
@@ -249,28 +409,54 @@ export default function Dashboard() {
 
           <section className="dashboardPanels">
             <article className="panel">
-              <h3>Aprovadas por mes</h3>
-              <p>Historico anual do valor aprovado.</p>
+              <div className="panelHeader">
+                <div>
+                  <h3>{chartConfig.title}</h3>
+                  <p>{chartConfig.description}</p>
+                </div>
 
-              <div className="barsChart">
-                {monthlyApproved.map((item) => {
-                  const approvedValue = Number(item.approved_value || 0);
-                  const height = Math.max((approvedValue / chartMax) * 100, 5);
-
-                  return (
-                    <div key={item.month} className="barItem">
-                      <div className="barTrack">
-                        <div
-                          className="barValue"
-                          style={{ height: `${height}%` }}
-                          title={`${item.label}: ${formatCurrency(approvedValue)}`}
-                        />
-                      </div>
-                      <span>{item.label}</span>
-                    </div>
-                  );
-                })}
+                <label className="chartTypeField">
+                  Tipo de grafico
+                  <select
+                    value={chartType}
+                    onChange={(event) => setChartType(event.target.value)}
+                  >
+                    <option value="monthly_bar">Barras por mes</option>
+                    <option value="product_pie">Pizza por produto</option>
+                    <option value="vendor_rank">Ranking vendedores</option>
+                  </select>
+                </label>
               </div>
+
+              {chartType === "monthly_bar" ? (
+                <div className="barsChart">
+                  {monthlyApproved.map((item) => {
+                    const approvedValue = Number(item.approved_value || 0);
+                    const height = Math.max((approvedValue / chartMax) * 100, 5);
+
+                    return (
+                      <div key={item.month} className="barItem">
+                        <div className="barTrack">
+                          <div
+                            className="barValue"
+                            style={{ height: `${height}%` }}
+                            title={`${item.label}: ${formatCurrency(approvedValue)}`}
+                          />
+                        </div>
+                        <span>{item.label}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : null}
+
+              {chartType === "product_pie" ? (
+                <ProductPieChart items={pieDataset} />
+              ) : null}
+
+              {chartType === "vendor_rank" ? (
+                <VendorRankingChart items={vendorRanking} />
+              ) : null}
             </article>
 
             <article className="panel panelGoal">
