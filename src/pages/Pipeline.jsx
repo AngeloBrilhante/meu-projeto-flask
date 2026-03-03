@@ -697,11 +697,11 @@ export default function Pipeline() {
                       <strong>{operation.produto || "-"}</strong>
                       <div className="pipelineHint">{operation.banco_digitacao || "-"}</div>
                     </td>
-                    <td>
+                    <td className="pipelineStatusCell">
                       {getStatusBadge(operation.normalizedStatus)}
                       {operation.digitador_nome && (
-                        <div className="pipelineHint">
-                          Digitando: {operation.digitador_nome}
+                        <div className="pipelineDigitadorTag">
+                          Digitador: {operation.digitador_nome}
                         </div>
                       )}
                     </td>
