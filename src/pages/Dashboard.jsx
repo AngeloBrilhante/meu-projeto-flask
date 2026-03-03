@@ -275,6 +275,8 @@ export default function Dashboard() {
     1,
     ...monthlyApproved.map((item) => Number(item?.approved_value || 0))
   );
+  const goalTarget = Number(summary?.goal?.target || 0);
+  const monthlyBarReference = goalTarget > 0 ? goalTarget : chartMax;
 
   const pieDataset = useMemo(
     () => buildPieDataset(approvedByProduct),
@@ -432,7 +434,11 @@ export default function Dashboard() {
                 <div className="barsChart">
                   {monthlyApproved.map((item) => {
                     const approvedValue = Number(item.approved_value || 0);
-                    const height = Math.max((approvedValue / chartMax) * 100, 5);
+                    const ratio = monthlyBarReference > 0
+                      ? approvedValue / monthlyBarReference
+                      : 0;
+                    const height = Math.min(Math.max(ratio * 100, 0), 100);
+                    const percentOfGoal = ratio * 100;
 
                     return (
                       <div key={item.month} className="barItem">
@@ -440,7 +446,7 @@ export default function Dashboard() {
                           <div
                             className="barValue"
                             style={{ height: `${height}%` }}
-                            title={`${item.label}: ${formatCurrency(approvedValue)}`}
+                            title={`${item.label}: ${formatCurrency(approvedValue)} | ${percentOfGoal.toFixed(2)}% da meta`}
                           />
                         </div>
                         <span>{item.label}</span>

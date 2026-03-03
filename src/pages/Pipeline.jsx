@@ -180,6 +180,8 @@ export default function Pipeline() {
     date_from: "",
     date_to: "",
     vendedor: "",
+    produto: "",
+    banco: "",
     priority: "",
   });
   const openEditorsRef = useRef({});
@@ -498,6 +500,30 @@ export default function Pipeline() {
     return names.sort((a, b) => a.localeCompare(b, "pt-BR"));
   }, [operations]);
 
+  const productOptions = useMemo(() => {
+    const names = Array.from(
+      new Set(
+        operations
+          .map((operation) => String(operation.produto || "").trim())
+          .filter(Boolean)
+      )
+    );
+    return names.sort((a, b) => a.localeCompare(b, "pt-BR"));
+  }, [operations]);
+
+  const bankOptions = useMemo(() => {
+    const names = Array.from(
+      new Set(
+        operations
+          .map((operation) =>
+            String(operation.banco_digitacao || operation.banco || "").trim()
+          )
+          .filter(Boolean)
+      )
+    );
+    return names.sort((a, b) => a.localeCompare(b, "pt-BR"));
+  }, [operations]);
+
   const rows = useMemo(() => {
     const fromDate = filters.date_from ? new Date(`${filters.date_from}T00:00:00`) : null;
     const toDate = filters.date_to ? new Date(`${filters.date_to}T23:59:59.999`) : null;
@@ -516,6 +542,22 @@ export default function Pipeline() {
         if (filters.vendedor) {
           const vendorName = String(operation.vendedor_nome || "").trim();
           if (vendorName !== filters.vendedor) {
+            return false;
+          }
+        }
+
+        if (filters.produto) {
+          const productName = String(operation.produto || "").trim();
+          if (productName !== filters.produto) {
+            return false;
+          }
+        }
+
+        if (filters.banco) {
+          const bankName = String(
+            operation.banco_digitacao || operation.banco || ""
+          ).trim();
+          if (bankName !== filters.banco) {
             return false;
           }
         }
@@ -620,6 +662,36 @@ export default function Pipeline() {
           >
             <option value="">Todos</option>
             {vendorOptions.map((name) => (
+              <option key={name} value={name}>
+                {name}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="pipelineFilterField">
+          <span>Produto</span>
+          <select
+            value={filters.produto}
+            onChange={(event) => handleFilterChange("produto", event.target.value)}
+          >
+            <option value="">Todos</option>
+            {productOptions.map((name) => (
+              <option key={name} value={name}>
+                {name}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="pipelineFilterField">
+          <span>Banco</span>
+          <select
+            value={filters.banco}
+            onChange={(event) => handleFilterChange("banco", event.target.value)}
+          >
+            <option value="">Todos</option>
+            {bankOptions.map((name) => (
               <option key={name} value={name}>
                 {name}
               </option>
