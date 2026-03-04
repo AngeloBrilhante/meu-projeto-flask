@@ -1033,6 +1033,17 @@ export default function Pipeline() {
                           </>
                         )}
 
+                        {operation.normalizedStatus === "AGUARDANDO_FORMALIZACAO" && (
+                          <button
+                            type="button"
+                            className={`rejectBtn${reprovacaoAberta ? " active" : ""}`}
+                            disabled={isSaving}
+                            onClick={() => toggleEditor(operation.id, "reprovacao")}
+                          >
+                            Reprovar
+                          </button>
+                        )}
+
                         {operation.normalizedStatus === "PENDENCIA" && (
                           <>
                             <button
@@ -1262,3 +1273,4 @@ export default function Pipeline() {
     </div>
   );
 }
+

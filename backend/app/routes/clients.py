@@ -2230,8 +2230,13 @@ def update_operation(operation_id):
 
                 allowed_transitions = {
                     "PRONTA_DIGITAR": {"PRONTA_DIGITAR", "EM_DIGITACAO", "DEVOLVIDA_VENDEDOR"},
-                    "EM_DIGITACAO": {"EM_DIGITACAO", "AGUARDANDO_FORMALIZACAO", "DEVOLVIDA_VENDEDOR"},
-                    "AGUARDANDO_FORMALIZACAO": {"AGUARDANDO_FORMALIZACAO", "ANALISE_BANCO", "DEVOLVIDA_VENDEDOR"},
+                    "EM_DIGITACAO": {
+                        "EM_DIGITACAO",
+                        "AGUARDANDO_FORMALIZACAO",
+                        "DEVOLVIDA_VENDEDOR",
+                        "REPROVADO",
+                    },
+                    "AGUARDANDO_FORMALIZACAO": {"AGUARDANDO_FORMALIZACAO", "ANALISE_BANCO", "DEVOLVIDA_VENDEDOR", "REPROVADO"},
                     "ANALISE_BANCO": {"ANALISE_BANCO", "PENDENCIA", "DEVOLVIDA_VENDEDOR", "APROVADO", "REPROVADO"},
                     "PENDENCIA": {"PENDENCIA", "ANALISE_BANCO", "DEVOLVIDA_VENDEDOR"},
                     "DEVOLVIDA_VENDEDOR": {"DEVOLVIDA_VENDEDOR", "ANALISE_BANCO"},
@@ -3648,4 +3653,5 @@ def get_dashboard_notifications():
     finally:
         cursor.close()
         db.close()
+
 
