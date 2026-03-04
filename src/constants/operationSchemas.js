@@ -404,8 +404,7 @@ export function buildOperationPayloadFromFicha(product, fichaPayload, fallback =
         ficha.banco_para_digitar,
         ficha.banco_nome,
         ficha.banco_codigo,
-        fallback.banco_digitacao,
-        upperProduct
+        fallback.banco_digitacao
       )
     ),
     margem,

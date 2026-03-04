@@ -16,6 +16,7 @@ import Pipeline from "./pages/Pipeline";
 import OperationsReport from "./pages/OperationsReport";
 import OperationDossier from "./pages/OperationDossier";
 import Profile from "./pages/Profile";
+import GlobalUsers from "./pages/GlobalUsers";
 
 
 export default function App() {
@@ -40,6 +41,7 @@ export default function App() {
           <Route path="/pipeline" element={<Pipeline />} />
           <Route path="/operations-report" element={<OperationsReport />} />
           <Route path="/operations/:operationId/ficha" element={<OperationDossier />} />
+          <Route path="/global/users" element={<GlobalUsers />} />
 
 
           {/* CLIENTE COM SUB-ROTAS */}

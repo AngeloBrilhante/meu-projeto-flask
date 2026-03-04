@@ -322,6 +322,17 @@ export default function DashboardLayout() {
             Clientes
           </NavLink>
 
+          {isGlobal && (
+            <NavLink
+              to="/global/users"
+              className={({ isActive }) =>
+                isActive ? "sidebarLink active" : "sidebarLink"
+              }
+            >
+              Usuarios
+            </NavLink>
+          )}
+
           {canAccessPipeline && (
             <NavLink
               to="/pipeline"

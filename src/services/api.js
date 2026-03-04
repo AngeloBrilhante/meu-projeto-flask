@@ -462,6 +462,22 @@ export async function updateCurrentUserPassword(payload) {
   return data;
 }
 
+export async function createUser(payload) {
+  const response = await fetch(`${API_URL}/users`, {
+    method: "POST",
+    headers: getAuthHeaders(true),
+    body: JSON.stringify(payload),
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.error || "Erro ao criar usuario");
+  }
+
+  return data;
+}
+
 export async function uploadCurrentUserAvatar(file) {
   const formData = new FormData();
   formData.append("avatar", file);

@@ -1,0 +1,106 @@
+.globalUsersPage {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.globalUsersHead h1 {
+  margin: 0;
+  font-size: 28px;
+}
+
+.globalUsersHead p {
+  margin: 6px 0 0;
+  color: var(--text-secondary);
+}
+
+.globalUsersCard {
+  background: var(--surface);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  box-shadow: var(--shadow);
+  padding: 18px;
+}
+
+.globalUsersCard h2 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.globalUsersMessage {
+  margin: 14px 0 0;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 13px;
+  border: 1px solid transparent;
+}
+
+.globalUsersMessage.error {
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  border-color: color-mix(in srgb, var(--danger) 40%, transparent);
+  color: var(--danger);
+}
+
+.globalUsersMessage.success {
+  background: color-mix(in srgb, var(--success) 14%, transparent);
+  border-color: color-mix(in srgb, var(--success) 45%, transparent);
+  color: var(--success);
+}
+
+.globalUsersForm {
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.globalUsersForm label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.globalUsersForm input,
+.globalUsersForm select {
+  height: 38px;
+  border-radius: 10px;
+  border: 1px solid var(--border-color);
+  background: var(--surface-strong);
+  color: var(--text-primary);
+  padding: 0 10px;
+  outline: none;
+}
+
+.globalUsersForm input:focus,
+.globalUsersForm select:focus {
+  border-color: var(--accent);
+}
+
+.globalUsersForm button {
+  grid-column: span 2;
+  height: 40px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.globalUsersForm button:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+@media (max-width: 900px) {
+  .globalUsersForm {
+    grid-template-columns: 1fr;
+  }
+
+  .globalUsersForm button {
+    grid-column: span 1;
+  }
+}
+

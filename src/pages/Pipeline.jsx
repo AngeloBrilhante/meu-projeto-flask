@@ -476,6 +476,16 @@ export default function Pipeline() {
     updateFlow(operation, "DEVOLVIDA_VENDEDOR");
   }
 
+  function handleAprovar(operation) {
+    const cliente = String(operation.nome || "").trim() || "cliente";
+    const confirmed = window.confirm(
+      `Confirma aprovar a operacao #${operation.id} de ${cliente}?`
+    );
+
+    if (!confirmed) return;
+    updateFlow(operation, "APROVADO");
+  }
+
   function handleResolverPendencia(operation) {
     updateFlow(operation, "ANALISE_BANCO", { clearPendencia: true });
   }
@@ -998,7 +1008,7 @@ export default function Pipeline() {
                               type="button"
                               className="approveBtn"
                               disabled={isSaving}
-                              onClick={() => updateFlow(operation, "APROVADO")}
+                              onClick={() => handleAprovar(operation)}
                             >
                               Aprovar
                             </button>

@@ -1099,7 +1099,11 @@ def create_operation(client_id):
 
     data = request.get_json() or {}
     produto = (data.get("produto") or "").strip().upper()
+    banco_digitacao = normalize_text(data.get("banco_digitacao"))
     ficha_portabilidade = None
+
+    if not banco_digitacao:
+        return jsonify({"error": "banco_digitacao obrigatorio"}), 400
 
     if produto in {"PORTABILIDADE", "PORTABILIDADE_REFIN"} or "ficha_portabilidade" in data:
         ficha_portabilidade = serialize_portability_form(data.get("ficha_portabilidade"))
@@ -1126,7 +1130,7 @@ def create_operation(client_id):
     """, (
         client_id,
         produto,
-        data.get("banco_digitacao"),
+        banco_digitacao,
         data.get("margem"),
         data.get("prazo"),
         data.get("valor_solicitado"),
