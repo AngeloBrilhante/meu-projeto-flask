@@ -335,6 +335,12 @@ export default function ClientOperations() {
                 <div className="operationFichaGrid">
                   {group.fields.map((field) => {
                     const value = form.ficha_portabilidade?.[field.name] ?? "";
+                    const hasEmptyOption = Array.isArray(field.options)
+                      ? field.options.some((option) => option.value === "")
+                      : false;
+                    const hasCurrentOption = Array.isArray(field.options)
+                      ? field.options.some((option) => option.value === value)
+                      : true;
 
                     return (
                       <label className="operationsField" key={field.name}>
@@ -347,6 +353,10 @@ export default function ClientOperations() {
                             onChange={handleFichaChange}
                             required={field.required}
                           >
+                            {!hasEmptyOption && <option value="">Selecione</option>}
+                            {!hasCurrentOption && value && (
+                              <option value={value}>{value}</option>
+                            )}
                             {field.options.map((option) => (
                               <option key={option.value} value={option.value}>
                                 {option.label}
@@ -405,6 +415,7 @@ export default function ClientOperations() {
               <tr>
                 <th>Produto</th>
                 <th>Banco</th>
+                <th>Promotora</th>
                 <th>Valor liberado</th>
                 <th>Parcela liberada</th>
                 <th>Prazo</th>
@@ -434,6 +445,7 @@ export default function ClientOperations() {
                   <tr key={operation.id}>
                     <td>{operation.produto}</td>
                     <td>{operation.banco_digitacao || "-"}</td>
+                    <td>{operation.promotora || "-"}</td>
                     <td>{formatCurrency(operation.valor_liberado)}</td>
                     <td>{formatCurrency(operation.parcela_liberada)}</td>
                     <td>{operation.prazo || "-"}</td>

@@ -35,12 +35,16 @@
 
 .pipelineFilters {
   display: grid;
-  grid-template-columns: repeat(7, minmax(130px, 1fr));
+  grid-template-columns: repeat(8, minmax(120px, 1fr));
   gap: 10px;
   padding: 10px;
   border: 1px solid var(--border-color);
   border-radius: 12px;
   background: var(--surface);
+}
+
+.pipelineFilterField.searchWide {
+  grid-column: span 2;
 }
 
 .pipelineFilterField {
@@ -774,6 +778,10 @@
     grid-template-columns: repeat(4, minmax(140px, 1fr));
   }
 
+  .pipelineFilterField.searchWide {
+    grid-column: span 2;
+  }
+
   .pipelineFlowCell {
     min-width: 300px;
   }
@@ -795,6 +803,10 @@
 
   .pipelineFilters {
     grid-template-columns: repeat(2, minmax(120px, 1fr));
+  }
+
+  .pipelineFilterField.searchWide {
+    grid-column: span 2;
   }
 
   .pipelineFlowCell {

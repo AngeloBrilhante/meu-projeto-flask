@@ -126,6 +126,7 @@ PENDING_OPERATION_FIELDS = {
 PIPELINE_OPERATION_FIELDS = PENDING_OPERATION_FIELDS | {
     "valor_liberado",
     "parcela_liberada",
+    "promotora",
     "digitador_id",
     "numero_proposta",
     "status",
@@ -231,6 +232,14 @@ PORTABILITY_FORM_FIELDS = (
     "saldo_quitacao",
     "valor_parcela",
 )
+
+PROMOTORA_OPTIONS = {
+    "AMF",
+    "FINANBANK",
+    "PROSPECTA",
+    "IDEIA",
+    "PORT",
+}
 
 
 def build_operation_update(data, allowed_fields):
@@ -470,7 +479,8 @@ def ensure_operations_extra_columns(cursor, db):
               'pendencia_respondida_em',
               'motivo_reprovacao',
               'digitador_id',
-              'numero_proposta'
+              'numero_proposta',
+              'promotora'
           )
         """
     )
@@ -561,6 +571,10 @@ def ensure_operations_extra_columns(cursor, db):
 
     if "numero_proposta" not in existing:
         cursor.execute("ALTER TABLE operacoes ADD COLUMN numero_proposta VARCHAR(120) NULL")
+        changed = True
+
+    if "promotora" not in existing:
+        cursor.execute("ALTER TABLE operacoes ADD COLUMN promotora VARCHAR(80) NULL")
         changed = True
 
     if changed:
@@ -2211,10 +2225,10 @@ def update_operation(operation_id):
                     return jsonify({"error": "Status invalido para a esteira"}), 400
 
                 allowed_transitions = {
-                    "PRONTA_DIGITAR": {"PRONTA_DIGITAR", "EM_DIGITACAO"},
-                    "EM_DIGITACAO": {"EM_DIGITACAO", "AGUARDANDO_FORMALIZACAO"},
-                    "AGUARDANDO_FORMALIZACAO": {"AGUARDANDO_FORMALIZACAO", "ANALISE_BANCO"},
-                    "ANALISE_BANCO": {"ANALISE_BANCO", "PENDENCIA", "APROVADO", "REPROVADO"},
+                    "PRONTA_DIGITAR": {"PRONTA_DIGITAR", "EM_DIGITACAO", "DEVOLVIDA_VENDEDOR"},
+                    "EM_DIGITACAO": {"EM_DIGITACAO", "AGUARDANDO_FORMALIZACAO", "DEVOLVIDA_VENDEDOR"},
+                    "AGUARDANDO_FORMALIZACAO": {"AGUARDANDO_FORMALIZACAO", "ANALISE_BANCO", "DEVOLVIDA_VENDEDOR"},
+                    "ANALISE_BANCO": {"ANALISE_BANCO", "PENDENCIA", "DEVOLVIDA_VENDEDOR", "APROVADO", "REPROVADO"},
                     "PENDENCIA": {"PENDENCIA", "ANALISE_BANCO", "DEVOLVIDA_VENDEDOR"},
                     "DEVOLVIDA_VENDEDOR": {"DEVOLVIDA_VENDEDOR", "ANALISE_BANCO"},
                 }
@@ -2336,6 +2350,7 @@ def update_operation(operation_id):
                             "error": "Informe o motivo para devolver ao vendedor"
                         }), 400
                     data["pendencia_motivo"] = reason
+                    data["devolvida_em"] = now_str
 
                 if next_status == "APROVADO" and "data_pagamento" not in data:
                     data["data_pagamento"] = now_str
@@ -2362,6 +2377,14 @@ def update_operation(operation_id):
 
             if "motivo_reprovacao" in data and data.get("motivo_reprovacao") is not None:
                 data["motivo_reprovacao"] = str(data.get("motivo_reprovacao") or "").strip()
+
+            if "promotora" in data:
+                promotora = str(data.get("promotora") or "").strip().upper()
+                if promotora and promotora not in PROMOTORA_OPTIONS:
+                    cursor.close()
+                    db.close()
+                    return jsonify({"error": "Promotora invalida"}), 400
+                data["promotora"] = promotora or None
 
     else:
         cursor.close()
@@ -2616,6 +2639,7 @@ def get_pipeline():
             o.parcela_solicitada,
             o.valor_liberado,
             o.parcela_liberada,
+            o.promotora,
             o.numero_proposta,
             o.enviada_esteira_em,
             o.link_formalizacao,
@@ -2635,6 +2659,7 @@ def get_pipeline():
             c.id as cliente_id,
             c.nome,
             c.cpf,
+            c.numero_beneficio,
             c.vendedor_id,
             COALESCE(u.nome, '-') AS vendedor_nome,
             COALESCE(d.nome, '-') AS digitador_nome

@@ -49,6 +49,15 @@ const REPROVACAO_REASON_OPTIONS = [
   { value: "OUTROS", label: "Outros" },
 ];
 
+const PROMOTORA_OPTIONS = [
+  { value: "", label: "Promotora (opcional)" },
+  { value: "AMF", label: "AMF" },
+  { value: "FINANBANK", label: "FINANBANK" },
+  { value: "PROSPECTA", label: "PROSPECTA" },
+  { value: "IDEIA", label: "IDEIA" },
+  { value: "PORT", label: "PORT" },
+];
+
 const FIVE_HOURS_MS = 5 * 60 * 60 * 1000;
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -74,6 +83,7 @@ function toDraft(operation) {
       operation.parcela_liberada === null || operation.parcela_liberada === undefined
         ? ""
         : String(operation.parcela_liberada),
+    promotora: operation.promotora || "",
     pendencia_tipo: operation.pendencia_tipo || "",
     pendencia_motivo: operation.pendencia_motivo || "",
     motivo_reprovacao: operation.motivo_reprovacao || "",
@@ -164,6 +174,10 @@ function formatHistoryActor(item) {
   return role ? `${base} (${role})` : base;
 }
 
+function onlyDigits(value) {
+  return String(value || "").replace(/\D/g, "");
+}
+
 export default function Pipeline() {
   const navigate = useNavigate();
   const [operations, setOperations] = useState([]);
@@ -176,6 +190,7 @@ export default function Pipeline() {
   const [loadingHistoryOperationId, setLoadingHistoryOperationId] = useState(null);
   const [nowMs, setNowMs] = useState(Date.now());
   const [filters, setFilters] = useState({
+    search: "",
     status: "",
     date_from: "",
     date_to: "",
@@ -339,6 +354,7 @@ export default function Pipeline() {
       pendencia_motivo: String(draft.pendencia_motivo || "").trim(),
       link_formalizacao: String(draft.link_formalizacao || "").trim(),
       motivo_reprovacao: String(draft.motivo_reprovacao || "").trim(),
+      promotora: String(draft.promotora || "").trim().toUpperCase(),
       status: nextStatus,
       ...payloadOverrides,
     };
@@ -535,6 +551,27 @@ export default function Pipeline() {
         priority: getPriorityMeta(operation.criado_em, nowMs),
       }))
       .filter((operation) => {
+        const query = String(filters.search || "").trim().toLowerCase();
+        if (query) {
+          const queryDigits = onlyDigits(query);
+          const clientName = String(operation.nome || "").toLowerCase();
+          const cpfText = String(operation.cpf || "");
+          const cpfDigits = onlyDigits(cpfText);
+          const benefitText = String(operation.numero_beneficio || "");
+          const benefitDigits = onlyDigits(benefitText);
+          const matchByText =
+            clientName.includes(query) ||
+            cpfText.toLowerCase().includes(query) ||
+            benefitText.toLowerCase().includes(query);
+          const matchByDigits = queryDigits
+            ? cpfDigits.includes(queryDigits) || benefitDigits.includes(queryDigits)
+            : false;
+
+          if (!matchByText && !matchByDigits) {
+            return false;
+          }
+        }
+
         if (filters.status && operation.normalizedStatus !== filters.status) {
           return false;
         }
@@ -621,6 +658,16 @@ export default function Pipeline() {
       </div>
 
       <div className="pipelineFilters">
+        <label className="pipelineFilterField searchWide">
+          <span>Busca</span>
+          <input
+            type="text"
+            value={filters.search}
+            onChange={(event) => handleFilterChange("search", event.target.value)}
+            placeholder="Nome, CPF ou numero de beneficio"
+          />
+        </label>
+
         <label className="pipelineFilterField">
           <span>Status</span>
           <select
@@ -792,6 +839,10 @@ export default function Pipeline() {
                             <span>Parcela liberada</span>
                             <strong>{formatCurrency(draft.parcela_liberada)}</strong>
                           </div>
+                          <div className="formalizacaoSummaryItem">
+                            <span>Promotora</span>
+                            <strong>{draft.promotora || "-"}</strong>
+                          </div>
                           <div className="formalizacaoSummaryItem link">
                             <span>Link</span>
                             <strong>
@@ -864,6 +915,23 @@ export default function Pipeline() {
                                 )
                               }
                             />
+                            <select
+                              className="proposalInput"
+                              value={draft.promotora || ""}
+                              onChange={(event) =>
+                                handleDraftChange(
+                                  operation.id,
+                                  "promotora",
+                                  event.target.value
+                                )
+                              }
+                            >
+                              {PROMOTORA_OPTIONS.map((option) => (
+                                <option key={option.value} value={option.value}>
+                                  {option.label}
+                                </option>
+                              ))}
+                            </select>
                             <input
                               type="url"
                               className="proposalInput proposalLinkInput"

@@ -15,6 +15,21 @@ function formatStatus(status) {
   return String(status || "PENDENTE").replaceAll("_", " ");
 }
 
+function resolveFichaFieldValue(fieldName, fichaValue, operation) {
+  const text = String(fichaValue ?? "").trim();
+  if (text) return fichaValue;
+
+  if (
+    fieldName === "banco_nome" ||
+    fieldName === "banco_para_digitar" ||
+    fieldName === "banco"
+  ) {
+    return operation?.banco_digitacao || "";
+  }
+
+  return fichaValue;
+}
+
 export default function OperationDossier() {
   const { operationId } = useParams();
   const navigate = useNavigate();
@@ -104,7 +119,10 @@ export default function OperationDossier() {
                       <article key={field.name}>
                         <span>{field.label}</span>
                         <strong>
-                          {formatOperationFichaValue(ficha[field.name], field.type)}
+                          {formatOperationFichaValue(
+                            resolveFichaFieldValue(field.name, ficha[field.name], operation),
+                            field.type
+                          )}
                         </strong>
                       </article>
                     ))}

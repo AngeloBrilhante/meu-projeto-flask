@@ -4,7 +4,7 @@
   { value: "SALARIO", label: "Salário" },
 ];
 
-const BANK_OPTIONS = [
+const BANK_LABELS = [
   "C6 BANK",
   "BMG",
   "FACTA",
@@ -17,7 +17,31 @@ const BANK_OPTIONS = [
   "CAPITAL",
   "BANRISUL",
   "NOSSA FINTECH",
-].map((bank) => ({ value: bank, label: bank }));
+];
+
+const BANK_OPTIONS = BANK_LABELS.map((bank) => ({ value: bank, label: bank }));
+
+const BANK_CANONICAL_BY_KEY = BANK_LABELS.reduce((acc, label) => {
+  acc.set(String(label).trim().toUpperCase(), label);
+  return acc;
+}, new Map());
+
+BANK_CANONICAL_BY_KEY.set("C6", "C6 BANK");
+BANK_CANONICAL_BY_KEY.set("C6BANK", "C6 BANK");
+
+function normalizeBankValue(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+
+  const key = raw.toUpperCase().replace(/\s+/g, " ");
+  const compactKey = key.replace(/\s+/g, "");
+
+  return (
+    BANK_CANONICAL_BY_KEY.get(key) ||
+    BANK_CANONICAL_BY_KEY.get(compactKey) ||
+    raw
+  );
+}
 
 export const OPERATION_SCHEMAS = {
   PORTABILIDADE: {
@@ -256,11 +280,13 @@ function parseDateForInput(value) {
 
 export function buildOperationFichaDefaults(product, client, user, seed = {}) {
   const upperProduct = toUpperProduct(product);
+  const normalizedSeedBank = normalizeBankValue(seed.banco_digitacao);
 
   return {
     vendedor_nome: user?.nome || "",
-    banco_nome: seed.banco_digitacao || "",
-    banco_para_digitar: seed.banco_digitacao || "",
+    banco_nome: normalizedSeedBank,
+    banco_para_digitar: normalizedSeedBank,
+    banco: normalizedSeedBank,
     titulo_produto: upperProduct === "CARTAO" ? "CARTAO RCC AMIGOZ" : "",
     cliente_nome: client?.nome || "",
     especie: client?.especie || "",
@@ -298,7 +324,12 @@ export function mergeOperationFicha(product, client, user, currentPayload, seed 
   const merged = {};
 
   schemaFieldNames(schema).forEach((name) => {
-    merged[name] = current[name] ?? defaults[name] ?? "";
+    const value = current[name] ?? defaults[name] ?? "";
+    if (name === "banco_nome" || name === "banco_para_digitar" || name === "banco") {
+      merged[name] = normalizeBankValue(value);
+      return;
+    }
+    merged[name] = value;
   });
 
   return merged;
@@ -314,7 +345,12 @@ export function sanitizeOperationFicha(product, payload) {
 
   schemaFieldNames(schema).forEach((name) => {
     const value = source[name];
-    const text = value == null ? "" : String(value).trim();
+    let text = value == null ? "" : String(value).trim();
+
+    if (name === "banco_nome" || name === "banco_para_digitar" || name === "banco") {
+      text = normalizeBankValue(text);
+    }
+
     result[name] = text;
     if (text) hasValue = true;
   });
@@ -363,12 +399,14 @@ export function buildOperationPayloadFromFicha(product, fichaPayload, fallback =
 
   return {
     produto: upperProduct,
-    banco_digitacao: toText(
-      ficha.banco_para_digitar,
-      ficha.banco_nome,
-      ficha.banco_codigo,
-      fallback.banco_digitacao,
-      upperProduct
+    banco_digitacao: normalizeBankValue(
+      toText(
+        ficha.banco_para_digitar,
+        ficha.banco_nome,
+        ficha.banco_codigo,
+        fallback.banco_digitacao,
+        upperProduct
+      )
     ),
     margem,
     prazo,
