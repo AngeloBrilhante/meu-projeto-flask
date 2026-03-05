@@ -33,6 +33,34 @@
   font-weight: 600;
 }
 
+.pipelineViewTabs {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.pipelineViewTab {
+  min-height: 36px;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text-primary);
+  padding: 0 14px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: border-color 0.16s ease, background-color 0.16s ease;
+}
+
+.pipelineViewTab:hover {
+  border-color: var(--pipeline-accent-border);
+}
+
+.pipelineViewTab.active {
+  border-color: var(--pipeline-accent-border);
+  background: var(--pipeline-accent-soft);
+}
+
 .pipelineFilters {
   display: grid;
   grid-template-columns: repeat(8, minmax(120px, 1fr));

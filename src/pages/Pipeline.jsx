@@ -18,6 +18,11 @@ const STATUS_LABELS = {
   REPROVADO: "Reprovada",
 };
 
+const PIPELINE_VIEW_OPTIONS = {
+  ACTIVE: "ACTIVE",
+  READY: "READY",
+};
+
 const LEGACY_STATUS_MAP = {
   PENDENTE: "PRONTA_DIGITAR",
   ENVIADA_ESTEIRA: "PRONTA_DIGITAR",
@@ -35,6 +40,7 @@ const PENDENCIA_TYPE_OPTIONS = [
   { value: "DOCUMENTACAO", label: "Documentacao" },
   { value: "ASSINATURA", label: "Assinatura" },
   { value: "MARGEM", label: "Margem" },
+  { value: "BENEFICIO_BLOQUEADO", label: "Beneficio bloqueado" },
   { value: "DIVERGENCIA_CADASTRAL", label: "Divergencia cadastral" },
   { value: "OUTROS", label: "Outros" },
 ];
@@ -189,6 +195,7 @@ export default function Pipeline() {
   const [historyByOperation, setHistoryByOperation] = useState({});
   const [loadingHistoryOperationId, setLoadingHistoryOperationId] = useState(null);
   const [nowMs, setNowMs] = useState(Date.now());
+  const [pipelineView, setPipelineView] = useState(PIPELINE_VIEW_OPTIONS.ACTIVE);
   const [filters, setFilters] = useState({
     search: "",
     status: "",
@@ -515,32 +522,70 @@ export default function Pipeline() {
     }
   }
 
+  const statusOptions = useMemo(() => {
+    return Object.entries(STATUS_LABELS).filter(([status]) => {
+      if (pipelineView === PIPELINE_VIEW_OPTIONS.READY) {
+        return status === "PRONTA_DIGITAR";
+      }
+      return status !== "PRONTA_DIGITAR";
+    });
+  }, [pipelineView]);
+
+  const operationsWithMeta = useMemo(() => {
+    return operations.map((operation) => ({
+      ...operation,
+      normalizedStatus: normalizeStatus(operation.status),
+      priority: getPriorityMeta(operation.criado_em, nowMs),
+    }));
+  }, [operations, nowMs]);
+
+  const scopedOperations = useMemo(() => {
+    return operationsWithMeta.filter((operation) => {
+      if (pipelineView === PIPELINE_VIEW_OPTIONS.READY) {
+        return operation.normalizedStatus === "PRONTA_DIGITAR";
+      }
+      return operation.normalizedStatus !== "PRONTA_DIGITAR";
+    });
+  }, [operationsWithMeta, pipelineView]);
+
+  const readyCount = useMemo(() => {
+    return operationsWithMeta.filter(
+      (operation) => operation.normalizedStatus === "PRONTA_DIGITAR"
+    ).length;
+  }, [operationsWithMeta]);
+
+  const activeCount = useMemo(() => {
+    return operationsWithMeta.filter(
+      (operation) => operation.normalizedStatus !== "PRONTA_DIGITAR"
+    ).length;
+  }, [operationsWithMeta]);
+
   const vendorOptions = useMemo(() => {
     const names = Array.from(
       new Set(
-        operations
+        scopedOperations
           .map((operation) => String(operation.vendedor_nome || "").trim())
           .filter(Boolean)
       )
     );
     return names.sort((a, b) => a.localeCompare(b, "pt-BR"));
-  }, [operations]);
+  }, [scopedOperations]);
 
   const productOptions = useMemo(() => {
     const names = Array.from(
       new Set(
-        operations
+        scopedOperations
           .map((operation) => String(operation.produto || "").trim())
           .filter(Boolean)
       )
     );
     return names.sort((a, b) => a.localeCompare(b, "pt-BR"));
-  }, [operations]);
+  }, [scopedOperations]);
 
   const bankOptions = useMemo(() => {
     const names = Array.from(
       new Set(
-        operations
+        scopedOperations
           .map((operation) =>
             String(operation.banco_digitacao || operation.banco || "").trim()
           )
@@ -548,18 +593,13 @@ export default function Pipeline() {
       )
     );
     return names.sort((a, b) => a.localeCompare(b, "pt-BR"));
-  }, [operations]);
+  }, [scopedOperations]);
 
   const rows = useMemo(() => {
     const fromDate = filters.date_from ? new Date(`${filters.date_from}T00:00:00`) : null;
     const toDate = filters.date_to ? new Date(`${filters.date_to}T23:59:59.999`) : null;
 
-    return [...operations]
-      .map((operation) => ({
-        ...operation,
-        normalizedStatus: normalizeStatus(operation.status),
-        priority: getPriorityMeta(operation.criado_em, nowMs),
-      }))
+    return [...scopedOperations]
       .filter((operation) => {
         const query = String(filters.search || "").trim().toLowerCase();
         if (query) {
@@ -636,7 +676,28 @@ export default function Pipeline() {
         }
         return Number(a.id || 0) - Number(b.id || 0);
       });
-  }, [operations, nowMs, filters]);
+  }, [scopedOperations, filters]);
+
+  useEffect(() => {
+    const allowedStatuses = new Set(statusOptions.map(([value]) => value));
+    setFilters((prev) => {
+      if (!prev.status || allowedStatuses.has(prev.status)) {
+        return prev;
+      }
+      return {
+        ...prev,
+        status: "",
+      };
+    });
+  }, [statusOptions]);
+
+  function handlePipelineViewChange(nextView) {
+    setPipelineView(nextView);
+    setFilters((prev) => ({
+      ...prev,
+      status: "",
+    }));
+  }
 
   function openOperationFicha(operation, event) {
     const interactive = event.target.closest(
@@ -664,7 +725,36 @@ export default function Pipeline() {
     <div className="pipelineContainer">
       <div className="pipelineHeader">
         <h2>Esteira de Operacoes</h2>
-        <p>Fluxo: pronta para digitar, digitacao, formalizacao, analise banco e pendencias.</p>
+        <p>
+          {pipelineView === PIPELINE_VIEW_OPTIONS.READY
+            ? "Operacoes aguardando inicio de digitacao."
+            : "Fluxo: digitacao, formalizacao, analise banco e pendencias."}
+        </p>
+      </div>
+
+      <div className="pipelineViewTabs" role="tablist" aria-label="Visoes da esteira">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={pipelineView === PIPELINE_VIEW_OPTIONS.ACTIVE}
+          className={`pipelineViewTab${
+            pipelineView === PIPELINE_VIEW_OPTIONS.ACTIVE ? " active" : ""
+          }`}
+          onClick={() => handlePipelineViewChange(PIPELINE_VIEW_OPTIONS.ACTIVE)}
+        >
+          Esteira principal ({activeCount})
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={pipelineView === PIPELINE_VIEW_OPTIONS.READY}
+          className={`pipelineViewTab${
+            pipelineView === PIPELINE_VIEW_OPTIONS.READY ? " active" : ""
+          }`}
+          onClick={() => handlePipelineViewChange(PIPELINE_VIEW_OPTIONS.READY)}
+        >
+          Prontas para digitar ({readyCount})
+        </button>
       </div>
 
       <div className="pipelineFilters">
@@ -685,7 +775,7 @@ export default function Pipeline() {
             onChange={(event) => handleFilterChange("status", event.target.value)}
           >
             <option value="">Todos</option>
-            {Object.entries(STATUS_LABELS).map(([value, label]) => (
+            {statusOptions.map(([value, label]) => (
               <option key={value} value={value}>
                 {label}
               </option>
@@ -773,7 +863,11 @@ export default function Pipeline() {
       {loading && <p className="pipelineMessage">Carregando...</p>}
 
       {!loading && rows.length === 0 ? (
-        <p className="pipelineMessage">Nenhuma operacao na esteira.</p>
+        <p className="pipelineMessage">
+          {pipelineView === PIPELINE_VIEW_OPTIONS.READY
+            ? "Nenhuma operacao pronta para digitar."
+            : "Nenhuma operacao na esteira principal."}
+        </p>
       ) : (
         <div className="tableWrapper">
           <table className="pipelineTable">
