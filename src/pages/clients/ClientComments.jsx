@@ -144,6 +144,7 @@ export default function ClientComments() {
       await createOperationComment(operationId, payload);
       setMessage("");
       await loadComments(operationId, { silent: true });
+      window.dispatchEvent(new Event("notifications:refresh"));
     } catch (error) {
       console.error("Erro ao enviar comentário:", error);
       alert(error.message || "Não foi possível enviar o comentário");

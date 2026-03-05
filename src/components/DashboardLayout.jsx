@@ -1,7 +1,6 @@
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  getDashboardNotifications,
   getCurrentUserProfile,
   getUserNotifications,
   markAllNotificationsAsRead,
@@ -56,6 +55,35 @@ function formatDateTime(value) {
   return date.toLocaleString("pt-BR");
 }
 
+function playNotificationSound() {
+  if (typeof window === "undefined") return;
+
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextClass) return;
+
+  try {
+    const context = new AudioContextClass();
+    const oscillator = context.createOscillator();
+    const gainNode = context.createGain();
+
+    oscillator.type = "sine";
+    oscillator.frequency.setValueAtTime(880, context.currentTime);
+    gainNode.gain.setValueAtTime(0.0001, context.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.11, context.currentTime + 0.02);
+    gainNode.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + 0.18);
+
+    oscillator.connect(gainNode);
+    gainNode.connect(context.destination);
+    oscillator.start();
+    oscillator.stop(context.currentTime + 0.19);
+    oscillator.onended = () => {
+      context.close().catch(() => {});
+    };
+  } catch {
+    // Navegador bloqueou audio automatico.
+  }
+}
+
 export default function DashboardLayout() {
   const navigate = useNavigate();
   const [user, setUser] = useState(() => getStoredUser());
@@ -64,6 +92,8 @@ export default function DashboardLayout() {
   const [userNotifications, setUserNotifications] = useState([]);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const notificationMenuRef = useRef(null);
+  const unreadNotificationIdsRef = useRef(new Set());
+  const notificationsLoadedRef = useRef(false);
 
   const role = (user?.role || "").toUpperCase();
   const isGlobal = role === "GLOBAL";
@@ -132,26 +162,44 @@ export default function DashboardLayout() {
 
   useEffect(() => {
     let mounted = true;
+    notificationsLoadedRef.current = false;
+    unreadNotificationIdsRef.current = new Set();
 
     async function loadNotifications() {
       try {
-        if (isVendor) {
-          const data = await getUserNotifications({ limit: 12 });
-          if (mounted) {
-            setUserNotifications(
-              Array.isArray(data?.notifications) ? data.notifications : []
-            );
-            setPipelineCount(Number(data?.unread_count || 0));
+        const data = await getUserNotifications({ limit: 20, unread_only: 1 });
+        const notifications = Array.isArray(data?.notifications)
+          ? data.notifications
+          : [];
+        const unreadCount = Number(data?.unread_count || 0);
+        const unreadIds = new Set(
+          notifications
+            .map((item) => Number(item?.id))
+            .filter((value) => Number.isFinite(value) && value > 0)
+        );
+
+        if (notificationsLoadedRef.current) {
+          let hasNewNotification = false;
+          unreadIds.forEach((notificationId) => {
+            if (!unreadNotificationIdsRef.current.has(notificationId)) {
+              hasNewNotification = true;
+            }
+          });
+
+          if (hasNewNotification) {
+            playNotificationSound();
           }
-          return;
         }
 
-        const data = await getDashboardNotifications();
+        unreadNotificationIdsRef.current = unreadIds;
+        notificationsLoadedRef.current = true;
+
         if (mounted) {
-          setPipelineCount(Number(data?.pipeline_count || 0));
-          setUserNotifications([]);
+          setPipelineCount(unreadCount);
+          setUserNotifications(notifications);
         }
       } catch (error) {
+        notificationsLoadedRef.current = true;
         if (mounted) {
           setPipelineCount(0);
           setUserNotifications([]);
@@ -176,7 +224,7 @@ export default function DashboardLayout() {
       window.removeEventListener("pipeline:changed", refreshNotifications);
       window.removeEventListener("notifications:refresh", refreshNotifications);
     };
-  }, [isVendor]);
+  }, [role]);
 
   useEffect(() => {
     if (!notificationsOpen) return undefined;
@@ -203,39 +251,35 @@ export default function DashboardLayout() {
     navigate("/");
   }
 
-  function openPipeline() {
-    if (isVendor) {
-      setNotificationsOpen((prev) => !prev);
-      return;
+  function toggleNotificationsPanel() {
+    setNotificationsOpen((prev) => !prev);
+  }
+
+  async function markNotificationAsReadAndRemove(notification) {
+    if (!notification) return;
+
+    const notificationId = Number(notification.id);
+    if (!Number.isFinite(notificationId) || notificationId <= 0) return;
+    const wasUnread = !notification.read_at;
+
+    if (wasUnread) {
+      await markNotificationAsRead(notificationId);
     }
 
-    if (canAccessPipeline) {
-      navigate("/pipeline");
-      return;
+    unreadNotificationIdsRef.current.delete(notificationId);
+    setUserNotifications((prev) =>
+      prev.filter((item) => Number(item?.id) !== notificationId)
+    );
+    if (wasUnread) {
+      setPipelineCount((prev) => Math.max(0, prev - 1));
     }
-
-    navigate("/operations-report");
   }
 
   async function handleNotificationClick(notification) {
     if (!notification) return;
 
     try {
-      if (!notification.read_at) {
-        await markNotificationAsRead(notification.id);
-        setUserNotifications((prev) =>
-          prev.map((item) =>
-            item.id === notification.id
-              ? {
-                  ...item,
-                  read_at: item.read_at || new Date().toISOString(),
-                  read: true,
-                }
-              : item
-          )
-        );
-        setPipelineCount((prev) => Math.max(0, prev - 1));
-      }
+      await markNotificationAsReadAndRemove(notification);
     } catch (error) {
       // Mantem navegacao mesmo se falhar a marcacao de leitura.
     }
@@ -250,6 +294,17 @@ export default function DashboardLayout() {
     navigate("/operations-report");
   }
 
+  async function handleMarkNotificationRead(event, notification) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    try {
+      await markNotificationAsReadAndRemove(notification);
+    } catch (error) {
+      // Sem acao: manter estado atual.
+    }
+  }
+
   async function handleMarkAllNotificationsRead(event) {
     event.preventDefault();
     event.stopPropagation();
@@ -258,26 +313,18 @@ export default function DashboardLayout() {
 
     try {
       await markAllNotificationsAsRead();
-      setUserNotifications((prev) =>
-        prev.map((item) => ({
-          ...item,
-          read_at: item.read_at || new Date().toISOString(),
-          read: true,
-        }))
-      );
+      unreadNotificationIdsRef.current = new Set();
+      setUserNotifications([]);
       setPipelineCount(0);
     } catch (error) {
       // Sem acao: manter estado atual.
     }
   }
 
-  const bellTitle = isVendor
-    ? pipelineCount > 0
+  const bellTitle =
+    pipelineCount > 0
       ? `${pipelineCount} notificacoes nao lidas`
-      : "Sem notificacoes novas"
-    : pipelineCount > 0
-    ? `${pipelineCount} operacoes na esteira`
-    : "Sem operacoes na esteira";
+      : "Sem notificacoes novas";
 
   return (
     <div className="appShell">
@@ -389,7 +436,7 @@ export default function DashboardLayout() {
               <button
                 type="button"
                 className="iconButton bellButton"
-                onClick={openPipeline}
+                onClick={toggleNotificationsPanel}
                 title={bellTitle}
               >
                 <IconBell />
@@ -400,7 +447,7 @@ export default function DashboardLayout() {
                 )}
               </button>
 
-              {isVendor && notificationsOpen && (
+              {notificationsOpen && (
                 <div className="notificationPanel">
                   <div className="notificationPanelHeader">
                     <strong>Notificacoes</strong>
@@ -419,18 +466,33 @@ export default function DashboardLayout() {
                   ) : (
                     <ul className="notificationList">
                       {userNotifications.map((notification) => (
-                        <li key={notification.id}>
+                        <li
+                          key={notification.id}
+                          className={`notificationItem${
+                            notification.read_at ? " read" : " unread"
+                          }`}
+                        >
                           <button
                             type="button"
-                            className={`notificationItem${
-                              notification.read_at ? " read" : " unread"
-                            }`}
+                            className="notificationItemMain"
                             onClick={() => handleNotificationClick(notification)}
                           >
                             <strong>{notification.title || "Atualizacao de operacao"}</strong>
                             <span>{notification.message || "-"}</span>
                             <small>{formatDateTime(notification.created_at)}</small>
                           </button>
+
+                          <div className="notificationItemActions">
+                            <button
+                              type="button"
+                              className="notificationItemReadBtn"
+                              onClick={(event) =>
+                                handleMarkNotificationRead(event, notification)
+                              }
+                            >
+                              Marcar como lida
+                            </button>
+                          </div>
                         </li>
                       ))}
                     </ul>

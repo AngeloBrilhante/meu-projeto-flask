@@ -678,6 +678,142 @@ def register_operation_status_history(
     )
 
 
+def get_user_display_name(cursor, user_id):
+    user_id = to_int(user_id)
+    if user_id <= 0:
+        return ""
+
+    cursor.execute(
+        """
+        SELECT COALESCE(nome, 'Usuario') AS nome
+        FROM usuarios
+        WHERE id = %s
+        LIMIT 1
+        """,
+        (user_id,),
+    )
+    row = cursor.fetchone() or {}
+    return str(row.get("nome") or "").strip()
+
+
+def collect_operation_notification_recipients(
+    cursor,
+    operation,
+    include_vendor=True,
+    include_assigned_digitador=True,
+    include_admins=True,
+    include_product_digitadores=True,
+):
+    recipients = set()
+    operation = operation or {}
+
+    if include_vendor:
+        vendedor_id = to_int(operation.get("vendedor_id"))
+        if vendedor_id > 0:
+            recipients.add(vendedor_id)
+
+    if include_assigned_digitador:
+        digitador_id = to_int(operation.get("digitador_id"))
+        if digitador_id > 0:
+            recipients.add(digitador_id)
+
+    if include_admins:
+        cursor.execute(
+            """
+            SELECT id
+            FROM usuarios
+            WHERE UPPER(role) IN ('ADMIN', 'GLOBAL')
+            """
+        )
+        for row in cursor.fetchall() or []:
+            user_id = to_int(row.get("id"))
+            if user_id > 0:
+                recipients.add(user_id)
+
+    if include_product_digitadores:
+        product_name = normalize_product_name(operation.get("produto"))
+        digitador_roles = [
+            role_name
+            for role_name, products in DIGITADOR_PRODUCT_PERMISSIONS.items()
+            if product_name in products
+        ]
+
+        if digitador_roles:
+            placeholders = ", ".join(["%s"] * len(digitador_roles))
+            cursor.execute(
+                f"""
+                SELECT id
+                FROM usuarios
+                WHERE UPPER(role) IN ({placeholders})
+                """,
+                tuple(digitador_roles),
+            )
+            for row in cursor.fetchall() or []:
+                user_id = to_int(row.get("id"))
+                if user_id > 0:
+                    recipients.add(user_id)
+
+    return recipients
+
+
+def insert_operation_notifications(
+    cursor,
+    user_ids,
+    operation_id,
+    previous_status,
+    next_status,
+    title,
+    message,
+):
+    if not user_ids:
+        return
+
+    operation_id = to_int(operation_id)
+    if operation_id <= 0:
+        return
+
+    normalized_next = normalize_operation_status(next_status) or "PRONTA_DIGITAR"
+    normalized_previous = (
+        normalize_operation_status(previous_status) if previous_status else None
+    )
+    title_text = str(title or "Atualizacao de operacao").strip() or "Atualizacao de operacao"
+    message_text = str(message or "").strip() or "Houve uma atualizacao na operacao."
+
+    rows = []
+    for user_id in user_ids:
+        normalized_user_id = to_int(user_id)
+        if normalized_user_id <= 0:
+            continue
+        rows.append(
+            (
+                normalized_user_id,
+                operation_id,
+                normalized_previous,
+                normalized_next,
+                title_text,
+                message_text,
+            )
+        )
+
+    if not rows:
+        return
+
+    cursor.executemany(
+        """
+        INSERT INTO operation_notifications (
+            user_id,
+            operation_id,
+            previous_status,
+            next_status,
+            title,
+            message
+        )
+        VALUES (%s, %s, %s, %s, %s, %s)
+        """,
+        rows,
+    )
+
+
 def notify_vendor_status_change(
     cursor,
     operation_id,
@@ -695,6 +831,7 @@ def notify_vendor_status_change(
         """
         SELECT
             c.vendedor_id,
+            o.digitador_id,
             COALESCE(c.nome, 'Cliente') AS cliente_nome,
             COALESCE(o.produto, 'OPERACAO') AS produto
         FROM operacoes o
@@ -705,27 +842,22 @@ def notify_vendor_status_change(
         (operation_id,),
     )
     operation = cursor.fetchone() or {}
+    recipients = collect_operation_notification_recipients(
+        cursor,
+        operation,
+        include_vendor=True,
+        include_assigned_digitador=True,
+        include_admins=True,
+        include_product_digitadores=True,
+    )
 
-    vendedor_id = to_int(operation.get("vendedor_id"))
-    if vendedor_id <= 0:
-        return
-
-    if changed_by and vendedor_id == to_int(changed_by):
-        return
-
-    actor_name = ""
     if changed_by:
-        cursor.execute(
-            """
-            SELECT COALESCE(nome, 'Usuario') AS nome
-            FROM usuarios
-            WHERE id = %s
-            LIMIT 1
-            """,
-            (changed_by,),
-        )
-        actor = cursor.fetchone() or {}
-        actor_name = str(actor.get("nome") or "").strip()
+        recipients.discard(to_int(changed_by))
+
+    if not recipients:
+        return
+
+    actor_name = get_user_display_name(cursor, changed_by)
 
     cliente_nome = str(operation.get("cliente_nome") or "Cliente").strip() or "Cliente"
     produto = normalize_product_name(operation.get("produto")) or "OPERACAO"
@@ -740,26 +872,104 @@ def notify_vendor_status_change(
         else f"{cliente_nome} ({produto}): {next_label}{actor_suffix}"
     )
 
-    cursor.execute(
-        """
-        INSERT INTO operation_notifications (
-            user_id,
-            operation_id,
-            previous_status,
-            next_status,
-            title,
-            message
-        )
-        VALUES (%s, %s, %s, %s, %s, %s)
-        """,
-        (
-            vendedor_id,
-            operation_id,
-            normalized_previous or None,
-            normalized_next,
-            title,
-            message,
-        ),
+    insert_operation_notifications(
+        cursor,
+        recipients,
+        operation_id,
+        normalized_previous,
+        normalized_next,
+        title,
+        message,
+    )
+
+
+def notify_operation_comment(
+    cursor,
+    operation_id,
+    operation,
+    author_id=None,
+    author_name="",
+    comment_message="",
+):
+    operation = operation or {}
+    operation_status = normalize_operation_status(operation.get("status")) or "PRONTA_DIGITAR"
+    recipients = collect_operation_notification_recipients(
+        cursor,
+        operation,
+        include_vendor=True,
+        include_assigned_digitador=True,
+        include_admins=True,
+        include_product_digitadores=True,
+    )
+
+    if author_id:
+        recipients.discard(to_int(author_id))
+
+    if not recipients:
+        return
+
+    author_display = str(author_name or "").strip() or "Usuario"
+    cliente_nome = str(operation.get("cliente_nome") or "Cliente").strip() or "Cliente"
+    produto = normalize_product_name(operation.get("produto")) or "OPERACAO"
+    compact_comment = " ".join(str(comment_message or "").split())
+    if len(compact_comment) > 140:
+        compact_comment = f"{compact_comment[:137]}..."
+
+    title = f"Novo comentario na operacao #{operation_id}"
+    message = f"{author_display} comentou em {cliente_nome} ({produto})"
+    if compact_comment:
+        message = f'{message}: "{compact_comment}"'
+
+    insert_operation_notifications(
+        cursor,
+        recipients,
+        operation_id,
+        operation_status,
+        operation_status,
+        title,
+        message,
+    )
+
+
+def notify_operation_arrived_pipeline(
+    cursor,
+    operation_id,
+    operation,
+    changed_by=None,
+):
+    operation = operation or {}
+    recipients = collect_operation_notification_recipients(
+        cursor,
+        operation,
+        include_vendor=False,
+        include_assigned_digitador=True,
+        include_admins=True,
+        include_product_digitadores=True,
+    )
+
+    if changed_by:
+        recipients.discard(to_int(changed_by))
+
+    if not recipients:
+        return
+
+    actor_name = get_user_display_name(cursor, changed_by)
+    actor_suffix = f" por {actor_name}" if actor_name else ""
+    cliente_nome = str(operation.get("cliente_nome") or "Cliente").strip() or "Cliente"
+    produto = normalize_product_name(operation.get("produto")) or "OPERACAO"
+    current_status = normalize_operation_status(operation.get("status")) or "PRONTA_DIGITAR"
+
+    title = f"Nova operacao na esteira #{operation_id}"
+    message = f"{cliente_nome} ({produto}) entrou na esteira{actor_suffix}."
+
+    insert_operation_notifications(
+        cursor,
+        recipients,
+        operation_id,
+        None,
+        current_status,
+        title,
+        message,
     )
 
 
@@ -1404,12 +1614,16 @@ def create_operation_comment(operation_id):
     db = get_db()
     cursor = db.cursor(dictionary=True)
     ensure_operation_comments_table(cursor, db)
+    ensure_operation_notifications_table(cursor, db)
 
     cursor.execute(
         """
         SELECT
             o.id,
+            o.status,
             o.produto,
+            o.digitador_id,
+            COALESCE(c.nome, 'Cliente') AS cliente_nome,
             c.vendedor_id
         FROM operacoes o
         JOIN clientes c ON c.id = o.cliente_id
@@ -1436,8 +1650,18 @@ def create_operation_comment(operation_id):
         """,
         (operation_id, user_id, message),
     )
-    db.commit()
     comment_id = cursor.lastrowid
+
+    author_name = get_user_display_name(cursor, user_id) or "Usuario"
+    notify_operation_comment(
+        cursor,
+        operation_id,
+        operation,
+        author_id=user_id,
+        author_name=author_name,
+        comment_message=message,
+    )
+    db.commit()
 
     cursor.execute(
         """
@@ -2100,6 +2324,7 @@ def update_operation(operation_id):
     cursor = db.cursor(dictionary=True)
     ensure_operations_extra_columns(cursor, db)
     ensure_operation_status_history_table(cursor, db)
+    ensure_operation_notifications_table(cursor, db)
 
     if "ficha_portabilidade" in data:
         data["ficha_portabilidade"] = serialize_portability_form(
@@ -2478,7 +2703,10 @@ def send_operation_to_pipeline(operation_id):
             SELECT
                 o.id,
                 o.status,
+                o.produto,
+                o.digitador_id,
                 o.enviada_esteira_em,
+                COALESCE(c.nome, 'Cliente') AS cliente_nome,
                 c.vendedor_id
             FROM operacoes o
             JOIN clientes c ON c.id = o.cliente_id
@@ -2560,6 +2788,14 @@ def send_operation_to_pipeline(operation_id):
             next_status,
             changed_by=user_id,
         )
+
+        if current_status == "PRONTA_DIGITAR":
+            notify_operation_arrived_pipeline(
+                cursor,
+                operation_id,
+                operation,
+                changed_by=user_id,
+            )
 
         conn.commit()
 
