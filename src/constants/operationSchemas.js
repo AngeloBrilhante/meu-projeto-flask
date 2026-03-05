@@ -53,7 +53,7 @@ export const OPERATION_SCHEMAS = {
           { name: "vendedor_nome", label: "Nome do vendedor", required: true },
           {
             name: "banco_nome",
-            label: "Nome do banco",
+            label: "Banco pra digitar",
             required: true,
             options: BANK_OPTIONS,
           },
@@ -84,7 +84,13 @@ export const OPERATION_SCHEMAS = {
         fields: [
           { name: "conta", label: "Conta", required: true },
           { name: "agencia", label: "Agência", required: true },
-          { name: "banco", label: "Banco", required: true, options: BANK_OPTIONS },
+          {
+            name: "banco",
+            label: "Nº da conta do cliente",
+            required: true,
+            inputMode: "numeric",
+            placeholder: "Ex: 12345-6",
+          },
           {
             name: "tipo_conta",
             label: "Tipo de conta",
@@ -325,7 +331,7 @@ export function buildOperationFichaDefaults(product, client, user, seed = {}) {
     vendedor_nome: user?.nome || "",
     banco_nome: normalizedSeedBank,
     banco_para_digitar: normalizedSeedBank,
-    banco: normalizedSeedBank,
+    banco: "",
     titulo_produto: upperProduct === "CARTAO" ? "CARTAO RCC AMIGOZ" : "",
     cliente_nome: client?.nome || "",
     especie: client?.especie || "",
@@ -364,7 +370,7 @@ export function mergeOperationFicha(product, client, user, currentPayload, seed 
 
   schemaFieldNames(schema).forEach((name) => {
     const value = current[name] ?? defaults[name] ?? "";
-    if (name === "banco_nome" || name === "banco_para_digitar" || name === "banco") {
+    if (name === "banco_nome" || name === "banco_para_digitar") {
       merged[name] = normalizeBankValue(value);
       return;
     }
@@ -386,7 +392,7 @@ export function sanitizeOperationFicha(product, payload) {
     const value = source[name];
     let text = value == null ? "" : String(value).trim();
 
-    if (name === "banco_nome" || name === "banco_para_digitar" || name === "banco") {
+    if (name === "banco_nome" || name === "banco_para_digitar") {
       text = normalizeBankValue(text);
     }
 

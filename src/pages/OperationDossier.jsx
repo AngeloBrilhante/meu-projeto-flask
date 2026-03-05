@@ -18,8 +18,7 @@ function resolveFichaFieldValue(fieldName, fichaValue, operation) {
 
   if (
     fieldName === "banco_nome" ||
-    fieldName === "banco_para_digitar" ||
-    fieldName === "banco"
+    fieldName === "banco_para_digitar"
   ) {
     return operation?.banco_digitacao || "";
   }
