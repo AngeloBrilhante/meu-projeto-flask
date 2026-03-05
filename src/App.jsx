@@ -39,6 +39,7 @@ export default function App() {
           <Route path="/clients" element={<Clients />} />
           <Route path="/clients/new" element={<CreateClient />} />
           <Route path="/pipeline" element={<Pipeline />} />
+          <Route path="/pipeline/prontas" element={<Pipeline />} />
           <Route path="/operations-report" element={<OperationsReport />} />
           <Route path="/operations/:operationId/ficha" element={<OperationDossier />} />
           <Route path="/global/users" element={<GlobalUsers />} />

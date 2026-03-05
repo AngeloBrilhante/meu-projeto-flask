@@ -381,14 +381,25 @@ export default function DashboardLayout() {
           )}
 
           {canAccessPipeline && (
-            <NavLink
-              to="/pipeline"
-              className={({ isActive }) =>
-                isActive ? "sidebarLink active" : "sidebarLink"
-              }
-            >
-              Esteira
-            </NavLink>
+            <>
+              <NavLink
+                to="/pipeline"
+                end
+                className={({ isActive }) =>
+                  isActive ? "sidebarLink active" : "sidebarLink"
+                }
+              >
+                Esteira
+              </NavLink>
+              <NavLink
+                to="/pipeline/prontas"
+                className={({ isActive }) =>
+                  isActive ? "sidebarLink active" : "sidebarLink"
+                }
+              >
+                Prontas para digitar
+              </NavLink>
+            </>
           )}
 
           {canAccessReport && (

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
   getOperationStatusHistory,
   getPipeline,
@@ -184,8 +184,16 @@ function onlyDigits(value) {
   return String(value || "").replace(/\D/g, "");
 }
 
+function getPipelineViewFromPath(pathname) {
+  const normalized = String(pathname || "").trim().toLowerCase();
+  return normalized.endsWith("/pipeline/prontas")
+    ? PIPELINE_VIEW_OPTIONS.READY
+    : PIPELINE_VIEW_OPTIONS.ACTIVE;
+}
+
 export default function Pipeline() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [operations, setOperations] = useState([]);
   const [drafts, setDrafts] = useState({});
   const [loading, setLoading] = useState(false);
@@ -195,7 +203,11 @@ export default function Pipeline() {
   const [historyByOperation, setHistoryByOperation] = useState({});
   const [loadingHistoryOperationId, setLoadingHistoryOperationId] = useState(null);
   const [nowMs, setNowMs] = useState(Date.now());
-  const [pipelineView, setPipelineView] = useState(PIPELINE_VIEW_OPTIONS.ACTIVE);
+  const routePipelineView = useMemo(
+    () => getPipelineViewFromPath(location.pathname),
+    [location.pathname]
+  );
+  const [pipelineView, setPipelineView] = useState(routePipelineView);
   const [filters, setFilters] = useState({
     search: "",
     status: "",
@@ -262,6 +274,10 @@ export default function Pipeline() {
 
     return () => clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+    setPipelineView(routePipelineView);
+  }, [routePipelineView]);
 
   function handleDraftChange(operationId, field, value) {
     setDrafts((prev) => ({
@@ -692,6 +708,12 @@ export default function Pipeline() {
   }, [statusOptions]);
 
   function handlePipelineViewChange(nextView) {
+    if (nextView === PIPELINE_VIEW_OPTIONS.READY) {
+      navigate("/pipeline/prontas");
+    } else {
+      navigate("/pipeline");
+    }
+
     setPipelineView(nextView);
     setFilters((prev) => ({
       ...prev,
