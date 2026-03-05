@@ -24,8 +24,29 @@ from app.utils.security import (
 
 clients_bp = Blueprint("clients", __name__)
 
-STORAGE_ROOT = os.getenv("STORAGE_ROOT", os.path.join(os.getcwd(), "storage"))
-BASE_STORAGE = os.path.join(STORAGE_ROOT, "clients")
+MODULE_STORAGE_ROOT = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "..", "..", "storage")
+)
+CWD_STORAGE_ROOT = os.path.abspath(os.path.join(os.getcwd(), "storage"))
+
+
+def build_storage_roots():
+    roots = []
+    configured_root = str(os.getenv("STORAGE_ROOT") or "").strip()
+    if configured_root:
+        roots.append(os.path.abspath(configured_root))
+
+    for candidate in (MODULE_STORAGE_ROOT, CWD_STORAGE_ROOT):
+        normalized = os.path.abspath(candidate)
+        if normalized not in roots:
+            roots.append(normalized)
+
+    return roots
+
+
+STORAGE_ROOTS = build_storage_roots()
+PRIMARY_STORAGE_ROOT = STORAGE_ROOTS[0]
+BASE_STORAGE = os.path.join(PRIMARY_STORAGE_ROOT, "clients")
 ALLOWED_EXTENSIONS = {"pdf", "jpg", "jpeg", "png"}
 DEFAULT_MONTHLY_GOAL = 20000.0
 MONTH_LABELS = [
@@ -110,6 +131,71 @@ def normalize_date_text(value):
 
 def normalize_text(value):
     return str(value or "").strip()
+
+
+def get_primary_client_folder(client_id):
+    return os.path.join(BASE_STORAGE, str(client_id))
+
+
+def iter_client_storage_folders(client_id):
+    seen = set()
+    client_id_text = str(client_id)
+
+    for storage_root in STORAGE_ROOTS:
+        folder = os.path.join(storage_root, "clients", client_id_text)
+        normalized = os.path.abspath(folder)
+        if normalized in seen:
+            continue
+        seen.add(normalized)
+        yield folder
+
+
+def list_client_documents_metadata(client_id):
+    documents_by_name = {}
+
+    for client_folder in iter_client_storage_folders(client_id):
+        if not os.path.isdir(client_folder):
+            continue
+
+        for filename in os.listdir(client_folder):
+            file_path = os.path.join(client_folder, filename)
+            if not os.path.isfile(file_path):
+                continue
+
+            created_at_ts = os.path.getctime(file_path)
+            current = documents_by_name.get(filename)
+            if current and current.get("_created_at_ts", 0) >= created_at_ts:
+                continue
+
+            documents_by_name[filename] = {
+                "filename": filename,
+                "type": filename.split("_")[0].upper(),
+                "uploaded_at": datetime.fromtimestamp(created_at_ts).strftime(
+                    "%Y-%m-%d %H:%M:%S"
+                ),
+                "_created_at_ts": created_at_ts,
+            }
+
+    documents = list(documents_by_name.values())
+    documents.sort(key=lambda item: item.get("_created_at_ts", 0), reverse=True)
+
+    for item in documents:
+        item.pop("_created_at_ts", None)
+
+    return documents
+
+
+def find_client_document_file(client_id, filename):
+    safe_filename = os.path.basename(str(filename or "").strip())
+    if not safe_filename:
+        return None, ""
+
+    for client_folder in iter_client_storage_folders(client_id):
+        file_path = os.path.join(client_folder, safe_filename)
+        if os.path.isfile(file_path):
+            return client_folder, safe_filename
+
+    return None, safe_filename
 
 
 EMAIL_REGEX = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
@@ -1508,23 +1594,7 @@ def get_operation_dossier(operation_id):
 
     operation = hydrate_operation_payload(operation)
 
-    client_folder = os.path.join(BASE_STORAGE, str(operation.get("cliente_id")))
-    documents = []
-
-    if os.path.exists(client_folder):
-        for filename in os.listdir(client_folder):
-            file_path = os.path.join(client_folder, filename)
-            documents.append(
-                {
-                    "filename": filename,
-                    "type": filename.split("_")[0].upper(),
-                    "uploaded_at": datetime.fromtimestamp(
-                        os.path.getctime(file_path)
-                    ).strftime("%Y-%m-%d %H:%M:%S"),
-                }
-            )
-
-        documents.sort(key=lambda item: item.get("uploaded_at", ""), reverse=True)
+    documents = list_client_documents_metadata(operation.get("cliente_id"))
 
     return jsonify({"operation": operation, "documents": documents}), 200
 
@@ -2187,7 +2257,7 @@ def upload_document():
     if not request.files:
         return jsonify({"error": "Nenhum arquivo enviado"}), 400
 
-    client_folder = os.path.join(BASE_STORAGE, str(client_id))
+    client_folder = get_primary_client_folder(client_id)
     os.makedirs(client_folder, exist_ok=True)
 
     saved_files = {}
@@ -2220,25 +2290,7 @@ def list_documents(client_id):
     if not can_access_client(client_id):
         return jsonify({"error": "Acesso nÃ£o autorizado"}), 403
 
-    client_folder = os.path.join(BASE_STORAGE, str(client_id))
-
-    if not os.path.exists(client_folder):
-        return jsonify({
-            "client_id": client_id,
-            "documents": []
-        }), 200
-
-    documents = []
-
-    for filename in os.listdir(client_folder):
-        file_path = os.path.join(client_folder, filename)
-        documents.append({
-            "filename": filename,
-            "type": filename.split("_")[0].upper(),
-            "uploaded_at": datetime.fromtimestamp(
-                os.path.getctime(file_path)
-            ).strftime("%Y-%m-%d %H:%M:%S")
-        })
+    documents = list_client_documents_metadata(client_id)
 
     return jsonify({
         "client_id": client_id,
@@ -2259,17 +2311,15 @@ def download_document(client_id, filename):
         return "", 200
 
     if not can_access_client(client_id):
-        return jsonify({"error": "Acesso nÃ£o autorizado"}), 403
+        return jsonify({"error": "Acesso nao autorizado"}), 403
 
-    client_folder = os.path.join(BASE_STORAGE, str(client_id))
-    file_path = os.path.join(client_folder, filename)
-
-    if not os.path.exists(file_path):
-        abort(404, description="Arquivo nÃ£o encontrado")
+    client_folder, safe_filename = find_client_document_file(client_id, filename)
+    if not client_folder:
+        abort(404, description="Arquivo nao encontrado")
 
     return send_from_directory(
         client_folder,
-        filename,
+        safe_filename,
         as_attachment=True
     )
 
@@ -2287,19 +2337,17 @@ def delete_document(client_id, filename):
         return "", 200
 
     if not can_access_client(client_id):
-        return jsonify({"error": "Acesso nÃ£o autorizado"}), 403
+        return jsonify({"error": "Acesso nao autorizado"}), 403
 
-    client_folder = os.path.join(BASE_STORAGE, str(client_id))
-    file_path = os.path.join(client_folder, filename)
+    client_folder, safe_filename = find_client_document_file(client_id, filename)
+    if not client_folder:
+        return jsonify({"error": "Arquivo nao encontrado"}), 404
 
-    if not os.path.exists(file_path):
-        return jsonify({"error": "Arquivo nÃ£o encontrado"}), 404
-
-    os.remove(file_path)
+    os.remove(os.path.join(client_folder, safe_filename))
 
     return jsonify({
-        "message": "Documento excluÃ­do com sucesso",
-        "filename": filename
+        "message": "Documento excluido com sucesso",
+        "filename": safe_filename
     }), 200
 
 
@@ -3889,5 +3937,3 @@ def get_dashboard_notifications():
     finally:
         cursor.close()
         db.close()
-
-
