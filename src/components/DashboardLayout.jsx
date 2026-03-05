@@ -2,6 +2,7 @@ import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   getCurrentUserProfile,
+  searchGlobal,
   getUserNotifications,
   markAllNotificationsAsRead,
   markNotificationAsRead,
@@ -55,6 +56,18 @@ function formatDateTime(value) {
   return date.toLocaleString("pt-BR");
 }
 
+function formatCpf(value) {
+  const digits = String(value || "").replace(/\D/g, "");
+  if (digits.length !== 11) return String(value || "").trim();
+  return digits.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
+}
+
+function buildSearchRoute(path, searchTerm) {
+  const query = String(searchTerm || "").trim();
+  if (!query) return path;
+  return `${path}?search=${encodeURIComponent(query)}`;
+}
+
 function playNotificationSound() {
   if (typeof window === "undefined") return;
 
@@ -91,7 +104,14 @@ export default function DashboardLayout() {
   const [pipelineCount, setPipelineCount] = useState(0);
   const [userNotifications, setUserNotifications] = useState([]);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [globalSearch, setGlobalSearch] = useState("");
+  const [searchClients, setSearchClients] = useState([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [highlightedSearchIndex, setHighlightedSearchIndex] = useState(0);
   const notificationMenuRef = useRef(null);
+  const searchBoxRef = useRef(null);
+  const searchRequestIdRef = useRef(0);
   const unreadNotificationIdsRef = useRef(new Set());
   const notificationsLoadedRef = useRef(false);
 
@@ -118,6 +138,80 @@ export default function DashboardLayout() {
     () => (displayName?.trim()?.charAt(0) || "U").toUpperCase(),
     [displayName]
   );
+  const trimmedGlobalSearch = String(globalSearch || "").trim();
+  const searchOptions = useMemo(() => {
+    const options = [];
+    const hasTerm = trimmedGlobalSearch.length >= 2;
+
+    if (hasTerm) {
+      searchClients.forEach((client) => {
+        const clientId = Number(client?.id);
+        if (!Number.isFinite(clientId) || clientId <= 0) return;
+
+        const nome = String(client?.nome || `Cliente #${clientId}`).trim();
+        const cpf = formatCpf(client?.cpf);
+        const beneficio = String(client?.numero_beneficio || "").trim();
+        const meta = [cpf ? `CPF ${cpf}` : "", beneficio ? `Beneficio ${beneficio}` : ""]
+          .filter(Boolean)
+          .join(" · ");
+
+        options.push(
+          {
+            key: `client-docs-${clientId}`,
+            title: nome,
+            subtitle: meta || "Abrir documentos do cliente",
+            scope: "Cliente",
+            route: `/clients/${clientId}/documentos`,
+          },
+          {
+            key: `client-ops-${clientId}`,
+            title: nome,
+            subtitle: "Abrir operacoes do cliente",
+            scope: "Operacoes",
+            route: `/clients/${clientId}/operacoes`,
+          },
+          {
+            key: `client-comments-${clientId}`,
+            title: nome,
+            subtitle: "Abrir comentarios do cliente",
+            scope: "Comentarios",
+            route: `/clients/${clientId}/comentarios`,
+          }
+        );
+      });
+
+      if (canAccessPipeline) {
+        options.push(
+          {
+            key: "pipeline-active-search",
+            title: `Buscar "${trimmedGlobalSearch}" na Esteira`,
+            subtitle: "Abre a esteira com filtro aplicado",
+            scope: "Esteira",
+            route: buildSearchRoute("/pipeline", trimmedGlobalSearch),
+          },
+          {
+            key: "pipeline-ready-search",
+            title: `Buscar "${trimmedGlobalSearch}" em Prontas para digitar`,
+            subtitle: "Abre a esteira de prontas com filtro aplicado",
+            scope: "Prontas",
+            route: buildSearchRoute("/pipeline/prontas", trimmedGlobalSearch),
+          }
+        );
+      }
+
+      if (canAccessReport) {
+        options.push({
+          key: "report-search",
+          title: `Buscar "${trimmedGlobalSearch}" na Planilha`,
+          subtitle: "Abre a planilha com filtro de busca",
+          scope: "Planilha",
+          route: buildSearchRoute("/operations-report", trimmedGlobalSearch),
+        });
+      }
+    }
+
+    return options.slice(0, 20);
+  }, [searchClients, trimmedGlobalSearch, canAccessPipeline, canAccessReport]);
 
   useEffect(() => {
     let mounted = true;
@@ -227,6 +321,42 @@ export default function DashboardLayout() {
   }, [role]);
 
   useEffect(() => {
+    const query = trimmedGlobalSearch;
+    if (query.length < 2) {
+      searchRequestIdRef.current += 1;
+      setSearchClients([]);
+      setSearchLoading(false);
+      return undefined;
+    }
+
+    const requestId = searchRequestIdRef.current + 1;
+    searchRequestIdRef.current = requestId;
+    setSearchLoading(true);
+
+    const timer = setTimeout(async () => {
+      try {
+        const data = await searchGlobal(query, 6);
+        if (searchRequestIdRef.current !== requestId) return;
+        const clients = Array.isArray(data?.clients) ? data.clients : [];
+        setSearchClients(clients);
+      } catch {
+        if (searchRequestIdRef.current !== requestId) return;
+        setSearchClients([]);
+      } finally {
+        if (searchRequestIdRef.current === requestId) {
+          setSearchLoading(false);
+        }
+      }
+    }, 250);
+
+    return () => clearTimeout(timer);
+  }, [trimmedGlobalSearch]);
+
+  useEffect(() => {
+    setHighlightedSearchIndex(0);
+  }, [searchOptions]);
+
+  useEffect(() => {
     if (!notificationsOpen) return undefined;
 
     function handleClickOutside(event) {
@@ -241,8 +371,78 @@ export default function DashboardLayout() {
     };
   }, [notificationsOpen]);
 
+  useEffect(() => {
+    if (!searchOpen) return undefined;
+
+    function handleClickOutside(event) {
+      if (!searchBoxRef.current) return;
+      if (searchBoxRef.current.contains(event.target)) return;
+      setSearchOpen(false);
+    }
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [searchOpen]);
+
   function toggleTheme() {
     setTheme((prev) => (prev === "dark" ? "light" : "dark"));
+  }
+
+  function handleSearchInputChange(event) {
+    const value = event.target.value;
+    setGlobalSearch(value);
+    setSearchOpen(true);
+  }
+
+  function handleSearchOptionSelect(option) {
+    if (!option?.route) return;
+
+    setSearchOpen(false);
+    setGlobalSearch("");
+    setSearchClients([]);
+    setHighlightedSearchIndex(0);
+    navigate(option.route);
+  }
+
+  function handleSearchKeyDown(event) {
+    if (!searchOptions.length) {
+      if (event.key === "Escape") {
+        setSearchOpen(false);
+      }
+      return;
+    }
+
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setSearchOpen(true);
+      setHighlightedSearchIndex((prev) =>
+        prev + 1 >= searchOptions.length ? 0 : prev + 1
+      );
+      return;
+    }
+
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setSearchOpen(true);
+      setHighlightedSearchIndex((prev) =>
+        prev - 1 < 0 ? searchOptions.length - 1 : prev - 1
+      );
+      return;
+    }
+
+    if (event.key === "Enter") {
+      event.preventDefault();
+      const option = searchOptions[highlightedSearchIndex] || searchOptions[0];
+      handleSearchOptionSelect(option);
+      return;
+    }
+
+    if (event.key === "Escape") {
+      event.preventDefault();
+      setSearchOpen(false);
+    }
   }
 
   function handleLogout() {
@@ -421,17 +621,52 @@ export default function DashboardLayout() {
 
       <div className="appMain">
         <header className="topBar">
-          <label className="searchField">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="m21 21-4.4-4.4M10.8 18a7.2 7.2 0 1 1 0-14.4 7.2 7.2 0 0 1 0 14.4z" />
-            </svg>
-            <input
-              type="text"
-              readOnly
-              value="Pesquise ou digite o comando..."
-              aria-label="Campo de pesquisa"
-            />
-          </label>
+          <div className="searchFieldWrap" ref={searchBoxRef}>
+            <label className="searchField">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="m21 21-4.4-4.4M10.8 18a7.2 7.2 0 1 1 0-14.4 7.2 7.2 0 0 1 0 14.4z" />
+              </svg>
+              <input
+                type="text"
+                value={globalSearch}
+                placeholder="Pesquise por nome, CPF ou beneficio..."
+                aria-label="Busca global"
+                onFocus={() => setSearchOpen(true)}
+                onChange={handleSearchInputChange}
+                onKeyDown={handleSearchKeyDown}
+              />
+            </label>
+
+            {searchOpen && (
+              <div className="searchDropdown" role="listbox" aria-label="Resultados da busca">
+                {trimmedGlobalSearch.length < 2 ? (
+                  <p className="searchDropdownState">
+                    Digite pelo menos 2 caracteres para buscar.
+                  </p>
+                ) : searchLoading ? (
+                  <p className="searchDropdownState">Buscando...</p>
+                ) : searchOptions.length === 0 ? (
+                  <p className="searchDropdownState">Nenhum resultado encontrado.</p>
+                ) : (
+                  searchOptions.map((option, index) => (
+                    <button
+                      key={option.key}
+                      type="button"
+                      className={`searchOption${
+                        highlightedSearchIndex === index ? " active" : ""
+                      }`}
+                      onMouseEnter={() => setHighlightedSearchIndex(index)}
+                      onClick={() => handleSearchOptionSelect(option)}
+                    >
+                      <span className="searchOptionScope">{option.scope}</span>
+                      <strong>{option.title}</strong>
+                      <small>{option.subtitle}</small>
+                    </button>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
 
           <div className="topActions">
             <button

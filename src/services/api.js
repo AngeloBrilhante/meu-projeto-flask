@@ -69,6 +69,29 @@ export async function listClients() {
   return response.json();
 }
 
+export async function searchGlobal(query, limit = 8) {
+  const search = String(query || "").trim();
+  if (search.length < 2) {
+    return { query: search, clients: [] };
+  }
+
+  const params = new URLSearchParams({
+    q: search,
+    limit: String(limit),
+  });
+  const response = await fetch(`${API_URL}/search/global?${params.toString()}`, {
+    headers: getAuthHeaders(),
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.error || "Erro ao buscar dados");
+  }
+
+  return data;
+}
+
 /* =======================
    LISTAR DOCUMENTOS
 ======================= */

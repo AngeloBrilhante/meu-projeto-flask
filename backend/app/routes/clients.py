@@ -1503,6 +1503,118 @@ def list_clients():
     return jsonify(clients), 200
 
 
+# ======================================================
+# BUSCA GLOBAL
+# ======================================================
+@clients_bp.route("/search/global", methods=["GET"])
+@jwt_required()
+def search_global():
+    role = normalize_role(current_user_role())
+    user_id = current_user_id()
+
+    if role not in OPERATION_VIEW_ALLOWED_ROLES:
+        return jsonify({"error": "Acesso nao autorizado"}), 403
+
+    query = normalize_text(request.args.get("q"))
+    limit = request.args.get("limit", type=int) or 8
+    limit = max(1, min(limit, 20))
+
+    if len(query) < 2:
+        return jsonify({"query": query, "clients": []}), 200
+
+    like_term = f"%{query}%"
+    only_digits_term = only_digits(query)
+    digit_like_term = f"%{only_digits_term}%" if only_digits_term else like_term
+
+    db = get_db()
+    cursor = db.cursor(dictionary=True)
+    ensure_operations_extra_columns(cursor, db)
+
+    try:
+        base_where = [
+            "("
+            "c.nome LIKE %s OR "
+            "c.cpf LIKE %s OR "
+            "REPLACE(REPLACE(c.cpf, '.', ''), '-', '') LIKE %s OR "
+            "c.numero_beneficio LIKE %s"
+            ")"
+        ]
+        params = [like_term, like_term, digit_like_term, like_term]
+
+        if is_admin_like_role(role):
+            cursor.execute(
+                f"""
+                SELECT
+                    c.id,
+                    c.nome,
+                    c.cpf,
+                    c.numero_beneficio,
+                    c.vendedor_id,
+                    COALESCE(v.nome, '-') AS vendedor_nome
+                FROM clientes c
+                LEFT JOIN usuarios v ON v.id = c.vendedor_id
+                WHERE {' AND '.join(base_where)}
+                ORDER BY c.nome ASC
+                LIMIT %s
+                """,
+                tuple([*params, limit]),
+            )
+        elif role == ROLE_VENDOR:
+            cursor.execute(
+                f"""
+                SELECT
+                    c.id,
+                    c.nome,
+                    c.cpf,
+                    c.numero_beneficio,
+                    c.vendedor_id,
+                    COALESCE(v.nome, '-') AS vendedor_nome
+                FROM clientes c
+                LEFT JOIN usuarios v ON v.id = c.vendedor_id
+                WHERE {' AND '.join(base_where)}
+                  AND c.vendedor_id = %s
+                ORDER BY c.nome ASC
+                LIMIT %s
+                """,
+                tuple([*params, user_id, limit]),
+            )
+        elif is_digitador_role(role):
+            product_conditions = []
+            product_params = []
+            apply_role_product_scope(role, product_conditions, product_params, "o.produto")
+            product_clause = (
+                f" AND {' AND '.join(product_conditions)}" if product_conditions else ""
+            )
+
+            cursor.execute(
+                f"""
+                SELECT DISTINCT
+                    c.id,
+                    c.nome,
+                    c.cpf,
+                    c.numero_beneficio,
+                    c.vendedor_id,
+                    COALESCE(v.nome, '-') AS vendedor_nome
+                FROM clientes c
+                JOIN operacoes o ON o.cliente_id = c.id
+                LEFT JOIN usuarios v ON v.id = c.vendedor_id
+                WHERE {' AND '.join(base_where)}
+                  {product_clause}
+                ORDER BY c.nome ASC
+                LIMIT %s
+                """,
+                tuple([*params, *product_params, limit]),
+            )
+        else:
+            return jsonify({"query": query, "clients": []}), 200
+
+        clients = cursor.fetchall()
+        return jsonify({"query": query, "clients": clients}), 200
+    finally:
+        cursor.close()
+        db.close()
+
+
 
 # ======================================================
 # ðŸ“ƒ LISTAR CONTRATOS DE CLIENTES

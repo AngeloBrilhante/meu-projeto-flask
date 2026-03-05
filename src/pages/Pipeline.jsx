@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import {
   getOperationStatusHistory,
   getPipeline,
@@ -194,6 +194,7 @@ function getPipelineViewFromPath(pathname) {
 export default function Pipeline() {
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchParams] = useSearchParams();
   const [operations, setOperations] = useState([]);
   const [drafts, setDrafts] = useState({});
   const [loading, setLoading] = useState(false);
@@ -206,6 +207,10 @@ export default function Pipeline() {
   const routePipelineView = useMemo(
     () => getPipelineViewFromPath(location.pathname),
     [location.pathname]
+  );
+  const routeSearchTerm = useMemo(
+    () => String(searchParams.get("search") || "").trim(),
+    [searchParams]
   );
   const [pipelineView, setPipelineView] = useState(routePipelineView);
   const [filters, setFilters] = useState({
@@ -278,6 +283,13 @@ export default function Pipeline() {
   useEffect(() => {
     setPipelineView(routePipelineView);
   }, [routePipelineView]);
+
+  useEffect(() => {
+    setFilters((prev) => {
+      if (prev.search === routeSearchTerm) return prev;
+      return { ...prev, search: routeSearchTerm };
+    });
+  }, [routeSearchTerm]);
 
   function handleDraftChange(operationId, field, value) {
     setDrafts((prev) => ({

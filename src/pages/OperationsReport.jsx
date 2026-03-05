@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { getOperationsReport } from "../services/api";
 import "./OperationsReport.css";
 
@@ -49,6 +50,7 @@ function toCsvValue(value) {
 }
 
 export default function OperationsReport() {
+  const [searchParams] = useSearchParams();
   const [filters, setFilters] = useState(INITIAL_FILTERS);
   const [operations, setOperations] = useState([]);
   const [vendors, setVendors] = useState([]);
@@ -57,6 +59,10 @@ export default function OperationsReport() {
   const role = useMemo(() => getStoredRole(), []);
   const isAdmin = role === "ADMIN" || role === "GLOBAL";
   const isVendor = role === "VENDEDOR";
+  const routeSearchTerm = useMemo(
+    () => String(searchParams.get("search") || "").trim(),
+    [searchParams]
+  );
 
   const subtitle = isAdmin
     ? "Aprovadas e reprovadas de todos os vendedores"
@@ -81,8 +87,10 @@ export default function OperationsReport() {
   }
 
   useEffect(() => {
-    loadReport(INITIAL_FILTERS);
-  }, []);
+    const nextFilters = { ...INITIAL_FILTERS, search: routeSearchTerm };
+    setFilters(nextFilters);
+    loadReport(nextFilters);
+  }, [routeSearchTerm]);
 
   function handleChange(event) {
     const { name, value } = event.target;

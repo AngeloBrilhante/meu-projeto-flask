@@ -153,8 +153,13 @@
   border-bottom: 1px solid var(--border-color);
 }
 
-.searchField {
+.searchFieldWrap {
+  position: relative;
   width: min(560px, 100%);
+}
+
+.searchField {
+  width: 100%;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -178,9 +183,75 @@
   width: 100%;
   border: 0;
   background: transparent;
-  color: var(--text-secondary);
+  color: var(--text-primary);
   font-size: 14px;
   outline: none;
+}
+
+.searchField input::placeholder {
+  color: var(--text-secondary);
+}
+
+.searchDropdown {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(100% + 8px);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.2);
+  overflow: auto;
+  max-height: min(360px, 55vh);
+  z-index: 35;
+}
+
+.searchDropdownState {
+  margin: 0;
+  padding: 12px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.searchOption {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border-color);
+  cursor: pointer;
+}
+
+.searchOption:last-child {
+  border-bottom: 0;
+}
+
+.searchOption.active,
+.searchOption:hover {
+  background: var(--surface-strong);
+}
+
+.searchOptionScope {
+  width: fit-content;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--accent);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.searchOption strong {
+  font-size: 13px;
+}
+
+.searchOption small {
+  font-size: 12px;
+  color: var(--text-secondary);
 }
 
 .topActions {
