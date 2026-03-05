@@ -256,6 +256,18 @@ export default function ClientOperations() {
     navigate(`/operations/${operationId}/ficha`);
   }
 
+  async function handleCopyFormalizationLink(link) {
+    const text = String(link || "").trim();
+    if (!text) return;
+
+    try {
+      await navigator.clipboard.writeText(text);
+      alert("Link copiado.");
+    } catch (error) {
+      window.prompt("Copie o link:", text);
+    }
+  }
+
   async function handleDelete(operation) {
     const confirmed = window.confirm(
       `Deseja realmente excluir a operacao #${operation.id}?`
@@ -469,14 +481,15 @@ export default function ClientOperations() {
                     <td>{operation.numero_proposta || "-"}</td>
                     <td>
                       {operation.link_formalizacao ? (
-                        <a
+                        <button
+                          type="button"
                           className="clientLinkButton"
-                          href={operation.link_formalizacao}
-                          target="_blank"
-                          rel="noreferrer"
+                          onClick={() =>
+                            handleCopyFormalizationLink(operation.link_formalizacao)
+                          }
                         >
-                          Abrir link
-                        </a>
+                          Copiar link
+                        </button>
                       ) : (
                         "-"
                       )}
