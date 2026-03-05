@@ -104,7 +104,14 @@ export const OPERATION_SCHEMAS = {
           { name: "saldo_quitacao", label: "Saldo de quitação", type: "number", min: 0, step: "0.01", required: true },
           { name: "valor_parcela", label: "Valor da parcela", type: "number", min: 0, step: "0.01", required: true },
           { name: "prazo", label: "Prazo", type: "number", min: 0 },
-          { name: "margem", label: "Margem", type: "number", min: 0, step: "0.01" },
+          {
+            name: "margem",
+            label: "Margem",
+            type: "text",
+            inputMode: "decimal",
+            decimalFlexible: true,
+            placeholder: "0,00",
+          },
         ],
       },
     ],
@@ -122,7 +129,15 @@ export const OPERATION_SCHEMAS = {
             options: BANK_OPTIONS,
           },
           { name: "vendedor_nome", label: "Nome do vendedor", required: true },
-          { name: "margem", label: "Margem", type: "number", min: 0, step: "0.01", required: true },
+          {
+            name: "margem",
+            label: "Margem",
+            type: "text",
+            inputMode: "decimal",
+            decimalFlexible: true,
+            placeholder: "0,00",
+            required: true,
+          },
           { name: "prazo", label: "Prazo", type: "number", min: 0, required: true },
         ],
       },
@@ -142,7 +157,15 @@ export const OPERATION_SCHEMAS = {
           { name: "rg_uf", label: "UF", required: true },
           { name: "rg_orgao_exp", label: "Órgão exp", required: true },
           { name: "data_emissao_rg", label: "Data emissão RG", type: "date", required: true },
-          { name: "salario", label: "Salário", type: "number", min: 0, step: "0.01", required: true },
+          {
+            name: "salario",
+            label: "Salário",
+            type: "text",
+            inputMode: "decimal",
+            decimalFlexible: true,
+            placeholder: "0,00",
+            required: true,
+          },
         ],
       },
       {
@@ -184,7 +207,15 @@ export const OPERATION_SCHEMAS = {
             required: true,
             options: BANK_OPTIONS,
           },
-          { name: "margem", label: "Margem", type: "number", min: 0, step: "0.01", required: true },
+          {
+            name: "margem",
+            label: "Margem",
+            type: "text",
+            inputMode: "decimal",
+            decimalFlexible: true,
+            placeholder: "0,00",
+            required: true,
+          },
           { name: "prazo", label: "Prazo", type: "number", min: 0 },
         ],
       },
@@ -204,7 +235,15 @@ export const OPERATION_SCHEMAS = {
           { name: "rg_uf", label: "UF", required: true },
           { name: "rg_orgao_exp", label: "Órgão exp", required: true },
           { name: "data_emissao_rg", label: "Data emissão RG", type: "date", required: true },
-          { name: "salario", label: "Salário", type: "number", min: 0, step: "0.01", required: true },
+          {
+            name: "salario",
+            label: "Salário",
+            type: "text",
+            inputMode: "decimal",
+            decimalFlexible: true,
+            placeholder: "0,00",
+            required: true,
+          },
         ],
       },
       {
@@ -362,11 +401,54 @@ export function hasOperationFicha(product, payload) {
   return Boolean(sanitizeOperationFicha(product, payload));
 }
 
+function parseFlexibleNumber(value) {
+  if (value === null || value === undefined) return null;
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : null;
+  }
+
+  const raw = String(value)
+    .trim()
+    .replace(/[^\d,.\-\s]/g, "");
+  if (!raw) return null;
+
+  const hasComma = raw.includes(",");
+  const hasDot = raw.includes(".");
+  const cleaned = raw.replace(/\s+/g, "");
+
+  if (!hasComma && !hasDot) {
+    const direct = Number(cleaned);
+    return Number.isNaN(direct) ? null : direct;
+  }
+
+  const lastComma = cleaned.lastIndexOf(",");
+  const lastDot = cleaned.lastIndexOf(".");
+  const decimalIndex = Math.max(lastComma, lastDot);
+
+  const sign = cleaned.startsWith("-") ? "-" : "";
+  const unsigned = sign ? cleaned.slice(1) : cleaned;
+  const unsignedDecimalIndex = decimalIndex - (sign ? 1 : 0);
+
+  if (unsignedDecimalIndex < 0) {
+    const direct = Number(cleaned.replace(/,/g, "."));
+    return Number.isNaN(direct) ? null : direct;
+  }
+
+  const integerPart = unsigned.slice(0, unsignedDecimalIndex).replace(/[.,]/g, "");
+  const decimalPart = unsigned.slice(unsignedDecimalIndex + 1).replace(/[.,]/g, "");
+  const normalized = decimalPart
+    ? `${sign}${integerPart || "0"}.${decimalPart}`
+    : `${sign}${integerPart || "0"}`;
+
+  const number = Number(normalized);
+  return Number.isNaN(number) ? null : number;
+}
+
 function toNullableNumber(...values) {
   for (const value of values) {
     if (value === null || value === undefined || value === "") continue;
-    const number = Number(value);
-    if (!Number.isNaN(number)) return number;
+    const number = parseFlexibleNumber(value);
+    if (number !== null) return number;
   }
   return null;
 }
