@@ -86,11 +86,45 @@ export async function listClientDocuments(clientId) {
 /* =======================
    DOWNLOAD DOCUMENTO
 ======================= */
-export function downloadDocument(clientId, filename) {
-  window.open(
-    `${API_URL}/clients/${clientId}/documents/${filename}`,
-    "_blank"
+export async function downloadDocument(clientId, filename) {
+  const safeFilename = String(filename || "").trim() || "documento";
+  const response = await fetch(
+    `${API_URL}/clients/${clientId}/documents/${encodeURIComponent(safeFilename)}`,
+    {
+      headers: getAuthHeaders(false),
+    }
   );
+
+  if (!response.ok) {
+    let errorMessage = "Erro ao baixar documento";
+    const contentType = response.headers.get("content-type") || "";
+
+    if (contentType.includes("application/json")) {
+      const data = await response.json();
+      errorMessage = data.error || errorMessage;
+    } else {
+      const rawText = await response.text();
+      const compactText = String(rawText || "")
+        .replace(/<[^>]*>/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+      if (compactText) {
+        errorMessage = compactText;
+      }
+    }
+
+    throw new Error(errorMessage);
+  }
+
+  const blob = await response.blob();
+  const objectUrl = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = objectUrl;
+  anchor.download = safeFilename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(objectUrl);
 }
 
 /* =======================
@@ -119,8 +153,9 @@ export async function uploadDocuments(clientId, files) {
    EXCLUIR DOCUMENTO
 ======================= */
 export async function deleteDocument(clientId, filename) {
+  const safeFilename = String(filename || "").trim();
   const response = await fetch(
-    `${API_URL}/clients/${clientId}/documents/${filename}`,
+    `${API_URL}/clients/${clientId}/documents/${encodeURIComponent(safeFilename)}`,
     {
       method: "DELETE",
       headers: getAuthHeaders(),

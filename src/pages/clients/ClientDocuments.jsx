@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
-import { listClientDocuments, uploadDocuments, deleteDocument } from "../../services/api";
-import { getApiUrl } from "../../config/api";
-
-const API_URL = getApiUrl();
+import {
+  deleteDocument,
+  downloadDocument,
+  listClientDocuments,
+  uploadDocuments,
+} from "../../services/api";
 
 export default function ClientDocuments() {
   const { id } = useParams();
@@ -48,6 +50,14 @@ export default function ClientDocuments() {
       loadDocuments();
     } catch (error) {
       console.error("Erro ao excluir:", error);
+    }
+  }
+
+  async function handleDownload(filename) {
+    try {
+      await downloadDocument(id, filename);
+    } catch (error) {
+      alert(error.message || "Nao foi possivel baixar o documento");
     }
   }
 
@@ -106,14 +116,13 @@ export default function ClientDocuments() {
               </div>
 
               <div className="documentActions">
-                <a
-                  href={`${API_URL}/clients/${id}/documents/${doc.filename}`}
-                  target="_blank"
-                  rel="noreferrer"
+                <button
+                  type="button"
                   className="clientLinkButton"
+                  onClick={() => handleDownload(doc.filename)}
                 >
                   Baixar
-                </a>
+                </button>
 
                 <button
                   type="button"

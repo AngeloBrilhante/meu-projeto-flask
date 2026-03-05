@@ -33,7 +33,13 @@ def can_access_client(client_id):
     if is_admin():
         return True
 
-    user_id = current_user_id()
+    try:
+        user_id = current_user_id()
+    except (TypeError, ValueError, RuntimeError):
+        return False
+
+    if not user_id:
+        return False
 
     db = get_db()
     cursor = db.cursor(dictionary=True)

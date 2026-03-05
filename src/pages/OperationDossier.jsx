@@ -1,15 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { getApiUrl } from "../config/api";
 import {
   formatOperationFichaValue,
   getOperationSchema,
   parseOperationFicha,
 } from "../constants/operationSchemas";
-import { getOperationDossier } from "../services/api";
+import { downloadDocument, getOperationDossier } from "../services/api";
 import "./OperationDossier.css";
-
-const API_URL = getApiUrl();
 
 function formatStatus(status) {
   return String(status || "PENDENTE").replaceAll("_", " ");
@@ -82,6 +79,16 @@ export default function OperationDossier() {
       cancelled = true;
     };
   }, [operationId]);
+
+  async function handleDownload(filename) {
+    if (!operation?.cliente_id || !filename) return;
+
+    try {
+      await downloadDocument(operation.cliente_id, filename);
+    } catch (requestError) {
+      alert(requestError.message || "Nao foi possivel baixar o documento.");
+    }
+  }
 
   return (
     <div className="operationDossierPage">
@@ -166,16 +173,13 @@ export default function OperationDossier() {
                     <small>{doc.uploaded_at || "-"}</small>
                   </div>
 
-                  <a
+                  <button
+                    type="button"
                     className="operationDossierLink"
-                    href={`${API_URL}/clients/${operation.cliente_id}/documents/${encodeURIComponent(
-                      doc.filename
-                    )}`}
-                    target="_blank"
-                    rel="noreferrer"
+                    onClick={() => handleDownload(doc.filename)}
                   >
-                    Abrir
-                  </a>
+                    Baixar
+                  </button>
                 </li>
               ))}
             </ul>
