@@ -453,6 +453,42 @@ def role_can_access_operation(role, user_id, operation):
     return normalize_product_name(operation.get("produto")) in products
 
 
+def can_access_client_documents(client_id):
+    if can_access_client(client_id):
+        return True
+
+    role = normalize_role(current_user_role())
+    if not is_digitador_role(role):
+        return False
+
+    conditions = []
+    params = [client_id]
+    apply_role_product_scope(role, conditions, params, "o.produto")
+    if not conditions:
+        return False
+
+    where_clause = " AND ".join(conditions)
+
+    db = get_db()
+    cursor = db.cursor(dictionary=True)
+
+    try:
+        cursor.execute(
+            f"""
+            SELECT 1
+            FROM operacoes o
+            WHERE o.cliente_id = %s
+              AND {where_clause}
+            LIMIT 1
+            """,
+            tuple(params),
+        )
+        return cursor.fetchone() is not None
+    finally:
+        cursor.close()
+        db.close()
+
+
 def apply_role_product_scope(role, conditions, params, column_name):
     products = allowed_products_for_role(role)
     if not products:
@@ -2399,7 +2435,7 @@ def list_documents(client_id):
     if request.method == "OPTIONS":
         return "", 200
 
-    if not can_access_client(client_id):
+    if not can_access_client_documents(client_id):
         return jsonify({"error": "Acesso nÃ£o autorizado"}), 403
 
     documents = list_client_documents_metadata(client_id)
@@ -2422,7 +2458,7 @@ def download_document(client_id, filename):
     if request.method == "OPTIONS":
         return "", 200
 
-    if not can_access_client(client_id):
+    if not can_access_client_documents(client_id):
         return jsonify({"error": "Acesso nao autorizado"}), 403
 
     client_folder, safe_filename = find_client_document_file(client_id, filename)

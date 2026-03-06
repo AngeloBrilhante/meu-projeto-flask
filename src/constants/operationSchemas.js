@@ -317,10 +317,34 @@ export function schemaFieldNames(schema) {
 function parseDateForInput(value) {
   if (!value) return "";
 
+  const text = String(value).trim();
+  const isoDateMatch = text.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (isoDateMatch) {
+    return `${isoDateMatch[1]}-${isoDateMatch[2]}-${isoDateMatch[3]}`;
+  }
+
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
 
-  return date.toISOString().slice(0, 10);
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(date.getUTCDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function formatDateForDisplay(value) {
+  const text = String(value || "").trim();
+  if (!text) return "-";
+
+  const isoDateMatch = text.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (isoDateMatch) {
+    return `${isoDateMatch[3]}/${isoDateMatch[2]}/${isoDateMatch[1]}`;
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return text;
+
+  return date.toLocaleDateString("pt-BR", { timeZone: "UTC" });
 }
 
 export function buildOperationFichaDefaults(product, client, user, seed = {}) {
@@ -507,9 +531,7 @@ export function formatOperationFichaValue(value, type) {
   }
 
   if (type === "date") {
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return String(value);
-    return date.toLocaleDateString("pt-BR");
+    return formatDateForDisplay(value);
   }
 
   return String(value);
