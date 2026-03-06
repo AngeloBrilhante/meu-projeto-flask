@@ -64,6 +64,25 @@ const PROMOTORA_OPTIONS = [
   { value: "PORT", label: "PORT" },
 ];
 
+const STATUS_ANDAMENTO_OPTIONS = [
+  { value: "", label: "Sem andamento" },
+  { value: "AGUARDANDO_SALDO", label: "Aguardando saldo" },
+  { value: "ANALISE_DE_CREDITO", label: "Analise de credito" },
+  { value: "ANALISE_DOCUMENTAL", label: "Analise documental" },
+  { value: "BENEFICIO_BLOQUEADO", label: "Beneficio bloqueado" },
+  {
+    value: "AGUARDANDO_LIBERACAO_DA_PROMOTORA",
+    label: "Aguardando liberacao da promotora",
+  },
+];
+
+const STATUS_ANDAMENTO_LABELS = STATUS_ANDAMENTO_OPTIONS.reduce((acc, option) => {
+  if (option.value) {
+    acc[option.value] = option.label;
+  }
+  return acc;
+}, {});
+
 const FIVE_HOURS_MS = 5 * 60 * 60 * 1000;
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -75,6 +94,19 @@ function normalizeStatus(status) {
 function getStatusLabel(status) {
   const normalized = normalizeStatus(status);
   return STATUS_LABELS[normalized] || normalized || "-";
+}
+
+function normalizeAndamentoStatus(status) {
+  return String(status || "")
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, "_");
+}
+
+function getAndamentoLabel(status) {
+  const normalized = normalizeAndamentoStatus(status);
+  if (!normalized) return "Sem andamento";
+  return STATUS_ANDAMENTO_LABELS[normalized] || normalized.replaceAll("_", " ");
 }
 
 function toDraft(operation) {
@@ -93,6 +125,7 @@ function toDraft(operation) {
     pendencia_tipo: operation.pendencia_tipo || "",
     pendencia_motivo: operation.pendencia_motivo || "",
     motivo_reprovacao: operation.motivo_reprovacao || "",
+    status_andamento: operation.status_andamento || "",
     reprovacao_tipo: "",
   };
 }
@@ -471,6 +504,33 @@ export default function Pipeline() {
     } catch (error) {
       console.error("Erro ao atualizar operacao:", error);
       alert(error.message || "Nao foi possivel atualizar a operacao");
+    } finally {
+      setSavingOperationId(null);
+    }
+  }
+
+  async function handleAndamentoChange(operation, nextAndamento) {
+    const normalizedAndamento = normalizeAndamentoStatus(nextAndamento);
+
+    try {
+      setSavingOperationId(operation.id);
+      await updateOperation(operation.id, {
+        status_andamento: normalizedAndamento,
+      });
+
+      setDrafts((prev) => ({
+        ...prev,
+        [operation.id]: {
+          ...(prev[operation.id] || toDraft(operation)),
+          status_andamento: normalizedAndamento,
+        },
+      }));
+
+      await fetchPipeline();
+      window.dispatchEvent(new Event("pipeline:changed"));
+    } catch (error) {
+      console.error("Erro ao atualizar andamento:", error);
+      alert(error.message || "Nao foi possivel atualizar o andamento");
     } finally {
       setSavingOperationId(null);
     }
@@ -929,6 +989,9 @@ export default function Pipeline() {
                 const canManageFlow = !["APROVADO", "REPROVADO"].includes(
                   operation.normalizedStatus
                 );
+                const andamentoAtual = normalizeAndamentoStatus(
+                  draft.status_andamento || operation.status_andamento
+                );
 
                 return (
                   <tr
@@ -956,6 +1019,27 @@ export default function Pipeline() {
                     </td>
                     <td className="pipelineStatusCell">
                       {getStatusBadge(operation.normalizedStatus)}
+                      <label className="pipelineProgressField">
+                        <span>Andamento</span>
+                        <select
+                          className="pipelineProgressSelect"
+                          value={andamentoAtual}
+                          disabled={isSaving || !canManageFlow}
+                          onClick={(event) => event.stopPropagation()}
+                          onChange={(event) =>
+                            handleAndamentoChange(operation, event.target.value)
+                          }
+                        >
+                          {STATUS_ANDAMENTO_OPTIONS.map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <div className="pipelineHint">
+                        Atual: {getAndamentoLabel(andamentoAtual)}
+                      </div>
                       {operation.digitador_nome && (
                         <div className="pipelineDigitadorTag">
                           Digitador: {operation.digitador_nome}

@@ -1,6 +1,7 @@
 import json
 import os
 import re
+import unicodedata
 import uuid
 from datetime import date, datetime
 from flask import Blueprint, request, jsonify, send_from_directory, abort
@@ -267,6 +268,7 @@ PIPELINE_OPERATION_FIELDS = PENDING_OPERATION_FIELDS | {
     "valor_liberado",
     "parcela_liberada",
     "promotora",
+    "status_andamento",
     "digitador_id",
     "numero_proposta",
     "status",
@@ -329,6 +331,15 @@ STATUS_LABELS = {
     "APROVADO": "Aprovada",
     "REPROVADO": "Reprovada",
 }
+
+OPERATION_PROGRESS_LABELS = {
+    "AGUARDANDO_SALDO": "Aguardando saldo",
+    "ANALISE_DE_CREDITO": "Analise de credito",
+    "ANALISE_DOCUMENTAL": "Analise documental",
+    "BENEFICIO_BLOQUEADO": "Beneficio bloqueado",
+    "AGUARDANDO_LIBERACAO_DA_PROMOTORA": "Aguardando liberacao da promotora",
+}
+OPERATION_PROGRESS_OPTIONS = set(OPERATION_PROGRESS_LABELS.keys())
 
 PORTABILITY_FORM_FIELDS = (
     "titulo_produto",
@@ -474,6 +485,26 @@ def format_operation_status_label(status):
     if not normalized:
         return "-"
     return STATUS_LABELS.get(normalized, normalized.replace("_", " ").title())
+
+
+def normalize_operation_progress_status(status):
+    text = str(status or "").strip()
+    if not text:
+        return ""
+
+    text = unicodedata.normalize("NFKD", text)
+    text = "".join(char for char in text if not unicodedata.combining(char))
+    text = re.sub(r"\s+", "_", text.upper())
+    return text
+
+
+def format_operation_progress_label(status):
+    normalized = normalize_operation_progress_status(status)
+    if not normalized:
+        return "Sem andamento"
+    return OPERATION_PROGRESS_LABELS.get(
+        normalized, normalized.replace("_", " ").title()
+    )
 
 
 def normalize_product_name(product):
@@ -656,7 +687,8 @@ def ensure_operations_extra_columns(cursor, db):
               'motivo_reprovacao',
               'digitador_id',
               'numero_proposta',
-              'promotora'
+              'promotora',
+              'status_andamento'
           )
         """
     )
@@ -751,6 +783,10 @@ def ensure_operations_extra_columns(cursor, db):
 
     if "promotora" not in existing:
         cursor.execute("ALTER TABLE operacoes ADD COLUMN promotora VARCHAR(80) NULL")
+        changed = True
+
+    if "status_andamento" not in existing:
+        cursor.execute("ALTER TABLE operacoes ADD COLUMN status_andamento VARCHAR(80) NULL")
         changed = True
 
     if changed:
@@ -1054,6 +1090,66 @@ def notify_vendor_status_change(
         operation_id,
         normalized_previous,
         normalized_next,
+        title,
+        message,
+    )
+
+
+def notify_vendor_progress_change(
+    cursor,
+    operation_id,
+    previous_progress,
+    next_progress,
+    changed_by=None,
+):
+    normalized_previous = normalize_operation_progress_status(previous_progress)
+    normalized_next = normalize_operation_progress_status(next_progress)
+
+    if normalized_previous == normalized_next:
+        return
+
+    cursor.execute(
+        """
+        SELECT
+            c.vendedor_id,
+            COALESCE(c.nome, 'Cliente') AS cliente_nome,
+            COALESCE(o.produto, 'OPERACAO') AS produto,
+            o.status
+        FROM operacoes o
+        JOIN clientes c ON c.id = o.cliente_id
+        WHERE o.id = %s
+        LIMIT 1
+        """,
+        (operation_id,),
+    )
+    operation = cursor.fetchone() or {}
+    vendedor_id = to_int(operation.get("vendedor_id"))
+    if vendedor_id <= 0:
+        return
+
+    recipients = {vendedor_id}
+    if changed_by:
+        recipients.discard(to_int(changed_by))
+    if not recipients:
+        return
+
+    actor_name = get_user_display_name(cursor, changed_by)
+    actor_suffix = f" por {actor_name}" if actor_name else ""
+    cliente_nome = str(operation.get("cliente_nome") or "Cliente").strip() or "Cliente"
+    produto = normalize_product_name(operation.get("produto")) or "OPERACAO"
+    previous_label = format_operation_progress_label(normalized_previous)
+    next_label = format_operation_progress_label(normalized_next)
+    operation_status = normalize_operation_status(operation.get("status")) or "ANALISE_BANCO"
+
+    title = f"Andamento da operacao #{operation_id} atualizado"
+    message = f"{cliente_nome} ({produto}): {previous_label} -> {next_label}{actor_suffix}"
+
+    insert_operation_notifications(
+        cursor,
+        recipients,
+        operation_id,
+        operation_status,
+        operation_status,
         title,
         message,
     )
@@ -2604,6 +2700,7 @@ def update_operation(operation_id):
         SELECT
             o.id,
             o.status,
+            o.status_andamento,
             o.enviada_esteira_em,
             o.pendencia_motivo,
             o.produto,
@@ -2625,6 +2722,10 @@ def update_operation(operation_id):
     current_status = normalize_operation_status(operation.get("status"))
     original_status = current_status
     next_status_for_history = current_status
+    original_progress_status = normalize_operation_progress_status(
+        operation.get("status_andamento")
+    )
+    next_progress_status_for_notification = original_progress_status
     history_note = None
     sent_to_pipeline = operation.get("enviada_esteira_em") is not None
     allowed_fields = set()
@@ -2888,6 +2989,20 @@ def update_operation(operation_id):
                     return jsonify({"error": "Promotora invalida"}), 400
                 data["promotora"] = promotora or None
 
+            if "status_andamento" in data:
+                status_andamento = normalize_operation_progress_status(
+                    data.get("status_andamento")
+                )
+                if (
+                    status_andamento
+                    and status_andamento not in OPERATION_PROGRESS_OPTIONS
+                ):
+                    cursor.close()
+                    db.close()
+                    return jsonify({"error": "Status de andamento invalido"}), 400
+                data["status_andamento"] = status_andamento or None
+                next_progress_status_for_notification = status_andamento
+
     else:
         cursor.close()
         db.close()
@@ -2921,6 +3036,15 @@ def update_operation(operation_id):
             operation_id,
             original_status,
             next_status_for_history,
+            changed_by=user_id,
+        )
+
+    if next_progress_status_for_notification != original_progress_status:
+        notify_vendor_progress_change(
+            cursor,
+            operation_id,
+            original_progress_status,
+            next_progress_status_for_notification,
             changed_by=user_id,
         )
 
@@ -3154,6 +3278,7 @@ def get_pipeline():
             o.parcela_liberada,
             o.promotora,
             o.numero_proposta,
+            o.status_andamento,
             o.enviada_esteira_em,
             o.link_formalizacao,
             o.devolvida_em,

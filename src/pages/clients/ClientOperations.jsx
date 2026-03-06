@@ -38,6 +38,14 @@ const STATUS_LABELS = {
   REPROVADO: "Reprovada",
 };
 
+const STATUS_ANDAMENTO_LABELS = {
+  AGUARDANDO_SALDO: "Aguardando saldo",
+  ANALISE_DE_CREDITO: "Analise de credito",
+  ANALISE_DOCUMENTAL: "Analise documental",
+  BENEFICIO_BLOQUEADO: "Beneficio bloqueado",
+  AGUARDANDO_LIBERACAO_DA_PROMOTORA: "Aguardando liberacao da promotora",
+};
+
 const LEGACY_STATUS_MAP = {
   PENDENTE: "PRONTA_DIGITAR",
   ENVIADA_ESTEIRA: "PRONTA_DIGITAR",
@@ -83,6 +91,16 @@ function formatCurrency(value) {
 function formatStatus(status) {
   const normalized = normalizeStatus(status);
   return STATUS_LABELS[normalized] || normalized.replaceAll("_", " ");
+}
+
+function formatAndamentoStatus(status) {
+  const normalized = String(status || "")
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, "_");
+
+  if (!normalized) return "-";
+  return STATUS_ANDAMENTO_LABELS[normalized] || normalized.replaceAll("_", " ");
 }
 
 export default function ClientOperations() {
@@ -436,6 +454,7 @@ export default function ClientOperations() {
                 <th>Prazo</th>
                 <th>Ficha</th>
                 <th>Status</th>
+                <th>Andamento banco</th>
                 <th>Digitador</th>
                 <th>N. proposta</th>
                 <th>Link formalizacao</th>
@@ -478,6 +497,11 @@ export default function ClientOperations() {
                     <td>
                       <span className={`operationStatusBadge ${normalizedStatus}`}>
                         {formatStatus(normalizedStatus)}
+                      </span>
+                    </td>
+                    <td>
+                      <span className="operationProgressBadge">
+                        {formatAndamentoStatus(operation.status_andamento)}
                       </span>
                     </td>
                     <td>{operation.digitador_nome || "-"}</td>
