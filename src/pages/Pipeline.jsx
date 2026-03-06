@@ -1231,14 +1231,24 @@ export default function Pipeline() {
                         )}
 
                         {operation.normalizedStatus === "PRONTA_DIGITAR" && (
-                          <button
-                            type="button"
-                            className="saveBtn"
-                            disabled={isSaving}
-                            onClick={() => updateFlow(operation, "EM_DIGITACAO")}
-                          >
-                            Iniciar digitacao
-                          </button>
+                          <>
+                            <button
+                              type="button"
+                              className="saveBtn"
+                              disabled={isSaving}
+                              onClick={() => updateFlow(operation, "EM_DIGITACAO")}
+                            >
+                              Iniciar digitacao
+                            </button>
+                            <button
+                              type="button"
+                              className={`rejectBtn${reprovacaoAberta ? " active" : ""}`}
+                              disabled={isSaving}
+                              onClick={() => toggleEditor(operation.id, "reprovacao")}
+                            >
+                              Reprovar
+                            </button>
+                          </>
                         )}
 
                         {operation.normalizedStatus === "EM_DIGITACAO" && (

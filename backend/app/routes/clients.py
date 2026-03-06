@@ -2823,7 +2823,13 @@ def update_operation(operation_id):
                     return jsonify({"error": "Status invalido para a esteira"}), 400
 
                 allowed_transitions = {
-                    "PRONTA_DIGITAR": {"PRONTA_DIGITAR", "EM_DIGITACAO", "DEVOLVIDA_VENDEDOR"},
+                    "PRONTA_DIGITAR": {
+                        "PRONTA_DIGITAR",
+                        "EM_DIGITACAO",
+                        "PENDENCIA",
+                        "DEVOLVIDA_VENDEDOR",
+                        "REPROVADO",
+                    },
                     "EM_DIGITACAO": {
                         "EM_DIGITACAO",
                         "AGUARDANDO_FORMALIZACAO",
