@@ -233,6 +233,7 @@ export default function Pipeline() {
   const [loading, setLoading] = useState(false);
   const [savingOperationId, setSavingOperationId] = useState(null);
   const [openEditors, setOpenEditors] = useState({});
+  const [openAndamentoMenu, setOpenAndamentoMenu] = useState({});
   const [openHistory, setOpenHistory] = useState({});
   const [historyByOperation, setHistoryByOperation] = useState({});
   const [loadingHistoryOperationId, setLoadingHistoryOperationId] = useState(null);
@@ -414,6 +415,13 @@ export default function Pipeline() {
     return Boolean(openEditors[operationId]?.[editorKey]);
   }
 
+  function toggleAndamentoMenu(operationId) {
+    setOpenAndamentoMenu((prev) => ({
+      ...prev,
+      [operationId]: !prev[operationId],
+    }));
+  }
+
   async function updateFlow(operation, nextStatus, options = {}) {
     const { payloadOverrides = {}, clearPendencia = false } = options;
     const draft = drafts[operation.id] || {};
@@ -511,6 +519,10 @@ export default function Pipeline() {
 
   async function handleAndamentoChange(operation, nextAndamento) {
     const normalizedAndamento = normalizeAndamentoStatus(nextAndamento);
+    setOpenAndamentoMenu((prev) => ({
+      ...prev,
+      [operation.id]: false,
+    }));
 
     try {
       setSavingOperationId(operation.id);
@@ -1019,26 +1031,40 @@ export default function Pipeline() {
                     </td>
                     <td className="pipelineStatusCell">
                       {getStatusBadge(operation.normalizedStatus)}
-                      <label className="pipelineProgressField">
+                      <div className="pipelineProgressField">
                         <span>Andamento</span>
-                        <select
-                          className="pipelineProgressSelect"
-                          value={andamentoAtual}
+                        <button
+                          type="button"
+                          className="pipelineProgressButton"
                           disabled={isSaving || !canManageFlow}
-                          onClick={(event) => event.stopPropagation()}
-                          onChange={(event) =>
-                            handleAndamentoChange(operation, event.target.value)
-                          }
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            toggleAndamentoMenu(operation.id);
+                          }}
                         >
-                          {STATUS_ANDAMENTO_OPTIONS.map((option) => (
-                            <option key={option.value} value={option.value}>
-                              {option.label}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <div className="pipelineHint">
-                        Atual: {getAndamentoLabel(andamentoAtual)}
+                          {getAndamentoLabel(andamentoAtual)}
+                        </button>
+
+                        {openAndamentoMenu[operation.id] && (
+                          <div
+                            className="pipelineProgressMenu"
+                            onClick={(event) => event.stopPropagation()}
+                          >
+                            {STATUS_ANDAMENTO_OPTIONS.map((option) => (
+                              <button
+                                key={option.value || "NONE"}
+                                type="button"
+                                className={`pipelineProgressOption${
+                                  option.value === andamentoAtual ? " active" : ""
+                                }`}
+                                disabled={isSaving || !canManageFlow}
+                                onClick={() => handleAndamentoChange(operation, option.value)}
+                              >
+                                {option.label}
+                              </button>
+                            ))}
+                          </div>
+                        )}
                       </div>
                       {operation.digitador_nome && (
                         <div className="pipelineDigitadorTag">

@@ -268,8 +268,9 @@
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 4px;
+  gap: 6px;
   width: min(280px, 100%);
+  position: relative;
 }
 
 .pipelineProgressField span {
@@ -279,21 +280,62 @@
   letter-spacing: 0.2px;
 }
 
-.pipelineProgressSelect {
+.pipelineProgressButton {
   width: 100%;
-  min-height: 34px;
+  min-height: 36px;
   border-radius: 999px;
   border: 1px solid var(--pipeline-accent-border);
+  background: var(--pipeline-accent-soft);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 700;
+  padding: 0 14px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.pipelineProgressButton:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.pipelineProgressButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.72;
+}
+
+.pipelineProgressMenu {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  padding: 8px;
+  border: 1px solid var(--pipeline-accent-border);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.pipelineProgressOption {
+  width: 100%;
+  min-height: 34px;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
   background: var(--surface-strong);
   color: var(--text-primary);
   font-size: 12px;
   font-weight: 700;
-  padding: 0 12px;
+  text-align: left;
+  padding: 0 10px;
+  cursor: pointer;
 }
 
-.pipelineProgressSelect:focus {
-  outline: none;
+.pipelineProgressOption:hover {
+  border-color: var(--pipeline-accent-border);
+}
+
+.pipelineProgressOption.active {
   border-color: var(--accent);
+  background: var(--pipeline-accent-soft);
 }
 
 .pipelineDigitadorTag {
