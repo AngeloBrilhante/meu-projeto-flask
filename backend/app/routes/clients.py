@@ -2,7 +2,7 @@ import json
 import os
 import re
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from flask import Blueprint, request, jsonify, send_from_directory, abort
 from flask_jwt_extended import jwt_required
 from app.database import get_db
@@ -131,6 +131,60 @@ def normalize_date_text(value):
 
 def normalize_text(value):
     return str(value or "").strip()
+
+
+def normalize_date_field(value):
+    if value is None:
+        return ""
+
+    if isinstance(value, datetime):
+        return value.date().strftime("%Y-%m-%d")
+
+    if isinstance(value, date):
+        return value.strftime("%Y-%m-%d")
+
+    text = str(value).strip()
+    if not text:
+        return ""
+
+    iso_match = re.match(r"^(\d{4})-(\d{2})-(\d{2})", text)
+    if iso_match:
+        return f"{iso_match.group(1)}-{iso_match.group(2)}-{iso_match.group(3)}"
+
+    br_match = re.match(r"^(\d{2})/(\d{2})/(\d{4})$", text)
+    if br_match:
+        return f"{br_match.group(3)}-{br_match.group(2)}-{br_match.group(1)}"
+
+    rfc_match = re.match(
+        r"^[A-Za-z]{3},\s*(\d{1,2})\s*([A-Za-z]{3})\s*(\d{4})",
+        text,
+    )
+    if rfc_match:
+        day = int(rfc_match.group(1))
+        month_abbr = rfc_match.group(2).strip().upper()
+        year = int(rfc_match.group(3))
+        month_map = {
+            "JAN": 1,
+            "FEB": 2,
+            "MAR": 3,
+            "APR": 4,
+            "MAY": 5,
+            "JUN": 6,
+            "JUL": 7,
+            "AUG": 8,
+            "SEP": 9,
+            "OCT": 10,
+            "NOV": 11,
+            "DEC": 12,
+        }
+        month = month_map.get(month_abbr)
+        if month:
+            try:
+                return date(year, month, day).strftime("%Y-%m-%d")
+            except ValueError:
+                pass
+
+    return text
 
 
 def get_primary_client_folder(client_id):
@@ -1532,6 +1586,9 @@ def list_clients():
         """, (current_user_id(),))
 
     clients = cursor.fetchall()
+    for client in clients:
+        client["data_nascimento"] = normalize_date_field(client.get("data_nascimento"))
+        client["rg_data_emissao"] = normalize_date_field(client.get("rg_data_emissao"))
 
     cursor.close()
     db.close()
@@ -1717,6 +1774,8 @@ def get_operation_dossier(operation_id):
         SELECT
             o.*,
             c.id AS cliente_id,
+            c.data_nascimento AS cliente_data_nascimento,
+            c.rg_data_emissao AS cliente_rg_data_emissao,
             c.vendedor_id,
             COALESCE(u.nome, '-') AS vendedor_nome,
             COALESCE(d.nome, '-') AS digitador_nome
@@ -1741,6 +1800,16 @@ def get_operation_dossier(operation_id):
         return jsonify({"error": "Acesso nao autorizado"}), 403
 
     operation = hydrate_operation_payload(operation)
+    ficha = operation.get("ficha_portabilidade")
+    if isinstance(ficha, dict):
+        client_birth_date = normalize_date_field(operation.get("cliente_data_nascimento"))
+        if client_birth_date:
+            ficha["data_nascimento"] = client_birth_date
+
+        client_rg_issue_date = normalize_date_field(operation.get("cliente_rg_data_emissao"))
+        if client_rg_issue_date:
+            ficha["data_emissao_rg"] = client_rg_issue_date
+            ficha["data_emissao"] = client_rg_issue_date
 
     documents = list_client_documents_metadata(operation.get("cliente_id"))
 
@@ -2020,6 +2089,9 @@ def get_client(client_id):
 
     if not client:
         return jsonify({"error": "Cliente nÃ£o encontrado"}), 404
+
+    client["data_nascimento"] = normalize_date_field(client.get("data_nascimento"))
+    client["rg_data_emissao"] = normalize_date_field(client.get("rg_data_emissao"))
 
     return jsonify(client), 200
 
