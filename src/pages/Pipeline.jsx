@@ -606,20 +606,71 @@ export default function Pipeline() {
     }
   }
 
-  function getStatusBadge(status) {
-    const normalized = normalizeStatus(status);
+  function getStatusBadge(operation, options = {}) {
+    const { andamentoAtual = "", isSaving = false, canManageFlow = false } = options;
+    const normalized = normalizeStatus(operation?.normalizedStatus || operation?.status);
+    const isAnaliseBanco = normalized === "ANALISE_BANCO";
 
-    switch (normalized) {
-      case "APROVADO":
-        return <span className="statusBadge green">APROVADA</span>;
-      case "REPROVADO":
-        return <span className="statusBadge red">REPROVADA</span>;
-      case "PENDENCIA":
-      case "DEVOLVIDA_VENDEDOR":
-        return <span className="statusBadge blue">{getStatusLabel(normalized)}</span>;
-      default:
-        return <span className="statusBadge yellow">{getStatusLabel(normalized)}</span>;
+    let badgeToneClass = "yellow";
+    if (normalized === "APROVADO") {
+      badgeToneClass = "green";
+    } else if (normalized === "REPROVADO") {
+      badgeToneClass = "red";
+    } else if (normalized === "PENDENCIA" || normalized === "DEVOLVIDA_VENDEDOR") {
+      badgeToneClass = "blue";
     }
+
+    if (!isAnaliseBanco) {
+      const defaultLabel =
+        normalized === "APROVADO"
+          ? "APROVADA"
+          : normalized === "REPROVADO"
+          ? "REPROVADA"
+          : getStatusLabel(normalized);
+
+      return <span className={`statusBadge ${badgeToneClass}`}>{defaultLabel}</span>;
+    }
+
+    const andamentoLabel = andamentoAtual
+      ? getAndamentoLabel(andamentoAtual)
+      : getStatusLabel(normalized);
+
+    return (
+      <div className="statusBadgeWrap">
+        <button
+          type="button"
+          className={`statusBadge ${badgeToneClass} statusBadgeButton`}
+          disabled={isSaving || !canManageFlow}
+          onClick={(event) => {
+            event.stopPropagation();
+            toggleAndamentoMenu(operation.id);
+          }}
+        >
+          {andamentoLabel}
+        </button>
+
+        {openAndamentoMenu[operation.id] && (
+          <div
+            className="statusAndamentoMenu"
+            onClick={(event) => event.stopPropagation()}
+          >
+            {STATUS_ANDAMENTO_OPTIONS.map((option) => (
+              <button
+                key={option.value || "NONE"}
+                type="button"
+                className={`statusAndamentoOption${
+                  option.value === andamentoAtual ? " active" : ""
+                }`}
+                disabled={isSaving || !canManageFlow}
+                onClick={() => handleAndamentoChange(operation, option.value)}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    );
   }
 
   const statusOptions = useMemo(() => {
@@ -1030,42 +1081,11 @@ export default function Pipeline() {
                       <div className="pipelineHint">{operation.banco_digitacao || "-"}</div>
                     </td>
                     <td className="pipelineStatusCell">
-                      {getStatusBadge(operation.normalizedStatus)}
-                      <div className="pipelineProgressField">
-                        <span>Andamento</span>
-                        <button
-                          type="button"
-                          className="pipelineProgressButton"
-                          disabled={isSaving || !canManageFlow}
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            toggleAndamentoMenu(operation.id);
-                          }}
-                        >
-                          {getAndamentoLabel(andamentoAtual)}
-                        </button>
-
-                        {openAndamentoMenu[operation.id] && (
-                          <div
-                            className="pipelineProgressMenu"
-                            onClick={(event) => event.stopPropagation()}
-                          >
-                            {STATUS_ANDAMENTO_OPTIONS.map((option) => (
-                              <button
-                                key={option.value || "NONE"}
-                                type="button"
-                                className={`pipelineProgressOption${
-                                  option.value === andamentoAtual ? " active" : ""
-                                }`}
-                                disabled={isSaving || !canManageFlow}
-                                onClick={() => handleAndamentoChange(operation, option.value)}
-                              >
-                                {option.label}
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                      </div>
+                      {getStatusBadge(operation, {
+                        andamentoAtual,
+                        isSaving,
+                        canManageFlow,
+                      })}
                       {operation.digitador_nome && (
                         <div className="pipelineDigitadorTag">
                           Digitador: {operation.digitador_nome}

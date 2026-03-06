@@ -264,47 +264,30 @@
   min-width: 0;
 }
 
-.pipelineProgressField {
+.statusBadgeWrap {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   gap: 6px;
   width: min(280px, 100%);
-  position: relative;
 }
 
-.pipelineProgressField span {
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--text-secondary);
-  letter-spacing: 0.2px;
-}
-
-.pipelineProgressButton {
-  width: 100%;
-  min-height: 36px;
-  border-radius: 999px;
-  border: 1px solid var(--pipeline-accent-border);
-  background: var(--pipeline-accent-soft);
-  color: var(--text-primary);
-  font-size: 12px;
-  font-weight: 700;
-  padding: 0 14px;
-  text-align: left;
+.statusBadgeButton {
+  border: 0;
   cursor: pointer;
 }
 
-.pipelineProgressButton:focus {
+.statusBadgeButton:focus {
   outline: none;
-  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent);
 }
 
-.pipelineProgressButton:disabled {
+.statusBadgeButton:disabled {
   cursor: not-allowed;
   opacity: 0.72;
 }
 
-.pipelineProgressMenu {
+.statusAndamentoMenu {
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -315,7 +298,7 @@
   background: var(--surface);
 }
 
-.pipelineProgressOption {
+.statusAndamentoOption {
   width: 100%;
   min-height: 34px;
   border-radius: 8px;
@@ -329,11 +312,11 @@
   cursor: pointer;
 }
 
-.pipelineProgressOption:hover {
+.statusAndamentoOption:hover {
   border-color: var(--pipeline-accent-border);
 }
 
-.pipelineProgressOption.active {
+.statusAndamentoOption.active {
   border-color: var(--accent);
   background: var(--pipeline-accent-soft);
 }
