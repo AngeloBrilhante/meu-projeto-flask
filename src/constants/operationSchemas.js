@@ -82,7 +82,7 @@ export const OPERATION_SCHEMAS = {
       {
         title: "Dados bancários",
         fields: [
-          { name: "conta", label: "Conta", required: true },
+          { name: "conta", label: "Banco do cliente", required: true },
           { name: "agencia", label: "Agência", required: true },
           {
             name: "banco",
@@ -179,7 +179,7 @@ export const OPERATION_SCHEMAS = {
         fields: [
           { name: "banco_codigo", label: "Cód banco", required: true },
           { name: "agencia", label: "Agência", required: true },
-          { name: "conta", label: "Conta", required: true },
+          { name: "conta", label: "Banco do cliente", required: true },
           {
             name: "tipo_conta",
             label: "Tipo de conta",
@@ -257,7 +257,7 @@ export const OPERATION_SCHEMAS = {
         fields: [
           { name: "banco_codigo", label: "Cód banco", required: true },
           { name: "agencia", label: "Agência", required: true },
-          { name: "conta", label: "Conta", required: true },
+          { name: "conta", label: "Banco do cliente", required: true },
           {
             name: "tipo_conta",
             label: "Tipo de conta",
