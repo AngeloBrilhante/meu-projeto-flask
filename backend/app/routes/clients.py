@@ -1,10 +1,11 @@
 import json
+import mysql.connector
 import os
 import re
 import unicodedata
 import uuid
 from datetime import date, datetime
-from flask import Blueprint, request, jsonify, send_from_directory, abort
+from flask import Blueprint, request, jsonify, send_from_directory, abort, current_app
 from flask_jwt_extended import jwt_required
 from app.database import get_db
 from app.utils.auth import (
@@ -343,6 +344,7 @@ OPERATION_PROGRESS_LABELS = {
     "ENVIADO_PARA_PAGAMENTO": "Enviado para pagamento",
 }
 OPERATION_PROGRESS_OPTIONS = set(OPERATION_PROGRESS_LABELS.keys())
+DB_CONNECTION_ERROR_CODES = {2006, 2013, 2055}
 
 PORTABILITY_FORM_FIELDS = (
     "titulo_produto",
@@ -1253,6 +1255,21 @@ def to_int(value):
         return int(value or 0)
     except (TypeError, ValueError):
         return 0
+
+
+def is_transient_db_connection_error(error):
+    if not isinstance(error, mysql.connector.Error):
+        return False
+
+    if getattr(error, "errno", None) in DB_CONNECTION_ERROR_CODES:
+        return True
+
+    message = str(error or "").lower()
+    return (
+        "lost connection" in message
+        or "conexao com o servidor mysql perdida" in message
+        or "can't connect to mysql server" in message
+    )
 
 
 def to_number(value):
@@ -4065,10 +4082,12 @@ def list_user_notifications():
     limit = request.args.get("limit", type=int) or 20
     limit = max(1, min(limit, 100))
 
-    db = get_db()
-    cursor = db.cursor(dictionary=True)
+    db = None
+    cursor = None
 
     try:
+        db = get_db()
+        cursor = db.cursor(dictionary=True)
         ensure_operation_notifications_table(cursor, db)
 
         conditions = ["user_id = %s"]
@@ -4125,9 +4144,26 @@ def list_user_notifications():
                 "unread_count": unread_count,
             }
         ), 200
+    except mysql.connector.Error as exc:
+        if is_transient_db_connection_error(exc):
+            current_app.logger.warning(
+                "Falha temporaria ao carregar notificacoes do usuario %s: %s",
+                user_id,
+                exc,
+            )
+            return jsonify(
+                {
+                    "notifications": [],
+                    "unread_count": 0,
+                    "degraded": True,
+                }
+            ), 200
+        raise
     finally:
-        cursor.close()
-        db.close()
+        if cursor is not None:
+            cursor.close()
+        if db is not None:
+            db.close()
 
 
 @clients_bp.route("/notifications/unread-count", methods=["GET"])
@@ -4135,10 +4171,12 @@ def list_user_notifications():
 def get_user_notifications_unread_count():
     user_id = current_user_id()
 
-    db = get_db()
-    cursor = db.cursor(dictionary=True)
+    db = None
+    cursor = None
 
     try:
+        db = get_db()
+        cursor = db.cursor(dictionary=True)
         ensure_operation_notifications_table(cursor, db)
         cursor.execute(
             """
@@ -4156,9 +4194,20 @@ def get_user_notifications_unread_count():
                 "unread_count": unread_count,
             }
         ), 200
+    except mysql.connector.Error as exc:
+        if is_transient_db_connection_error(exc):
+            current_app.logger.warning(
+                "Falha temporaria ao contar notificacoes do usuario %s: %s",
+                user_id,
+                exc,
+            )
+            return jsonify({"unread_count": 0, "degraded": True}), 200
+        raise
     finally:
-        cursor.close()
-        db.close()
+        if cursor is not None:
+            cursor.close()
+        if db is not None:
+            db.close()
 
 
 @clients_bp.route("/notifications/<int:notification_id>/read", methods=["PUT"])
@@ -4254,10 +4303,12 @@ def get_dashboard_notifications():
     else:
         return jsonify({"error": "Acesso restrito"}), 403
 
-    db = get_db()
-    cursor = db.cursor(dictionary=True)
+    db = None
+    cursor = None
 
     try:
+        db = get_db()
+        cursor = db.cursor(dictionary=True)
         active_status_placeholders = ", ".join(
             ["%s"] * len(PIPELINE_ACTIVE_STATUSES_WITH_LEGACY)
         )
@@ -4295,6 +4346,23 @@ def get_dashboard_notifications():
                 "has_pipeline": pipeline_count > 0,
             }
         ), 200
+    except mysql.connector.Error as exc:
+        if is_transient_db_connection_error(exc):
+            current_app.logger.warning(
+                "Falha temporaria ao carregar resumo de notificacoes do dashboard para role %s: %s",
+                role,
+                exc,
+            )
+            return jsonify(
+                {
+                    "pipeline_count": 0,
+                    "has_pipeline": False,
+                    "degraded": True,
+                }
+            ), 200
+        raise
     finally:
-        cursor.close()
-        db.close()
+        if cursor is not None:
+            cursor.close()
+        if db is not None:
+            db.close()
