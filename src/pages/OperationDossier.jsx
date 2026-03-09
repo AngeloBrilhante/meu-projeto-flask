@@ -13,6 +13,10 @@ function formatStatus(status) {
 }
 
 function resolveFichaFieldValue(fieldName, fichaValue, operation) {
+  if (fieldName === "vendedor_nome") {
+    return operation?.vendedor_nome || fichaValue;
+  }
+
   const text = String(fichaValue ?? "").trim();
   if (text) return fichaValue;
 

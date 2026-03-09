@@ -352,7 +352,7 @@ export function buildOperationFichaDefaults(product, client, user, seed = {}) {
   const normalizedSeedBank = normalizeBankValue(seed.banco_digitacao);
 
   return {
-    vendedor_nome: user?.nome || "",
+    vendedor_nome: client?.vendedor_nome || user?.nome || "",
     banco_nome: normalizedSeedBank,
     banco_para_digitar: normalizedSeedBank,
     banco: "",
@@ -368,7 +368,7 @@ export function buildOperationFichaDefaults(product, client, user, seed = {}) {
     data_emissao_rg: parseDateForInput(client?.rg_data_emissao),
     nome_mae: client?.nome_mae || "",
     telefone: client?.telefone || "",
-    email: user?.email || "",
+    email: client?.email || "",
     naturalidade: client?.naturalidade || "",
     rg_uf: client?.rg_uf || "",
     rg_orgao_exp: client?.rg_orgao_exp || "",
@@ -394,9 +394,29 @@ export function mergeOperationFicha(product, client, user, currentPayload, seed 
 
   schemaFieldNames(schema).forEach((name) => {
     const value = current[name] ?? defaults[name] ?? "";
+    if (name === "vendedor_nome") {
+      merged[name] = defaults[name] || value;
+      return;
+    }
     if (name === "banco_nome" || name === "banco_para_digitar") {
       merged[name] = normalizeBankValue(value);
       return;
+    }
+    if (name === "email") {
+      const currentEmail = String(current[name] || "").trim().toLowerCase();
+      const clientEmail = String(defaults[name] || "").trim().toLowerCase();
+      const sellerEmail = String(user?.email || "").trim().toLowerCase();
+
+      if (!currentEmail) {
+        merged[name] = defaults[name] || "";
+        return;
+      }
+
+      // Corrects old payloads that were seeded with the seller e-mail.
+      if (clientEmail && currentEmail === sellerEmail && clientEmail !== sellerEmail) {
+        merged[name] = defaults[name] || "";
+        return;
+      }
     }
     merged[name] = value;
   });

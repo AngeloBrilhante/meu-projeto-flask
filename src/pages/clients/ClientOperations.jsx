@@ -396,15 +396,16 @@ export default function ClientOperations() {
                               </option>
                             ))}
                           </select>
-                        ) : (
-                          <input
-                            type={field.type || "text"}
-                            name={field.name}
-                            value={value}
-                            inputMode={field.inputMode}
-                            min={field.type === "number" ? field.min : undefined}
-                            step={field.type === "number" ? field.step : undefined}
-                            pattern={field.decimalFlexible ? "[0-9.,\\s-]*" : undefined}
+	                        ) : (
+	                          <input
+	                            type={field.type || "text"}
+	                            name={field.name}
+	                            value={value}
+	                            readOnly={field.name === "vendedor_nome"}
+	                            inputMode={field.inputMode}
+	                            min={field.type === "number" ? field.min : undefined}
+	                            step={field.type === "number" ? field.step : undefined}
+	                            pattern={field.decimalFlexible ? "[0-9.,\\s-]*" : undefined}
                             placeholder={field.placeholder}
                             required={field.required}
                             onChange={handleFichaChange}

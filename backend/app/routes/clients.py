@@ -2177,7 +2177,14 @@ def get_client(client_id):
     ensure_clients_extra_columns(cursor, db)
 
     cursor.execute(
-        "SELECT * FROM clientes WHERE id = %s",
+        """
+        SELECT
+            c.*,
+            COALESCE(u.nome, '-') AS vendedor_nome
+        FROM clientes c
+        LEFT JOIN usuarios u ON u.id = c.vendedor_id
+        WHERE c.id = %s
+        """,
         (client_id,)
     )
 
