@@ -42,8 +42,11 @@ const STATUS_ANDAMENTO_LABELS = {
   AGUARDANDO_SALDO: "Aguardando saldo",
   ANALISE_DE_CREDITO: "Analise de credito",
   ANALISE_DOCUMENTAL: "Analise documental",
+  ANALISE_DE_SELFIE: "Analise de selfie",
+  ANALISE_DE_FORMALIZACAO: "Analise de formalizacao",
   BENEFICIO_BLOQUEADO: "Beneficio bloqueado",
   AGUARDANDO_LIBERACAO_DA_PROMOTORA: "Aguardando liberacao da promotora",
+  ENVIADO_PARA_PAGAMENTO: "Enviado para pagamento",
 };
 
 const LEGACY_STATUS_MAP = {

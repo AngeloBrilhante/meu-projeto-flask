@@ -69,10 +69,19 @@ const STATUS_ANDAMENTO_OPTIONS = [
   { value: "AGUARDANDO_SALDO", label: "Aguardando saldo" },
   { value: "ANALISE_DE_CREDITO", label: "Analise de credito" },
   { value: "ANALISE_DOCUMENTAL", label: "Analise documental" },
+  { value: "ANALISE_DE_SELFIE", label: "Analise de selfie" },
+  {
+    value: "ANALISE_DE_FORMALIZACAO",
+    label: "Analise de formalizacao",
+  },
   { value: "BENEFICIO_BLOQUEADO", label: "Beneficio bloqueado" },
   {
     value: "AGUARDANDO_LIBERACAO_DA_PROMOTORA",
     label: "Aguardando liberacao da promotora",
+  },
+  {
+    value: "ENVIADO_PARA_PAGAMENTO",
+    label: "Enviado para pagamento",
   },
 ];
 
