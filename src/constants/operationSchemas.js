@@ -177,9 +177,15 @@ export const OPERATION_SCHEMAS = {
       {
         title: "Dados bancários",
         fields: [
-          { name: "banco_codigo", label: "Cód banco", required: true },
-          { name: "agencia", label: "Agência", required: true },
           { name: "conta", label: "Banco do cliente", required: true },
+          { name: "agencia", label: "Agência", required: true },
+          {
+            name: "banco",
+            label: "Nº da conta do cliente",
+            required: true,
+            inputMode: "numeric",
+            placeholder: "Ex: 12345-6",
+          },
           {
             name: "tipo_conta",
             label: "Tipo de conta",
@@ -255,9 +261,15 @@ export const OPERATION_SCHEMAS = {
       {
         title: "Dados bancários",
         fields: [
-          { name: "banco_codigo", label: "Cód banco", required: true },
-          { name: "agencia", label: "Agência", required: true },
           { name: "conta", label: "Banco do cliente", required: true },
+          { name: "agencia", label: "Agência", required: true },
+          {
+            name: "banco",
+            label: "Nº da conta do cliente",
+            required: true,
+            inputMode: "numeric",
+            placeholder: "Ex: 12345-6",
+          },
           {
             name: "tipo_conta",
             label: "Tipo de conta",
@@ -290,18 +302,43 @@ export function getOperationSchema(product) {
   return OPERATION_SCHEMAS[toUpperProduct(product)] || null;
 }
 
-export function parseOperationFicha(payload) {
+export function parseOperationFicha(payload, product = "") {
   if (!payload) return {};
 
   if (typeof payload === "string") {
     try {
-      return JSON.parse(payload) || {};
+      return normalizeLegacyBankingFields(product, JSON.parse(payload) || {});
     } catch {
       return {};
     }
   }
 
-  return typeof payload === "object" ? payload : {};
+  return typeof payload === "object"
+    ? normalizeLegacyBankingFields(product, payload)
+    : {};
+}
+
+function normalizeLegacyBankingFields(product, payload) {
+  const upperProduct = toUpperProduct(product);
+  if (upperProduct !== "NOVO" && upperProduct !== "CARTAO") {
+    return payload;
+  }
+
+  if (!payload || typeof payload !== "object") {
+    return payload;
+  }
+
+  const legacyBankCode = String(payload.banco_codigo || "").trim();
+  const accountNumber = String(payload.banco || "").trim();
+  if (!legacyBankCode || accountNumber) {
+    return payload;
+  }
+
+  return {
+    ...payload,
+    banco: String(payload.conta || "").trim(),
+    conta: "",
+  };
 }
 
 export function schemaFieldNames(schema) {
@@ -389,7 +426,7 @@ export function mergeOperationFicha(product, client, user, currentPayload, seed 
   if (!schema) return {};
 
   const defaults = buildOperationFichaDefaults(product, client, user, seed);
-  const current = parseOperationFicha(currentPayload);
+  const current = parseOperationFicha(currentPayload, product);
   const merged = {};
 
   schemaFieldNames(schema).forEach((name) => {
@@ -428,7 +465,7 @@ export function sanitizeOperationFicha(product, payload) {
   const schema = getOperationSchema(product);
   if (!schema) return null;
 
-  const source = parseOperationFicha(payload);
+  const source = parseOperationFicha(payload, product);
   const result = {};
   let hasValue = false;
 

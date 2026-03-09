@@ -41,7 +41,7 @@ export default function OperationDossier() {
   const operation = payload?.operation || null;
   const documents = Array.isArray(payload?.documents) ? payload.documents : [];
   const schema = getOperationSchema(operation?.produto);
-  const ficha = parseOperationFicha(operation?.ficha_portabilidade);
+  const ficha = parseOperationFicha(operation?.ficha_portabilidade, operation?.produto);
 
   const fallbackFichaEntries = useMemo(() => {
     if (schema) return [];
