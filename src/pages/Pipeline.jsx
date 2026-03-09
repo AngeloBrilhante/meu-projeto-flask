@@ -526,15 +526,30 @@ export default function Pipeline() {
 
     try {
       setSavingOperationId(operation.id);
-      await updateOperation(operation.id, {
+      const response = await updateOperation(operation.id, {
         status_andamento: normalizedAndamento,
       });
+      const updatedOperation = response?.operation || null;
+
+      setOperations((prev) =>
+        prev.map((item) =>
+          item.id === operation.id
+            ? {
+                ...item,
+                ...(updatedOperation || {}),
+                status_andamento:
+                  updatedOperation?.status_andamento ?? normalizedAndamento ?? "",
+              }
+            : item
+        )
+      );
 
       setDrafts((prev) => ({
         ...prev,
         [operation.id]: {
           ...(prev[operation.id] || toDraft(operation)),
-          status_andamento: normalizedAndamento,
+          status_andamento:
+            updatedOperation?.status_andamento ?? normalizedAndamento ?? "",
         },
       }));
 
@@ -1053,7 +1068,9 @@ export default function Pipeline() {
                   operation.normalizedStatus
                 );
                 const andamentoAtual = normalizeAndamentoStatus(
-                  draft.status_andamento || operation.status_andamento
+                  Object.prototype.hasOwnProperty.call(draft, "status_andamento")
+                    ? draft.status_andamento
+                    : operation.status_andamento
                 );
 
                 return (
