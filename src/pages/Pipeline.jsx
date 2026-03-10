@@ -118,6 +118,15 @@ function getAndamentoLabel(status) {
   return STATUS_ANDAMENTO_LABELS[normalized] || normalized.replaceAll("_", " ");
 }
 
+function usesProposalLabels(product) {
+  const normalized = String(product || "").trim().toUpperCase();
+  return (
+    normalized === "PORTABILIDADE" ||
+    normalized === "PORTABILIDADE_REFIN" ||
+    normalized === "REFINANCIAMENTO"
+  );
+}
+
 function toDraft(operation) {
   return {
     link_formalizacao: operation.link_formalizacao || "",
@@ -1081,6 +1090,9 @@ export default function Pipeline() {
                     ? draft.status_andamento
                     : operation.status_andamento
                 );
+                const useProposalLabels = usesProposalLabels(operation.produto);
+                const valorLabel = useProposalLabels ? "Valor da proposta" : "Valor liberado";
+                const parcelaLabel = useProposalLabels ? "Parcela" : "Parcela liberada";
 
                 return (
                   <tr
@@ -1126,11 +1138,11 @@ export default function Pipeline() {
                             <strong>{draft.numero_proposta || "-"}</strong>
                           </div>
                           <div className="formalizacaoSummaryItem">
-                            <span>Valor liberado</span>
+                            <span>{valorLabel}</span>
                             <strong>{formatCurrency(draft.valor_liberado)}</strong>
                           </div>
                           <div className="formalizacaoSummaryItem">
-                            <span>Parcela liberada</span>
+                            <span>{parcelaLabel}</span>
                             <strong>{formatCurrency(draft.parcela_liberada)}</strong>
                           </div>
                           <div className="formalizacaoSummaryItem">
@@ -1184,7 +1196,7 @@ export default function Pipeline() {
                               min="0"
                               step="0.01"
                               className="proposalInput"
-                              placeholder="Valor liberado"
+                              placeholder={valorLabel}
                               value={draft.valor_liberado}
                               onChange={(event) =>
                                 handleDraftChange(
@@ -1199,7 +1211,7 @@ export default function Pipeline() {
                               min="0"
                               step="0.01"
                               className="proposalInput"
-                              placeholder="Parcela liberada"
+                              placeholder={parcelaLabel}
                               value={draft.parcela_liberada}
                               onChange={(event) =>
                                 handleDraftChange(
