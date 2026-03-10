@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { getOperationsReport } from "../services/api";
+import { DATE_INPUT_PLACEHOLDER, normalizeDateInputValue } from "../utils/date";
 import "./OperationsReport.css";
 
 const INITIAL_FILTERS = {
@@ -94,7 +95,13 @@ export default function OperationsReport() {
 
   function handleChange(event) {
     const { name, value } = event.target;
-    setFilters((prev) => ({ ...prev, [name]: value }));
+    setFilters((prev) => ({
+      ...prev,
+      [name]:
+        name === "date_from" || name === "date_to"
+          ? normalizeDateInputValue(value)
+          : value,
+    }));
   }
 
   function handleSubmit(event) {
@@ -225,17 +232,21 @@ export default function OperationsReport() {
         )}
 
         <input
-          type="date"
+          type="text"
           name="date_from"
           value={filters.date_from}
           onChange={handleChange}
+          inputMode="numeric"
+          placeholder={DATE_INPUT_PLACEHOLDER}
         />
 
         <input
-          type="date"
+          type="text"
           name="date_to"
           value={filters.date_to}
           onChange={handleChange}
+          inputMode="numeric"
+          placeholder={DATE_INPUT_PLACEHOLDER}
         />
 
         <button type="submit" className="primaryButton" disabled={loading}>

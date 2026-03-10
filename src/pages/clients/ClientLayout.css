@@ -119,6 +119,32 @@
   color: var(--text-secondary);
 }
 
+.clientDataGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.clientDataGrid article {
+  background: var(--surface-strong);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 10px;
+}
+
+.clientDataGrid span {
+  display: block;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.clientDataGrid strong {
+  display: block;
+  margin-top: 4px;
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
 .documentsUploadForm {
   background: var(--surface-strong);
   border: 1px solid var(--border-color);
@@ -708,6 +734,7 @@
 
 @media (max-width: 1100px) {
   .clientInfoGrid,
+  .clientDataGrid,
   .documentsUploadGrid,
   .operationsGrid,
   .operationFichaGrid,
@@ -722,6 +749,7 @@
 
 @media (max-width: 760px) {
   .clientInfoGrid,
+  .clientDataGrid,
   .documentsUploadGrid,
   .operationsGrid,
   .operationFichaGrid,

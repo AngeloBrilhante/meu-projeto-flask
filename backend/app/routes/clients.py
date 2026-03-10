@@ -364,6 +364,7 @@ PORTABILITY_FORM_FIELDS = (
     "nome_mae",
     "telefone",
     "email",
+    "analfabeto",
     "naturalidade",
     "rg_uf",
     "rg_orgao_exp",
@@ -615,6 +616,53 @@ def normalize_optional_email(value):
     return email
 
 
+def parse_flexible_decimal(value):
+    if value is None:
+        raise ValueError("valor ausente")
+
+    if isinstance(value, (int, float)):
+        return float(value)
+
+    text = str(value).strip()
+    if not text:
+        raise ValueError("valor vazio")
+
+    cleaned = re.sub(r"[^\d,.\-\s]", "", text).replace(" ", "")
+    if not cleaned:
+        raise ValueError("valor invalido")
+
+    last_comma = cleaned.rfind(",")
+    last_dot = cleaned.rfind(".")
+    decimal_index = max(last_comma, last_dot)
+
+    sign = "-" if cleaned.startswith("-") else ""
+    unsigned = cleaned[1:] if sign else cleaned
+    decimal_index_unsigned = decimal_index - (1 if sign else 0)
+
+    if decimal_index_unsigned >= 0:
+        integer_part = re.sub(r"[.,]", "", unsigned[:decimal_index_unsigned])
+        decimal_part = re.sub(r"[.,]", "", unsigned[decimal_index_unsigned + 1 :])
+        normalized = (
+            f"{sign}{integer_part or '0'}.{decimal_part}"
+            if decimal_part
+            else f"{sign}{integer_part or '0'}"
+        )
+    else:
+        normalized = cleaned.replace(",", ".")
+
+    return float(normalized)
+
+
+def normalize_optional_boolean(value):
+    if value in (None, "", []):
+        return False
+    if isinstance(value, bool):
+        return value
+
+    text = str(value).strip().lower()
+    return text in {"1", "true", "sim", "yes", "on"}
+
+
 def ensure_dashboard_goals_table(cursor, db):
     cursor.execute(
         """
@@ -643,13 +691,14 @@ def ensure_clients_extra_columns(cursor, db):
         FROM INFORMATION_SCHEMA.COLUMNS
         WHERE TABLE_SCHEMA = DATABASE()
           AND TABLE_NAME = 'clientes'
-          AND COLUMN_NAME IN ('email')
+          AND COLUMN_NAME IN ('email', 'analfabeto')
         """
     )
 
     existing = {row["COLUMN_NAME"]: row for row in cursor.fetchall()}
     changed = False
     email_column = existing.get("email")
+    analfabeto_column = existing.get("analfabeto")
 
     if not email_column:
         cursor.execute(
@@ -661,6 +710,19 @@ def ensure_clients_extra_columns(cursor, db):
         email_len = email_column.get("CHARACTER_MAXIMUM_LENGTH") or 0
         if email_type != "varchar" or email_len < 180:
             cursor.execute("ALTER TABLE clientes MODIFY COLUMN email VARCHAR(180) NULL")
+            changed = True
+
+    if not analfabeto_column:
+        cursor.execute(
+            "ALTER TABLE clientes ADD COLUMN analfabeto TINYINT(1) NOT NULL DEFAULT 0 AFTER email"
+        )
+        changed = True
+    else:
+        analfabeto_type = str(analfabeto_column.get("DATA_TYPE") or "").lower()
+        if analfabeto_type not in {"tinyint", "bit", "boolean"}:
+            cursor.execute(
+                "ALTER TABLE clientes MODIFY COLUMN analfabeto TINYINT(1) NOT NULL DEFAULT 0"
+            )
             changed = True
 
     if changed:
@@ -1374,7 +1436,7 @@ def create_client():
         }), 400
 
     try:
-        salario = float(str(data.get("salario")).replace(",", "."))
+        salario = parse_flexible_decimal(data.get("salario"))
     except (TypeError, ValueError):
         return jsonify({"error": "salario invalido"}), 400
 
@@ -1412,6 +1474,7 @@ def create_client():
         email = normalize_optional_email(data.get("email"))
     except ValueError:
         return jsonify({"error": "email invalido"}), 400
+    analfabeto = 1 if normalize_optional_boolean(data.get("analfabeto")) else 0
     rua = normalize_text(data.get("rua"))
     numero = normalize_text(data.get("numero"))
     bairro = normalize_text(data.get("bairro"))
@@ -1456,6 +1519,7 @@ def create_client():
             "naturalidade",
             "telefone",
             "email",
+            "analfabeto",
             "cep",
         ]
         missing_base_columns = [
@@ -1528,6 +1592,7 @@ def create_client():
             naturalidade,
             telefone,
             email or None,
+            analfabeto,
             cep,
             *address_values,
         ]
@@ -1705,6 +1770,7 @@ def list_clients():
     for client in clients:
         client["data_nascimento"] = normalize_date_field(client.get("data_nascimento"))
         client["rg_data_emissao"] = normalize_date_field(client.get("rg_data_emissao"))
+        client["analfabeto"] = bool(to_int(client.get("analfabeto")))
 
     cursor.close()
     db.close()
@@ -1892,6 +1958,7 @@ def get_operation_dossier(operation_id):
             c.id AS cliente_id,
             c.data_nascimento AS cliente_data_nascimento,
             c.rg_data_emissao AS cliente_rg_data_emissao,
+            c.analfabeto AS cliente_analfabeto,
             c.vendedor_id,
             COALESCE(u.nome, '-') AS vendedor_nome,
             COALESCE(d.nome, '-') AS digitador_nome
@@ -1926,6 +1993,8 @@ def get_operation_dossier(operation_id):
         if client_rg_issue_date:
             ficha["data_emissao_rg"] = client_rg_issue_date
             ficha["data_emissao"] = client_rg_issue_date
+        if to_int(operation.get("cliente_analfabeto")):
+            ficha["analfabeto"] = "Sim"
 
     documents = list_client_documents_metadata(operation.get("cliente_id"))
 
@@ -2215,6 +2284,7 @@ def get_client(client_id):
 
     client["data_nascimento"] = normalize_date_field(client.get("data_nascimento"))
     client["rg_data_emissao"] = normalize_date_field(client.get("rg_data_emissao"))
+    client["analfabeto"] = bool(to_int(client.get("analfabeto")))
 
     return jsonify(client), 200
 
@@ -3392,9 +3462,11 @@ def get_operations_report():
 
     try:
         if date_from:
-            parsed_from = datetime.strptime(date_from, "%Y-%m-%d")
+            parsed_from = datetime.strptime(normalize_date_text(date_from), "%Y-%m-%d")
+            date_from = parsed_from.strftime("%Y-%m-%d")
         if date_to:
-            parsed_to = datetime.strptime(date_to, "%Y-%m-%d")
+            parsed_to = datetime.strptime(normalize_date_text(date_to), "%Y-%m-%d")
+            date_to = parsed_to.strftime("%Y-%m-%d")
     except ValueError:
         return jsonify({"error": "Formato de data invÃ¡lido. Use YYYY-MM-DD."}), 400
 

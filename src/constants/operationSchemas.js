@@ -73,7 +73,8 @@ export const OPERATION_SCHEMAS = {
           { name: "data_emissao", label: "Data emissão", type: "date" },
           { name: "nome_mae", label: "Nome da mãe", required: true },
           { name: "telefone", label: "Telefone", required: true },
-          { name: "email", label: "E-mail", type: "email" },
+          { name: "email", label: "E-mail (opcional)", type: "email" },
+          { name: "analfabeto", label: "Analfabeto", readOnly: true, hideWhenEmpty: true },
           { name: "cep", label: "CEP", required: true },
           { name: "endereco", label: "Endereço", required: true },
           { name: "bairro", label: "Bairro", required: true },
@@ -158,6 +159,7 @@ export const OPERATION_SCHEMAS = {
           { name: "numero_beneficio", label: "Número do benefício", required: true },
           { name: "telefone", label: "Telefone", required: true },
           { name: "nome_mae", label: "Nome da mãe", required: true },
+          { name: "analfabeto", label: "Analfabeto", readOnly: true, hideWhenEmpty: true },
           { name: "rg", label: "Número do RG", required: true },
           { name: "naturalidade", label: "Naturalidade", required: true },
           { name: "rg_uf", label: "UF", required: true },
@@ -242,6 +244,7 @@ export const OPERATION_SCHEMAS = {
           { name: "numero_beneficio", label: "Número do benefício", required: true },
           { name: "telefone", label: "Telefone", required: true },
           { name: "nome_mae", label: "Nome da mãe", required: true },
+          { name: "analfabeto", label: "Analfabeto", readOnly: true, hideWhenEmpty: true },
           { name: "rg", label: "Número do RG", required: true },
           { name: "naturalidade", label: "Naturalidade", required: true },
           { name: "rg_uf", label: "UF", required: true },
@@ -307,18 +310,18 @@ export function parseOperationFicha(payload, product = "") {
 
   if (typeof payload === "string") {
     try {
-      return normalizeLegacyBankingFields(product, JSON.parse(payload) || {});
+      return normalizeLegacyOperationFields(product, JSON.parse(payload) || {});
     } catch {
       return {};
     }
   }
 
   return typeof payload === "object"
-    ? normalizeLegacyBankingFields(product, payload)
+    ? normalizeLegacyOperationFields(product, payload)
     : {};
 }
 
-function normalizeLegacyBankingFields(product, payload) {
+function normalizeLegacyOperationFields(product, payload) {
   const upperProduct = toUpperProduct(product);
   if (upperProduct !== "NOVO" && upperProduct !== "CARTAO") {
     return payload;
@@ -328,17 +331,23 @@ function normalizeLegacyBankingFields(product, payload) {
     return payload;
   }
 
+  const normalized = { ...payload };
   const legacyBankCode = String(payload.banco_codigo || "").trim();
   const accountNumber = String(payload.banco || "").trim();
-  if (!legacyBankCode || accountNumber) {
-    return payload;
+
+  if (legacyBankCode && !accountNumber) {
+    normalized.banco = String(payload.conta || "").trim();
+    normalized.conta = "";
   }
 
-  return {
-    ...payload,
-    banco: String(payload.conta || "").trim(),
-    conta: "",
-  };
+  if (
+    upperProduct === "CARTAO" &&
+    String(normalized.titulo_produto || "").trim().toUpperCase() === "CARTAO RCC AMIGOZ"
+  ) {
+    normalized.titulo_produto = "CARTAO RCC";
+  }
+
+  return normalized;
 }
 
 export function schemaFieldNames(schema) {
@@ -393,7 +402,7 @@ export function buildOperationFichaDefaults(product, client, user, seed = {}) {
     banco_nome: normalizedSeedBank,
     banco_para_digitar: normalizedSeedBank,
     banco: "",
-    titulo_produto: upperProduct === "CARTAO" ? "CARTAO RCC AMIGOZ" : "",
+    titulo_produto: upperProduct === "CARTAO" ? "CARTAO RCC" : "",
     cliente_nome: client?.nome || "",
     especie: client?.especie || "",
     uf_beneficio: client?.uf_beneficio || "",
@@ -406,6 +415,7 @@ export function buildOperationFichaDefaults(product, client, user, seed = {}) {
     nome_mae: client?.nome_mae || "",
     telefone: client?.telefone || "",
     email: client?.email || "",
+    analfabeto: client?.analfabeto ? "Sim" : "",
     naturalidade: client?.naturalidade || "",
     rg_uf: client?.rg_uf || "",
     rg_orgao_exp: client?.rg_orgao_exp || "",

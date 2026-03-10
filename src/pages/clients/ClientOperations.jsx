@@ -6,6 +6,7 @@ import {
   hasOperationFicha,
   mergeOperationFicha,
 } from "../../constants/operationSchemas";
+import { DATE_INPUT_PLACEHOLDER, normalizeDateInputValue } from "../../utils/date";
 import {
   createOperation,
   deleteOperation,
@@ -368,6 +369,9 @@ export default function ClientOperations() {
                 <div className="operationFichaGrid">
                   {group.fields.map((field) => {
                     const value = form.ficha_portabilidade?.[field.name] ?? "";
+                    if (field.hideWhenEmpty && !String(value || "").trim()) {
+                      return null;
+                    }
                     const hasEmptyOption = Array.isArray(field.options)
                       ? field.options.some((option) => option.value === "")
                       : false;
@@ -396,21 +400,38 @@ export default function ClientOperations() {
                               </option>
                             ))}
                           </select>
-	                        ) : (
-	                          <input
-	                            type={field.type || "text"}
-	                            name={field.name}
-	                            value={value}
-	                            readOnly={field.name === "vendedor_nome"}
-	                            inputMode={field.inputMode}
-	                            min={field.type === "number" ? field.min : undefined}
-	                            step={field.type === "number" ? field.step : undefined}
-	                            pattern={field.decimalFlexible ? "[0-9.,\\s-]*" : undefined}
-                            placeholder={field.placeholder}
-                            required={field.required}
-                            onChange={handleFichaChange}
-                          />
-                        )}
+		                        ) : (
+		                          <input
+		                            type={field.type === "date" ? "text" : field.type || "text"}
+		                            name={field.name}
+		                            value={value}
+		                            readOnly={field.readOnly || field.name === "vendedor_nome"}
+		                            inputMode={
+                                  field.type === "date"
+                                    ? "numeric"
+                                    : field.inputMode
+                                }
+		                            min={field.type === "number" ? field.min : undefined}
+		                            step={field.type === "number" ? field.step : undefined}
+		                            pattern={field.decimalFlexible ? "[0-9.,\\s-]*" : undefined}
+	                            placeholder={
+                                  field.placeholder ||
+                                  (field.type === "date" ? DATE_INPUT_PLACEHOLDER : undefined)
+                                }
+		                            required={field.required}
+			                            onChange={(event) =>
+                                  handleFichaChange({
+                                    target: {
+                                      name: field.name,
+                                      value:
+                                        field.type === "date"
+                                          ? normalizeDateInputValue(event.target.value)
+                                          : event.target.value,
+                                    },
+                                  })
+                                }
+		                          />
+		                        )}
                       </label>
                     );
                   })}

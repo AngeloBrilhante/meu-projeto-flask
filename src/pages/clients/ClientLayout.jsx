@@ -83,10 +83,18 @@ export default function ClientLayout() {
         </div>
       </header>
 
-      <div className="clientTabs">
-        <button
-          type="button"
-          className={isActive("documentos") ? "clientTabButton active" : "clientTabButton"}
+	      <div className="clientTabs">
+	        <button
+	          type="button"
+	          className={isActive("dados") ? "clientTabButton active" : "clientTabButton"}
+	          onClick={() => navigate("dados")}
+	        >
+	          Dados
+	        </button>
+
+	        <button
+	          type="button"
+	          className={isActive("documentos") ? "clientTabButton active" : "clientTabButton"}
           onClick={() => navigate("documentos")}
         >
           Documentos

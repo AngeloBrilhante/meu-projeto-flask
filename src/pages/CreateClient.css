@@ -43,6 +43,10 @@
   color: var(--text-secondary);
 }
 
+.createCheckboxField {
+  justify-content: flex-end;
+}
+
 .createField input,
 .createField select {
   height: 40px;
@@ -51,6 +55,30 @@
   background: var(--surface-strong);
   color: var(--text-primary);
   padding: 0 10px;
+}
+
+.createCheckboxControl {
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: var(--surface-strong);
+  color: var(--text-primary);
+  padding: 0 12px;
+}
+
+.createCheckboxControl input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.createCheckboxControl span {
+  font-size: 14px;
+  color: var(--text-primary);
 }
 
 .createField input:focus,

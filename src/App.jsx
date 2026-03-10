@@ -7,6 +7,7 @@ import Clients from "./pages/Clients";
 import CreateClient from "./pages/CreateClient";
 
 import ClientLayout from "./pages/clients/ClientLayout";
+import ClientData from "./pages/clients/ClientData";
 import ClientDocuments from "./pages/clients/ClientDocuments";
 import ClientOperations from "./pages/clients/ClientOperations";
 import ClientComments from "./pages/clients/ClientComments";
@@ -48,10 +49,11 @@ export default function App() {
           {/* CLIENTE COM SUB-ROTAS */}
           <Route path="/clients/:id" element={<ClientLayout />}>
 
-            {/* Aba padrão */}
-            <Route index element={<ClientDocuments />} />
+	            {/* Aba padrão */}
+	            <Route index element={<ClientDocuments />} />
 
-            <Route path="documentos" element={<ClientDocuments />} />
+	            <Route path="dados" element={<ClientData />} />
+	            <Route path="documentos" element={<ClientDocuments />} />
             <Route path="operacoes" element={<ClientOperations />} />
             <Route path="comentarios" element={<ClientComments />} />
             <Route path="status" element={<Navigate to="../comentarios" replace />} />

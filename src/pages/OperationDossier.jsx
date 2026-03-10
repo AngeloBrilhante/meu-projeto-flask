@@ -123,22 +123,30 @@ export default function OperationDossier() {
             <div className="operationDossierFicha">
               {schema.groups.map((group) => (
                 <div key={group.title} className="operationDossierGroup">
-                  <h3>{group.title}</h3>
-                  <div className="operationDossierGrid">
-                    {group.fields.map((field) => (
-                      <article key={field.name}>
-                        <span>{field.label}</span>
-                        <strong>
-                          {formatOperationFichaValue(
-                            resolveFichaFieldValue(field.name, ficha[field.name], operation),
-                            field.type
-                          )}
-                        </strong>
-                      </article>
-                    ))}
-                  </div>
-                </div>
-              ))}
+	                  <h3>{group.title}</h3>
+	                  <div className="operationDossierGrid">
+	                    {group.fields.map((field) => {
+                        const resolvedValue = resolveFichaFieldValue(
+                          field.name,
+                          ficha[field.name],
+                          operation
+                        );
+                        if (field.hideWhenEmpty && !String(resolvedValue || "").trim()) {
+                          return null;
+                        }
+
+                        return (
+	                      <article key={field.name}>
+	                        <span>{field.label}</span>
+	                        <strong>
+	                          {formatOperationFichaValue(resolvedValue, field.type)}
+	                        </strong>
+	                      </article>
+                        );
+                      })}
+	                  </div>
+	                </div>
+	              ))}
             </div>
           ) : fallbackFichaEntries.length > 0 ? (
             <div className="operationDossierGroup">

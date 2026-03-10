@@ -5,6 +5,7 @@ import {
   getPipeline,
   updateOperation,
 } from "../services/api";
+import { DATE_INPUT_PLACEHOLDER, normalizeDateInputValue, parseDateFilterBoundary } from "../utils/date";
 import "./Pipeline.css";
 
 const STATUS_LABELS = {
@@ -94,6 +95,7 @@ const STATUS_ANDAMENTO_LABELS = STATUS_ANDAMENTO_OPTIONS.reduce((acc, option) =>
 
 const FIVE_HOURS_MS = 5 * 60 * 60 * 1000;
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+const READY_PIPELINE_STATUSES = new Set(["PRONTA_DIGITAR", "EM_DIGITACAO"]);
 
 function normalizeStatus(status) {
   const normalized = String(status || "").trim().toUpperCase();
@@ -709,9 +711,9 @@ export default function Pipeline() {
   const statusOptions = useMemo(() => {
     return Object.entries(STATUS_LABELS).filter(([status]) => {
       if (pipelineView === PIPELINE_VIEW_OPTIONS.READY) {
-        return status === "PRONTA_DIGITAR";
+        return READY_PIPELINE_STATUSES.has(status);
       }
-      return status !== "PRONTA_DIGITAR";
+      return !READY_PIPELINE_STATUSES.has(status);
     });
   }, [pipelineView]);
 
@@ -726,21 +728,21 @@ export default function Pipeline() {
   const scopedOperations = useMemo(() => {
     return operationsWithMeta.filter((operation) => {
       if (pipelineView === PIPELINE_VIEW_OPTIONS.READY) {
-        return operation.normalizedStatus === "PRONTA_DIGITAR";
+        return READY_PIPELINE_STATUSES.has(operation.normalizedStatus);
       }
-      return operation.normalizedStatus !== "PRONTA_DIGITAR";
+      return !READY_PIPELINE_STATUSES.has(operation.normalizedStatus);
     });
   }, [operationsWithMeta, pipelineView]);
 
   const readyCount = useMemo(() => {
     return operationsWithMeta.filter(
-      (operation) => operation.normalizedStatus === "PRONTA_DIGITAR"
+      (operation) => READY_PIPELINE_STATUSES.has(operation.normalizedStatus)
     ).length;
   }, [operationsWithMeta]);
 
   const activeCount = useMemo(() => {
     return operationsWithMeta.filter(
-      (operation) => operation.normalizedStatus !== "PRONTA_DIGITAR"
+      (operation) => !READY_PIPELINE_STATUSES.has(operation.normalizedStatus)
     ).length;
   }, [operationsWithMeta]);
 
@@ -780,8 +782,8 @@ export default function Pipeline() {
   }, [scopedOperations]);
 
   const rows = useMemo(() => {
-    const fromDate = filters.date_from ? new Date(`${filters.date_from}T00:00:00`) : null;
-    const toDate = filters.date_to ? new Date(`${filters.date_to}T23:59:59.999`) : null;
+    const fromDate = parseDateFilterBoundary(filters.date_from);
+    const toDate = parseDateFilterBoundary(filters.date_to, true);
 
     return [...scopedOperations]
       .filter((operation) => {
@@ -899,9 +901,13 @@ export default function Pipeline() {
   }
 
   function handleFilterChange(field, value) {
+    const nextValue =
+      field === "date_from" || field === "date_to"
+        ? normalizeDateInputValue(value)
+        : value;
     setFilters((prev) => ({
       ...prev,
-      [field]: value,
+      [field]: nextValue,
     }));
   }
 
@@ -917,7 +923,7 @@ export default function Pipeline() {
         <h2>Esteira de Operacoes</h2>
         <p>
           {pipelineView === PIPELINE_VIEW_OPTIONS.READY
-            ? "Operacoes aguardando inicio de digitacao."
+            ? "Operacoes prontas para digitar ou em digitacao."
             : "Fluxo: digitacao, formalizacao, analise banco e pendencias."}
         </p>
       </div>
@@ -976,18 +982,22 @@ export default function Pipeline() {
         <label className="pipelineFilterField">
           <span>Data inicial</span>
           <input
-            type="date"
+            type="text"
             value={filters.date_from}
             onChange={(event) => handleFilterChange("date_from", event.target.value)}
+            inputMode="numeric"
+            placeholder={DATE_INPUT_PLACEHOLDER}
           />
         </label>
 
         <label className="pipelineFilterField">
           <span>Data final</span>
           <input
-            type="date"
+            type="text"
             value={filters.date_to}
             onChange={(event) => handleFilterChange("date_to", event.target.value)}
+            inputMode="numeric"
+            placeholder={DATE_INPUT_PLACEHOLDER}
           />
         </label>
 

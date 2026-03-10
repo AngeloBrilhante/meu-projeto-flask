@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { createClient } from "../services/api";
+import { DATE_INPUT_PLACEHOLDER, normalizeDateInputValue } from "../utils/date";
 import "./CreateClient.css";
 
 const INITIAL_FORM = {
@@ -19,6 +20,7 @@ const INITIAL_FORM = {
   naturalidade: "",
   telefone: "",
   email: "",
+  analfabeto: false,
   cep: "",
   rua: "",
   numero: "",
@@ -88,7 +90,20 @@ export default function CreateClient() {
   }
 
   function handleChange(event) {
-    const { name, value } = event.target;
+    const { name, value, type, checked } = event.target;
+
+    if (type === "checkbox") {
+      setForm((prev) => ({ ...prev, [name]: checked }));
+      return;
+    }
+
+    if (name === "data_nascimento" || name === "rg_data_emissao") {
+      setForm((prev) => ({
+        ...prev,
+        [name]: normalizeDateInputValue(value),
+      }));
+      return;
+    }
 
     if (name === "cep") {
       const nextCep = formatCep(value);
@@ -115,10 +130,7 @@ export default function CreateClient() {
     setSaving(true);
 
     try {
-      await createClient({
-        ...form,
-        salario: form.salario ? Number(form.salario) : null,
-      });
+      await createClient(form);
 
       alert("Cliente cadastrado com sucesso!");
       navigate("/clients");
@@ -163,10 +175,12 @@ export default function CreateClient() {
             <label className="createField">
               <span>Data de nascimento</span>
               <input
-                type="date"
+                type="text"
                 name="data_nascimento"
                 value={form.data_nascimento}
                 onChange={handleChange}
+                inputMode="numeric"
+                placeholder={DATE_INPUT_PLACEHOLDER}
               />
             </label>
 
@@ -204,7 +218,9 @@ export default function CreateClient() {
                 name="salario"
                 value={form.salario}
                 onChange={handleChange}
-                placeholder="0.00"
+                inputMode="decimal"
+                pattern="[0-9.,\\s-]*"
+                placeholder="1.650,50"
               />
             </label>
 
@@ -248,10 +264,12 @@ export default function CreateClient() {
             <label className="createField">
               <span>Data emissão RG</span>
               <input
-                type="date"
+                type="text"
                 name="rg_data_emissao"
                 value={form.rg_data_emissao}
                 onChange={handleChange}
+                inputMode="numeric"
+                placeholder={DATE_INPUT_PLACEHOLDER}
               />
             </label>
 
@@ -274,7 +292,7 @@ export default function CreateClient() {
             </label>
 
             <label className="createField">
-              <span>E-mail</span>
+              <span>E-mail (opcional)</span>
               <input
                 type="email"
                 name="email"
@@ -283,6 +301,19 @@ export default function CreateClient() {
                 placeholder="cliente@email.com"
               />
             </label>
+
+            <div className="createField createCheckboxField">
+              <span>Analfabeto (opcional)</span>
+              <label className="createCheckboxControl">
+                <input
+                  type="checkbox"
+                  name="analfabeto"
+                  checked={Boolean(form.analfabeto)}
+                  onChange={handleChange}
+                />
+                <span>Cliente analfabeto</span>
+              </label>
+            </div>
 
             <label className="createField">
               <span>CEP</span>
