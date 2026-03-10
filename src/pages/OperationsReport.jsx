@@ -157,13 +157,24 @@ export default function OperationsReport() {
   const stats = useMemo(() => {
     const aprovadas = operations.filter((op) => op.status === "APROVADO").length;
     const reprovadas = operations.filter((op) => op.status === "REPROVADO").length;
+    const totalValor = operations.reduce((acc, op) => {
+      const value = Number(op.valor_liberado);
+      return acc + (Number.isFinite(value) ? value : 0);
+    }, 0);
 
     return {
       total: operations.length,
       aprovadas,
       reprovadas,
+      totalValor,
     };
   }, [operations]);
+
+  const totalLabel = useMemo(() => {
+    if (filters.status === "APROVADO") return "Total aprovado";
+    if (filters.status === "REPROVADO") return "Total recusado";
+    return "Total";
+  }, [filters.status]);
 
   return (
     <div className="reportContainer">
@@ -242,7 +253,7 @@ export default function OperationsReport() {
       </form>
 
       <div className="reportStats">
-        <div className="statCard">Total: {stats.total}</div>
+        <div className="statCard">{totalLabel}: {formatCurrency(stats.totalValor)}</div>
         <div className="statCard approved">Aprovadas: {stats.aprovadas}</div>
         <div className="statCard rejected">Reprovadas: {stats.reprovadas}</div>
       </div>
