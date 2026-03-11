@@ -93,6 +93,11 @@ const STATUS_ANDAMENTO_LABELS = STATUS_ANDAMENTO_OPTIONS.reduce((acc, option) =>
   return acc;
 }, {});
 
+const SORT_ORDER_OPTIONS = {
+  NEWEST_FIRST: "NEWEST_FIRST",
+  OLDEST_FIRST: "OLDEST_FIRST",
+};
+
 const FIVE_HOURS_MS = 5 * 60 * 60 * 1000;
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 const READY_PIPELINE_STATUSES = new Set(["PRONTA_DIGITAR", "EM_DIGITACAO"]);
@@ -276,6 +281,7 @@ export default function Pipeline() {
     produto: "",
     banco: "",
     priority: "",
+    sort_order: SORT_ORDER_OPTIONS.NEWEST_FIRST,
   });
   const openEditorsRef = useRef({});
 
@@ -857,10 +863,14 @@ export default function Pipeline() {
         return true;
       })
       .sort((a, b) => {
+        const sortDirection =
+          filters.sort_order === SORT_ORDER_OPTIONS.OLDEST_FIRST ? 1 : -1;
+
         if (a.priority.createdMs !== b.priority.createdMs) {
-          return a.priority.createdMs - b.priority.createdMs;
+          return (a.priority.createdMs - b.priority.createdMs) * sortDirection;
         }
-        return Number(a.id || 0) - Number(b.id || 0);
+
+        return (Number(a.id || 0) - Number(b.id || 0)) * sortDirection;
       });
   }, [scopedOperations, filters]);
 
@@ -1056,6 +1066,17 @@ export default function Pipeline() {
             <option value="red">Urgente (&gt; 24h)</option>
             <option value="yellow">Atencao (&gt; 5h)</option>
             <option value="green">Normal</option>
+          </select>
+        </label>
+
+        <label className="pipelineFilterField">
+          <span>Ordem</span>
+          <select
+            value={filters.sort_order}
+            onChange={(event) => handleFilterChange("sort_order", event.target.value)}
+          >
+            <option value={SORT_ORDER_OPTIONS.NEWEST_FIRST}>Mais novos primeiro</option>
+            <option value={SORT_ORDER_OPTIONS.OLDEST_FIRST}>Mais antigos primeiro</option>
           </select>
         </label>
       </div>
