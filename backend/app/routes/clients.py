@@ -308,6 +308,13 @@ PIPELINE_ACTIVE_STATUSES_WITH_LEGACY = PIPELINE_ACTIVE_STATUSES + (
     "DEVOLVIDA",
 )
 
+PIPELINE_READY_VISIBLE_STATUSES_WITH_LEGACY = (
+    "PRONTA_DIGITAR",
+    "EM_DIGITACAO",
+    "PENDENTE",
+    "ENVIADA_ESTEIRA",
+)
+
 VALID_PIPELINE_STATUS_UPDATES = set(PIPELINE_ACTIVE_STATUSES) | FINAL_OPERATION_STATUSES
 
 LEGACY_STATUS_MAP = {
@@ -3349,6 +3356,7 @@ def update_client_fase(client_id):
 @jwt_required()
 def get_pipeline():
     role = normalize_role(current_user_role())
+    user_id = current_user_id()
 
     if role not in PIPELINE_ALLOWED_ROLES:
         return jsonify({"error": "Acesso restrito"}), 403
@@ -3367,6 +3375,20 @@ def get_pipeline():
     ]
     params = list(PIPELINE_ACTIVE_STATUSES_WITH_LEGACY)
     apply_role_product_scope(role, conditions, params, "o.produto")
+
+    if is_digitador_role(role):
+        ready_placeholders = ", ".join(
+            ["%s"] * len(PIPELINE_READY_VISIBLE_STATUSES_WITH_LEGACY)
+        )
+        conditions.append(
+            f"""(
+                UPPER(o.status) IN ({ready_placeholders})
+                OR o.digitador_id = %s
+            )"""
+        )
+        params.extend(PIPELINE_READY_VISIBLE_STATUSES_WITH_LEGACY)
+        params.append(user_id)
+
     where_clause = " AND ".join(conditions)
 
     cursor.execute(f"""
