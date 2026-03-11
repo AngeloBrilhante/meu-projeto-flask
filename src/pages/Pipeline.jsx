@@ -1370,16 +1370,26 @@ export default function Pipeline() {
                           </>
                         )}
 
-                        {operation.normalizedStatus === "AGUARDANDO_FORMALIZACAO" && (
-                          <button
-                            type="button"
-                            className={`rejectBtn${reprovacaoAberta ? " active" : ""}`}
-                            disabled={isSaving}
-                            onClick={() => toggleEditor(operation.id, "reprovacao")}
-                          >
-                            Reprovar
-                          </button>
-                        )}
+	                        {operation.normalizedStatus === "AGUARDANDO_FORMALIZACAO" && (
+	                          <>
+	                            <button
+	                              type="button"
+	                              className="saveBtn"
+	                              disabled={isSaving}
+	                              onClick={() => updateFlow(operation, "ANALISE_BANCO")}
+	                            >
+	                              Formalizada
+	                            </button>
+	                            <button
+	                              type="button"
+	                              className={`rejectBtn${reprovacaoAberta ? " active" : ""}`}
+	                              disabled={isSaving}
+	                              onClick={() => toggleEditor(operation.id, "reprovacao")}
+	                            >
+	                              Reprovar
+	                            </button>
+	                          </>
+	                        )}
 
                         {operation.normalizedStatus === "PENDENCIA" && (
                           <>
