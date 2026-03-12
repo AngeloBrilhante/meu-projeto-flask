@@ -75,6 +75,7 @@ const STATUS_ANDAMENTO_OPTIONS = [
     value: "ANALISE_DE_FORMALIZACAO",
     label: "Analise de formalizacao",
   },
+  { value: "AGUARDANDO_AVERBACAO", label: "Aguardando averbacao" },
   { value: "BENEFICIO_BLOQUEADO", label: "Beneficio bloqueado" },
   {
     value: "AGUARDANDO_LIBERACAO_DA_PROMOTORA",

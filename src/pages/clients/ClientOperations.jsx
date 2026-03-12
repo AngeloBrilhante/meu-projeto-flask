@@ -45,6 +45,7 @@ const STATUS_ANDAMENTO_LABELS = {
   ANALISE_DOCUMENTAL: "Analise documental",
   ANALISE_DE_SELFIE: "Analise de selfie",
   ANALISE_DE_FORMALIZACAO: "Analise de formalizacao",
+  AGUARDANDO_AVERBACAO: "Aguardando averbacao",
   BENEFICIO_BLOQUEADO: "Beneficio bloqueado",
   AGUARDANDO_LIBERACAO_DA_PROMOTORA: "Aguardando liberacao da promotora",
   ENVIADO_PARA_PAGAMENTO: "Enviado para pagamento",
