@@ -104,6 +104,13 @@
   min-height: 0;
 }
 
+.clientSectionHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
 .clientSection h2 {
   margin: 0;
   font-size: 20px;
@@ -143,6 +150,77 @@
   margin-top: 4px;
   color: var(--text-primary);
   font-size: 14px;
+}
+
+.clientEditForm {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.clientEditGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.clientEditField {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.clientEditField span,
+.clientEditCheckbox span {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.clientEditField input {
+  height: 38px;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: var(--surface-strong);
+  color: var(--text-primary);
+  padding: 0 10px;
+}
+
+.clientEditField input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.clientEditCheckbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+}
+
+.clientEditActions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.clientFeedbackError,
+.clientFeedbackSuccess {
+  margin: 0;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 13px;
+}
+
+.clientFeedbackError {
+  color: #b93c3c;
+  background: rgba(185, 60, 60, 0.12);
+  border: 1px solid rgba(185, 60, 60, 0.28);
+}
+
+.clientFeedbackSuccess {
+  color: #157347;
+  background: rgba(21, 115, 71, 0.12);
+  border: 1px solid rgba(21, 115, 71, 0.28);
 }
 
 .documentsUploadForm {
@@ -735,6 +813,7 @@
 @media (max-width: 1100px) {
   .clientInfoGrid,
   .clientDataGrid,
+  .clientEditGrid,
   .documentsUploadGrid,
   .operationsGrid,
   .operationFichaGrid,
@@ -750,6 +829,7 @@
 @media (max-width: 760px) {
   .clientInfoGrid,
   .clientDataGrid,
+  .clientEditGrid,
   .documentsUploadGrid,
   .operationsGrid,
   .operationFichaGrid,
@@ -762,6 +842,12 @@
   }
 
   .operationsToolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .clientSectionHeader,
+  .clientEditActions {
     flex-direction: column;
     align-items: stretch;
   }

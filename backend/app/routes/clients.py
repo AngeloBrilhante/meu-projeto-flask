@@ -1348,6 +1348,32 @@ def to_number(value):
         return 0.0
 
 
+def serialize_client_record(client):
+    if not client:
+        return client
+
+    client["data_nascimento"] = normalize_date_field(client.get("data_nascimento"))
+    client["rg_data_emissao"] = normalize_date_field(client.get("rg_data_emissao"))
+    client["analfabeto"] = bool(to_int(client.get("analfabeto")))
+    return client
+
+
+def fetch_client_record(cursor, client_id):
+    cursor.execute(
+        """
+        SELECT
+            c.*,
+            COALESCE(u.nome, '-') AS vendedor_nome
+        FROM clientes c
+        LEFT JOIN usuarios u ON u.id = c.vendedor_id
+        WHERE c.id = %s
+        LIMIT 1
+        """,
+        (client_id,),
+    )
+    return serialize_client_record(cursor.fetchone())
+
+
 def resolve_dashboard_goal(cursor, year, month, vendedor_id):
     if vendedor_id:
         cursor.execute(
@@ -2269,19 +2295,7 @@ def get_client(client_id):
     cursor = db.cursor(dictionary=True)
     ensure_clients_extra_columns(cursor, db)
 
-    cursor.execute(
-        """
-        SELECT
-            c.*,
-            COALESCE(u.nome, '-') AS vendedor_nome
-        FROM clientes c
-        LEFT JOIN usuarios u ON u.id = c.vendedor_id
-        WHERE c.id = %s
-        """,
-        (client_id,)
-    )
-
-    client = cursor.fetchone()
+    client = fetch_client_record(cursor, client_id)
 
     cursor.close()
     db.close()
@@ -2289,12 +2303,264 @@ def get_client(client_id):
     if not client:
         return jsonify({"error": "Cliente nÃ£o encontrado"}), 404
 
-    client["data_nascimento"] = normalize_date_field(client.get("data_nascimento"))
-    client["rg_data_emissao"] = normalize_date_field(client.get("rg_data_emissao"))
-    client["analfabeto"] = bool(to_int(client.get("analfabeto")))
-
     return jsonify(client), 200
 
+
+@clients_bp.route("/clients/<int:client_id>", methods=["PUT"])
+@jwt_required()
+def update_client(client_id):
+    if not can_access_client(client_id):
+        return jsonify({"error": "Acesso nao autorizado"}), 403
+
+    data = request.get_json() or {}
+    required_fields = [
+        "nome",
+        "cpf",
+        "data_nascimento",
+        "especie",
+        "uf_beneficio",
+        "numero_beneficio",
+        "salario",
+        "nome_mae",
+        "rg_numero",
+        "rg_orgao_exp",
+        "rg_uf",
+        "rg_data_emissao",
+        "naturalidade",
+        "telefone",
+        "cep",
+        "rua",
+        "numero",
+        "bairro",
+    ]
+
+    missing_fields = []
+    for field in required_fields:
+        value = data.get(field)
+        if value is None or str(value).strip() == "":
+            missing_fields.append(field)
+
+    if missing_fields:
+        return jsonify(
+            {
+                "error": "Campos obrigatorios faltando",
+                "fields": missing_fields,
+            }
+        ), 400
+
+    try:
+        salario = parse_flexible_decimal(data.get("salario"))
+    except (TypeError, ValueError):
+        return jsonify({"error": "salario invalido"}), 400
+
+    cpf = only_digits(data.get("cpf"))
+    if len(cpf) != 11:
+        return jsonify({"error": "cpf invalido. Informe 11 digitos"}), 400
+
+    cep = only_digits(data.get("cep"))
+    if len(cep) != 8:
+        return jsonify({"error": "cep invalido. Informe 8 digitos"}), 400
+
+    uf_beneficio = str(data.get("uf_beneficio") or "").strip().upper()
+    if len(uf_beneficio) != 2:
+        return jsonify({"error": "uf_beneficio invalida. Use 2 letras"}), 400
+
+    rg_uf = str(data.get("rg_uf") or "").strip().upper()
+    if len(rg_uf) != 2:
+        return jsonify({"error": "rg_uf invalida. Use 2 letras"}), 400
+
+    try:
+        data_nascimento = normalize_date_text(data.get("data_nascimento"))
+        rg_data_emissao = normalize_date_text(data.get("rg_data_emissao"))
+    except ValueError:
+        return jsonify({"error": "Data invalida. Use DD/MM/AAAA ou AAAA-MM-DD"}), 400
+
+    nome = normalize_text(data.get("nome"))
+    especie = normalize_text(data.get("especie"))
+    numero_beneficio = normalize_text(data.get("numero_beneficio"))
+    nome_mae = normalize_text(data.get("nome_mae"))
+    rg_numero = normalize_text(data.get("rg_numero"))
+    rg_orgao_exp = normalize_text(data.get("rg_orgao_exp"))
+    naturalidade = normalize_text(data.get("naturalidade"))
+    telefone = only_digits(data.get("telefone"))
+    try:
+        email = normalize_optional_email(data.get("email"))
+    except ValueError:
+        return jsonify({"error": "email invalido"}), 400
+    analfabeto = 1 if normalize_optional_boolean(data.get("analfabeto")) else 0
+    rua = normalize_text(data.get("rua"))
+    numero = normalize_text(data.get("numero"))
+    bairro = normalize_text(data.get("bairro"))
+
+    if len(telefone) < 10:
+        return jsonify({"error": "telefone invalido. Informe DDD e numero"}), 400
+
+    db = get_db()
+    cursor = db.cursor(dictionary=True)
+
+    try:
+        ensure_clients_extra_columns(cursor, db)
+        existing_client = fetch_client_record(cursor, client_id)
+        if not existing_client:
+            return jsonify({"error": "Cliente nao encontrado"}), 404
+
+        cursor.execute(
+            """
+            SELECT
+                COLUMN_NAME,
+                CHARACTER_MAXIMUM_LENGTH
+            FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+              AND TABLE_NAME = 'clientes'
+            """
+        )
+        column_meta = {
+            row["COLUMN_NAME"]: row.get("CHARACTER_MAXIMUM_LENGTH")
+            for row in cursor.fetchall()
+        }
+
+        base_columns = [
+            "nome",
+            "cpf",
+            "data_nascimento",
+            "especie",
+            "uf_beneficio",
+            "numero_beneficio",
+            "salario",
+            "nome_mae",
+            "rg_numero",
+            "rg_orgao_exp",
+            "rg_uf",
+            "rg_data_emissao",
+            "naturalidade",
+            "telefone",
+            "email",
+            "analfabeto",
+            "cep",
+        ]
+        missing_base_columns = [
+            column_name for column_name in base_columns if column_name not in column_meta
+        ]
+        if missing_base_columns:
+            return jsonify(
+                {
+                    "error": "Estrutura da tabela clientes desatualizada",
+                    "fields": missing_base_columns,
+                }
+            ), 500
+
+        use_split_address = all(
+            column_name in column_meta for column_name in ("rua", "numero", "bairro")
+        )
+        use_legacy_address = all(
+            column_name in column_meta for column_name in ("endereco", "bairro")
+        )
+
+        if use_split_address:
+            address_columns = ["rua", "numero", "bairro"]
+            address_values = [rua, numero, bairro]
+        elif use_legacy_address:
+            address_columns = ["endereco", "bairro"]
+            composed_address = ", ".join(part for part in (rua, numero) if part).strip()
+            address_values = [composed_address, bairro]
+        else:
+            return jsonify(
+                {
+                    "error": "Estrutura da tabela clientes invalida para endereco",
+                }
+            ), 500
+
+        string_values = {
+            "nome": nome,
+            "cpf": cpf,
+            "especie": especie,
+            "uf_beneficio": uf_beneficio,
+            "numero_beneficio": numero_beneficio,
+            "nome_mae": nome_mae,
+            "rg_numero": rg_numero,
+            "rg_orgao_exp": rg_orgao_exp,
+            "rg_uf": rg_uf,
+            "naturalidade": naturalidade,
+            "telefone": telefone,
+            "email": email,
+            "cep": cep,
+            **dict(zip(address_columns, address_values)),
+        }
+
+        for column_name, value in string_values.items():
+            max_length = column_meta.get(column_name)
+            if max_length and len(str(value)) > int(max_length):
+                return jsonify(
+                    {
+                        "error": f"{column_name} excede o limite de {int(max_length)} caracteres",
+                    }
+                ), 400
+
+        update_columns = base_columns + address_columns
+        update_values = {
+            "nome": nome,
+            "cpf": cpf,
+            "data_nascimento": data_nascimento,
+            "especie": especie,
+            "uf_beneficio": uf_beneficio,
+            "numero_beneficio": numero_beneficio,
+            "salario": salario,
+            "nome_mae": nome_mae,
+            "rg_numero": rg_numero,
+            "rg_orgao_exp": rg_orgao_exp,
+            "rg_uf": rg_uf,
+            "rg_data_emissao": rg_data_emissao,
+            "naturalidade": naturalidade,
+            "telefone": telefone,
+            "email": email or None,
+            "analfabeto": analfabeto,
+            "cep": cep,
+            **dict(zip(address_columns, address_values)),
+        }
+        update_sql = ", ".join([f"{column_name} = %s" for column_name in update_columns])
+        update_params = [update_values[column_name] for column_name in update_columns]
+        update_params.append(client_id)
+
+        cursor.execute(
+            f"""
+            UPDATE clientes
+            SET {update_sql}
+            WHERE id = %s
+            """,
+            tuple(update_params),
+        )
+        db.commit()
+
+        client = fetch_client_record(cursor, client_id)
+        return jsonify(
+            {
+                "message": "Cliente atualizado com sucesso",
+                "client": client,
+            }
+        ), 200
+    except Exception as exc:
+        db.rollback()
+        message = str(exc)
+
+        if "Duplicate entry" in message and "cpf" in message.lower():
+            return jsonify({"error": "CPF ja cadastrado"}), 409
+
+        if "Incorrect date value" in message:
+            return jsonify({"error": "Data invalida"}), 400
+
+        data_too_long_match = re.search(
+            r"Data too long for column '([^']+)'",
+            message,
+            flags=re.IGNORECASE,
+        )
+        if data_too_long_match:
+            field_name = data_too_long_match.group(1)
+            return jsonify({"error": f"{field_name} excede o limite permitido"}), 400
+
+        return jsonify({"error": "Erro ao atualizar cliente"}), 500
+    finally:
+        cursor.close()
+        db.close()
 
 
 # ======================================================

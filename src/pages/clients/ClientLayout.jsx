@@ -120,7 +120,7 @@ export default function ClientLayout() {
       </div>
 
       <section className="clientContentCard">
-        <Outlet context={{ client }} />
+        <Outlet context={{ client, refreshClient: loadClient }} />
       </section>
     </div>
   );

@@ -21,6 +21,23 @@ export async function healthCheck() {
   return response.json();
 }
 
+export async function updateClient(clientId, clientData) {
+  const response = await fetch(`${API_URL}/clients/${clientId}`, {
+    method: "PUT",
+    headers: getAuthHeaders(true),
+    body: JSON.stringify(clientData),
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    const details = Array.isArray(data.fields) ? `: ${data.fields.join(", ")}` : "";
+    throw new Error((data.error || "Erro ao atualizar cliente") + details);
+  }
+
+  return data;
+}
+
 /* =======================
    CRIAR CLIENTE
 ======================= */
