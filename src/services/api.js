@@ -13,12 +13,36 @@ function getAuthHeaders(isJson = true) {
   };
 }
 
+async function parseApiJson(response, fallbackMessage) {
+  const contentType = response.headers.get("content-type") || "";
+
+  if (contentType.includes("application/json")) {
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || fallbackMessage);
+    }
+    return data;
+  }
+
+  const rawText = await response.text();
+  const compactText = String(rawText || "")
+    .replace(/<[^>]*>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!response.ok) {
+    throw new Error(compactText || fallbackMessage);
+  }
+
+  return {};
+}
+
 /* =======================
    HEALTH CHECK
 ======================= */
 export async function healthCheck() {
   const response = await fetch(`${API_URL}/health`);
-  return response.json();
+  return parseApiJson(response, "Erro ao listar documentos");
 }
 
 export async function updateClient(clientId, clientData) {
@@ -83,7 +107,7 @@ export async function listClients() {
     headers: getAuthHeaders(),
   });
 
-  return response.json();
+  return parseApiJson(response, "Erro ao enviar documentos");
 }
 
 export async function searchGlobal(query, limit = 8) {
@@ -230,7 +254,7 @@ export async function listClientOperations(clientId) {
     }
   );
 
-  return response.json();
+  return parseApiJson(response, "Erro ao excluir documento");
 }
 
 export async function getOperationDossier(operationId) {
@@ -347,7 +371,7 @@ export async function updateClientStatus(clientId, status) {
     throw new Error(error.error || "Erro ao atualizar status");
   }
 
-  return response.json();
+  return parseApiJson(response, "Erro ao listar documentos");
 }
 
 export async function getOperationComments(operationId) {
@@ -405,7 +429,7 @@ export async function getOperationStats(period) {
     throw new Error(error.error || "Erro ao buscar estatisticas");
   }
 
-  return response.json();
+  return parseApiJson(response, "Erro ao enviar documentos");
 }
 
 export async function getPipeline() {
@@ -418,7 +442,7 @@ export async function getPipeline() {
     throw new Error(error.error || "Erro ao buscar pipeline");
   }
 
-  return response.json();
+  return parseApiJson(response, "Erro ao excluir documento");
 }
 
 export async function getOperationsReport(filters = {}) {

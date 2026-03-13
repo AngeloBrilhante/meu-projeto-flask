@@ -3,10 +3,14 @@ from flask_jwt_extended import jwt_required
 
 from app.database import get_db
 from app.routes.clients import (
+    deserialize_document_row_from_trash,
+    ensure_documents_table,
     ensure_operation_comments_table,
     ensure_operation_notifications_table,
     ensure_operation_status_history_table,
     ensure_operations_extra_columns,
+    serialize_document_row_for_trash,
+    sync_storage_documents_to_db,
 )
 from app.routes.users import ensure_user_profile_columns
 from app.utils.auth import current_user_id, current_user_role
@@ -192,7 +196,7 @@ def delete_operation_record(cursor, operation_id, actor_id, actor_role, reason):
     return {"id": int(operation_id), "status": "deleted", "trash_id": int(trash_id)}
 
 
-def delete_client_record(cursor, client_id, actor_id, actor_role, reason):
+def delete_client_record(cursor, db, client_id, actor_id, actor_role, reason):
     cursor.execute(
         """
         SELECT *
@@ -270,19 +274,22 @@ def delete_client_record(cursor, client_id, actor_id, actor_role, reason):
         )
         operation_notifications = cursor.fetchall()
 
-    has_documents_table = table_exists(cursor, "documentos")
-    documents = []
-    if has_documents_table:
-        cursor.execute(
-            """
-            SELECT *
-            FROM documentos
-            WHERE client_id = %s OR id = %s
-            ORDER BY id ASC
-            """,
-            (client_id, client_id),
-        )
-        documents = cursor.fetchall()
+    ensure_documents_table(cursor, db)
+    sync_storage_documents_to_db(
+        cursor,
+        client_id,
+        seller_id=int(client.get("vendedor_id") or 0) or None,
+    )
+    cursor.execute(
+        """
+        SELECT *
+        FROM documentos
+        WHERE client_id = %s
+        ORDER BY id ASC
+        """,
+        (client_id,),
+    )
+    documents = cursor.fetchall()
 
     trash_id = add_to_trash(
         cursor,
@@ -296,7 +303,7 @@ def delete_client_record(cursor, client_id, actor_id, actor_role, reason):
             "operation_notifications": [
                 row_to_insert_dict(item) for item in operation_notifications
             ],
-            "documents": [row_to_insert_dict(item) for item in documents],
+            "documents": [serialize_document_row_for_trash(item) for item in documents],
         },
         deleted_by=actor_id,
         deleted_role=actor_role,
@@ -319,14 +326,7 @@ def delete_client_record(cursor, client_id, actor_id, actor_role, reason):
         )
 
     cursor.execute("DELETE FROM operacoes WHERE cliente_id = %s", (client_id,))
-    if has_documents_table:
-        cursor.execute(
-            """
-            DELETE FROM documentos
-            WHERE client_id = %s OR id = %s
-            """,
-            (client_id, client_id),
-        )
+    cursor.execute("DELETE FROM documentos WHERE client_id = %s", (client_id,))
     cursor.execute("DELETE FROM clientes WHERE id = %s", (client_id,))
 
     log_audit(
@@ -511,7 +511,7 @@ def restore_operation_payload(cursor, payload):
     return {"entity_type": "OPERACAO", "entity_id": operation_id}
 
 
-def restore_client_payload(cursor, payload):
+def restore_client_payload(cursor, db, payload):
     client = payload.get("client") if isinstance(payload, dict) else None
     if not isinstance(client, dict):
         raise ValueError("Payload do cliente invalido")
@@ -566,11 +566,12 @@ def restore_client_payload(cursor, payload):
     documents_restored = 0
     document_warnings = []
     documents = payload.get("documents") or []
-    if documents and table_exists(cursor, "documentos"):
+    if documents:
+        ensure_documents_table(cursor, db)
         for item in documents:
             if not isinstance(item, dict):
                 continue
-            row = dict(item)
+            row = deserialize_document_row_from_trash(item)
             row.pop("id", None)
             try:
                 insert_row(cursor, "documentos", row)
@@ -810,7 +811,7 @@ def restore_trash_item(trash_id):
         elif entity_type == "OPERACAO":
             result = restore_operation_payload(cursor, payload)
         elif entity_type == "CLIENTE":
-            result = restore_client_payload(cursor, payload)
+            result = restore_client_payload(cursor, db, payload)
         else:
             return jsonify({"error": "Tipo de entidade nao suportado para restauracao"}), 400
 
@@ -927,6 +928,7 @@ def bulk_delete():
             try:
                 result = delete_client_record(
                     cursor,
+                    db,
                     client_id=client_id,
                     actor_id=actor_id,
                     actor_role=actor_role,

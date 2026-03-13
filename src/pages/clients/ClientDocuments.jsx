@@ -12,13 +12,17 @@ export default function ClientDocuments() {
   const [documents, setDocuments] = useState([]);
   const [files, setFiles] = useState({});
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
   async function loadDocuments() {
     try {
+      setError("");
       const data = await listClientDocuments(id);
       setDocuments(data.documents || []);
     } catch (error) {
       console.error("Erro ao carregar documentos:", error);
+      setDocuments([]);
+      setError(error.message || "Nao foi possivel carregar os documentos.");
     }
   }
 
@@ -31,12 +35,14 @@ export default function ClientDocuments() {
     setLoading(true);
 
     try {
+      setError("");
       await uploadDocuments(id, files);
       setFiles({});
-      loadDocuments();
+      await loadDocuments();
       alert("Upload realizado com sucesso");
     } catch (error) {
       console.error("Erro no upload:", error);
+      setError(error.message || "Nao foi possivel enviar os documentos.");
     } finally {
       setLoading(false);
     }
@@ -46,10 +52,12 @@ export default function ClientDocuments() {
     if (!window.confirm("Deseja excluir este documento?")) return;
 
     try {
+      setError("");
       await deleteDocument(id, filename);
-      loadDocuments();
+      await loadDocuments();
     } catch (error) {
       console.error("Erro ao excluir:", error);
+      setError(error.message || "Nao foi possivel excluir o documento.");
     }
   }
 
@@ -74,6 +82,8 @@ export default function ClientDocuments() {
     <div className="clientSection">
       <h2>Documentos</h2>
       <p className="clientSectionText">Envio e gerenciamento de documentos do cliente.</p>
+
+      {error && <p className="clientFeedbackError">{error}</p>}
 
       <form onSubmit={handleUpload} className="documentsUploadForm">
         <h3>Upload de documentos</h3>

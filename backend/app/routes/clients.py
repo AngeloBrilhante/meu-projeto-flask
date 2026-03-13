@@ -1,11 +1,15 @@
+﻿import base64
 import json
+import mimetypes
 import mysql.connector
 import os
 import re
 import unicodedata
 import uuid
 from datetime import date, datetime
-from flask import Blueprint, request, jsonify, send_from_directory, abort, current_app
+from io import BytesIO
+
+from flask import Blueprint, request, jsonify, send_file, current_app
 from flask_jwt_extended import jwt_required
 from app.database import get_db
 from app.utils.auth import (
@@ -50,6 +54,7 @@ STORAGE_ROOTS = build_storage_roots()
 PRIMARY_STORAGE_ROOT = STORAGE_ROOTS[0]
 BASE_STORAGE = os.path.join(PRIMARY_STORAGE_ROOT, "clients")
 ALLOWED_EXTENSIONS = {"pdf", "jpg", "jpeg", "png"}
+DOCUMENT_BINARY_ENCODING = "base64"
 DEFAULT_MONTHLY_GOAL = 20000.0
 MONTH_LABELS = [
     "Jan",
@@ -106,7 +111,7 @@ OPERATION_VIEW_ALLOWED_ROLES = {
 
 
 # ======================================================
-# UTILITÃRIOS
+# UTILITÃƒÂRIOS
 # ======================================================
 def allowed_file(filename):
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
@@ -206,43 +211,326 @@ def iter_client_storage_folders(client_id):
         yield folder
 
 
-def list_client_documents_metadata(client_id):
-    documents_by_name = {}
+def normalize_document_filename(filename):
+    return os.path.basename(str(filename or "").strip())
 
+
+def infer_document_type(field_name=None, filename=None):
+    field_text = str(field_name or "").strip().upper()
+    if field_text:
+        return field_text
+
+    safe_filename = normalize_document_filename(filename)
+    if "_" in safe_filename:
+        return safe_filename.split("_", 1)[0].upper()
+
+    stem = safe_filename.rsplit(".", 1)[0]
+    return stem.upper() or "ARQUIVO"
+
+
+def format_document_uploaded_at(value):
+    if isinstance(value, datetime):
+        return value.strftime("%Y-%m-%d %H:%M:%S")
+    if isinstance(value, date):
+        return f"{value.strftime('%Y-%m-%d')} 00:00:00"
+
+    text = str(value or "").strip()
+    if not text:
+        return ""
+
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
+        try:
+            return datetime.strptime(text, fmt).strftime("%Y-%m-%d %H:%M:%S")
+        except ValueError:
+            continue
+
+    return text
+
+
+def ensure_documents_table(cursor, db):
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS documentos (
+            id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+            client_id INT NOT NULL,
+            seller_id INT NULL,
+            document_type VARCHAR(60) NULL,
+            file_name VARCHAR(255) NOT NULL,
+            original_name VARCHAR(255) NOT NULL,
+            content_type VARCHAR(120) NULL,
+            file_size INT NOT NULL DEFAULT 0,
+            file_data LONGBLOB NULL,
+            upload_date DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        """
+    )
+
+    changed = False
+
+    cursor.execute(
+        """
+        SELECT CONSTRAINT_NAME
+        FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'documentos'
+          AND REFERENCED_TABLE_NAME IS NOT NULL
+        GROUP BY CONSTRAINT_NAME
+        """
+    )
+    for row in cursor.fetchall():
+        constraint_name = row.get("CONSTRAINT_NAME")
+        if not constraint_name or constraint_name == "PRIMARY":
+            continue
+        cursor.execute(f"ALTER TABLE documentos DROP FOREIGN KEY `{constraint_name}`")
+        changed = True
+
+    cursor.execute(
+        """
+        SELECT
+            COLUMN_NAME,
+            IS_NULLABLE,
+            COLUMN_TYPE,
+            COLUMN_DEFAULT
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'documentos'
+        """
+    )
+    column_rows = cursor.fetchall()
+    columns = {row.get("COLUMN_NAME"): row for row in column_rows}
+
+    column_statements = {
+        "client_id": "ADD COLUMN client_id INT NOT NULL",
+        "seller_id": "ADD COLUMN seller_id INT NULL",
+        "document_type": "ADD COLUMN document_type VARCHAR(60) NULL",
+        "file_name": "ADD COLUMN file_name VARCHAR(255) NOT NULL",
+        "original_name": "ADD COLUMN original_name VARCHAR(255) NOT NULL",
+        "content_type": "ADD COLUMN content_type VARCHAR(120) NULL",
+        "file_size": "ADD COLUMN file_size INT NOT NULL DEFAULT 0",
+        "file_data": "ADD COLUMN file_data LONGBLOB NULL",
+        "upload_date": "ADD COLUMN upload_date DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP",
+    }
+
+    for column_name, statement in column_statements.items():
+        if column_name in columns:
+            continue
+        cursor.execute(f"ALTER TABLE documentos {statement}")
+        changed = True
+
+    seller_meta = columns.get("seller_id") or {}
+    if seller_meta.get("IS_NULLABLE") == "NO":
+        cursor.execute("ALTER TABLE documentos MODIFY COLUMN seller_id INT NULL")
+        changed = True
+
+    file_data_meta = columns.get("file_data") or {}
+    if file_data_meta and str(file_data_meta.get("COLUMN_TYPE") or "").lower() != "longblob":
+        cursor.execute("ALTER TABLE documentos MODIFY COLUMN file_data LONGBLOB NULL")
+        changed = True
+
+    upload_date_meta = columns.get("upload_date") or {}
+    if upload_date_meta and str(upload_date_meta.get("COLUMN_DEFAULT") or "").upper() != "CURRENT_TIMESTAMP":
+        cursor.execute(
+            "ALTER TABLE documentos MODIFY COLUMN upload_date DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP"
+        )
+        changed = True
+
+    cursor.execute(
+        """
+        SELECT DISTINCT INDEX_NAME
+        FROM INFORMATION_SCHEMA.STATISTICS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'documentos'
+        """
+    )
+    indexes = {row.get("INDEX_NAME") for row in cursor.fetchall()}
+
+    if "idx_documentos_client_file" not in indexes:
+        cursor.execute(
+            "CREATE INDEX idx_documentos_client_file ON documentos (client_id, file_name)"
+        )
+        changed = True
+
+    if "idx_documentos_client_upload" not in indexes:
+        cursor.execute(
+            "CREATE INDEX idx_documentos_client_upload ON documentos (client_id, upload_date)"
+        )
+        changed = True
+
+    if changed:
+        db.commit()
+
+
+def resolve_client_seller_id(cursor, client_id):
+    cursor.execute(
+        """
+        SELECT vendedor_id
+        FROM clientes
+        WHERE id = %s
+        LIMIT 1
+        """,
+        (client_id,),
+    )
+    row = cursor.fetchone() or {}
+    seller_id = row.get("vendedor_id")
+    return int(seller_id) if seller_id is not None else None
+
+
+def list_client_documents_metadata_from_db(cursor, client_id):
+    cursor.execute(
+        """
+        SELECT
+            file_name,
+            document_type,
+            upload_date
+        FROM documentos
+        WHERE client_id = %s
+        ORDER BY upload_date DESC, id DESC
+        """,
+        (client_id,),
+    )
+    rows = cursor.fetchall()
+
+    documents = []
+    for row in rows:
+        filename = row.get("file_name") or ""
+        documents.append(
+            {
+                "filename": filename,
+                "type": row.get("document_type") or infer_document_type(filename=filename),
+                "uploaded_at": format_document_uploaded_at(row.get("upload_date")),
+            }
+        )
+
+    return documents
+
+
+def sync_storage_documents_to_db(cursor, client_id, seller_id=None):
+    client_id = int(client_id)
+    if seller_id is None:
+        seller_id = resolve_client_seller_id(cursor, client_id)
+
+    cursor.execute(
+        """
+        SELECT file_name
+        FROM documentos
+        WHERE client_id = %s
+        """,
+        (client_id,),
+    )
+    existing_files = {
+        normalize_document_filename(row.get("file_name")) for row in cursor.fetchall()
+    }
+
+    inserted = 0
     for client_folder in iter_client_storage_folders(client_id):
         if not os.path.isdir(client_folder):
             continue
 
         for filename in os.listdir(client_folder):
-            file_path = os.path.join(client_folder, filename)
+            safe_filename = normalize_document_filename(filename)
+            if not safe_filename or safe_filename in existing_files:
+                continue
+
+            file_path = os.path.join(client_folder, safe_filename)
             if not os.path.isfile(file_path):
                 continue
 
-            created_at_ts = os.path.getctime(file_path)
-            current = documents_by_name.get(filename)
-            if current and current.get("_created_at_ts", 0) >= created_at_ts:
-                continue
+            with open(file_path, "rb") as storage_file:
+                file_bytes = storage_file.read()
 
-            documents_by_name[filename] = {
-                "filename": filename,
-                "type": filename.split("_")[0].upper(),
-                "uploaded_at": datetime.fromtimestamp(created_at_ts).strftime(
-                    "%Y-%m-%d %H:%M:%S"
+            stat_result = os.stat(file_path)
+            content_type = mimetypes.guess_type(safe_filename)[0] or "application/octet-stream"
+            upload_date = datetime.fromtimestamp(stat_result.st_ctime).strftime(
+                "%Y-%m-%d %H:%M:%S"
+            )
+
+            cursor.execute(
+                """
+                INSERT INTO documentos (
+                    client_id,
+                    seller_id,
+                    document_type,
+                    file_name,
+                    original_name,
+                    content_type,
+                    file_size,
+                    file_data,
+                    upload_date
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """,
+                (
+                    client_id,
+                    seller_id,
+                    infer_document_type(filename=safe_filename),
+                    safe_filename,
+                    safe_filename,
+                    content_type,
+                    len(file_bytes),
+                    file_bytes,
+                    upload_date,
                 ),
-                "_created_at_ts": created_at_ts,
-            }
+            )
+            existing_files.add(safe_filename)
+            inserted += 1
 
-    documents = list(documents_by_name.values())
-    documents.sort(key=lambda item: item.get("_created_at_ts", 0), reverse=True)
+    return inserted
 
-    for item in documents:
-        item.pop("_created_at_ts", None)
 
-    return documents
+def list_client_documents_metadata(client_id):
+    db = get_db()
+    cursor = db.cursor(dictionary=True)
+    try:
+        ensure_documents_table(cursor, db)
+        if sync_storage_documents_to_db(cursor, client_id) > 0:
+            db.commit()
+        return list_client_documents_metadata_from_db(cursor, client_id)
+    finally:
+        cursor.close()
+        db.close()
+
+
+def get_client_document_record(cursor, client_id, filename):
+    safe_filename = normalize_document_filename(filename)
+    if not safe_filename:
+        return None, ""
+
+    cursor.execute(
+        """
+        SELECT *
+        FROM documentos
+        WHERE client_id = %s
+          AND file_name = %s
+        ORDER BY id DESC
+        LIMIT 1
+        """,
+        (client_id, safe_filename),
+    )
+    return cursor.fetchone(), safe_filename
+
+
+def serialize_document_row_for_trash(row):
+    payload = row_to_insert_dict(row)
+    file_data = payload.get("file_data")
+    if isinstance(file_data, (bytes, bytearray, memoryview)):
+        payload["file_data"] = base64.b64encode(bytes(file_data)).decode("ascii")
+        payload["file_data_encoding"] = DOCUMENT_BINARY_ENCODING
+    return payload
+
+
+def deserialize_document_row_from_trash(row):
+    payload = dict(row or {})
+    if payload.get("file_data_encoding") == DOCUMENT_BINARY_ENCODING:
+        encoded_data = str(payload.get("file_data") or "").strip()
+        payload["file_data"] = (
+            base64.b64decode(encoded_data.encode("ascii")) if encoded_data else None
+        )
+    payload.pop("file_data_encoding", None)
+    return payload
 
 
 def find_client_document_file(client_id, filename):
-    safe_filename = os.path.basename(str(filename or "").strip())
+    safe_filename = normalize_document_filename(filename)
     if not safe_filename:
         return None, ""
 
@@ -1409,7 +1697,7 @@ def resolve_dashboard_goal(cursor, year, month, vendedor_id):
 
 
 # ======================================================
-# âž• CRIAR CLIENTE
+# Ã¢Å¾â€¢ CRIAR CLIENTE
 # ======================================================
 @clients_bp.route("/clients", methods=["POST"])
 @jwt_required()
@@ -1683,7 +1971,7 @@ def create_client():
 
 
 # ======================================================
-# ðŸ“ƒ CRIAR OPERAÃ‡Ã•ES
+# Ã°Å¸â€œÆ’ CRIAR OPERAÃƒâ€¡Ãƒâ€¢ES
 # ======================================================
 
 @clients_bp.route("/clients/<int:client_id>/operations", methods=["POST"])
@@ -1696,7 +1984,7 @@ def create_operation(client_id):
         return jsonify({"error": "Acesso nao autorizado"}), 403
 
     if not can_access_client(client_id):
-        return jsonify({"error": "Acesso nÃ£o autorizado"}), 403
+        return jsonify({"error": "Acesso nÃƒÂ£o autorizado"}), 403
 
     data = request.get_json() or {}
     produto = (data.get("produto") or "").strip().upper()
@@ -1755,13 +2043,13 @@ def create_operation(client_id):
     db.close()
 
     return jsonify({
-        "message": "OperaÃ§Ã£o criada com sucesso",
+        "message": "OperaÃƒÂ§ÃƒÂ£o criada com sucesso",
         "operation_id": operation_id
     }), 201
 
 
 # ======================================================
-# ðŸ“ƒ LISTAR CLIENTES
+# Ã°Å¸â€œÆ’ LISTAR CLIENTES
 # ======================================================
 @clients_bp.route("/clients", methods=["GET"])
 @jwt_required()
@@ -1926,7 +2214,7 @@ def search_global():
 
 
 # ======================================================
-# ðŸ“ƒ LISTAR CONTRATOS DE CLIENTES
+# Ã°Å¸â€œÆ’ LISTAR CONTRATOS DE CLIENTES
 # ======================================================
 
 @clients_bp.route("/clients/<int:client_id>/operations", methods=["GET"])
@@ -1934,7 +2222,7 @@ def search_global():
 def list_operations(client_id):
 
     if not can_access_client(client_id):
-        return jsonify({"error": "Acesso nÃ£o autorizado"}), 403
+        return jsonify({"error": "Acesso nÃƒÂ£o autorizado"}), 403
 
     db = get_db()
     cursor = db.cursor(dictionary=True)
@@ -2284,13 +2572,13 @@ def get_operation_status_history(operation_id):
     return jsonify(history), 200
 
 
-# ðŸ“„ OBTER CLIENTE POR ID
+# Ã°Å¸â€œâ€ž OBTER CLIENTE POR ID
 # ======================================================
 @clients_bp.route("/clients/<int:client_id>", methods=["GET"])
 @jwt_required()
 def get_client(client_id):
     if not can_access_client(client_id):
-        return jsonify({"error": "Acesso nÃ£o autorizado"}), 403
+        return jsonify({"error": "Acesso nÃƒÂ£o autorizado"}), 403
 
     db = get_db()
     cursor = db.cursor(dictionary=True)
@@ -2302,7 +2590,7 @@ def get_client(client_id):
     db.close()
 
     if not client:
-        return jsonify({"error": "Cliente nÃ£o encontrado"}), 404
+        return jsonify({"error": "Cliente nÃƒÂ£o encontrado"}), 404
 
     return jsonify(client), 200
 
@@ -2565,7 +2853,7 @@ def update_client(client_id):
 
 
 # ======================================================
-# ðŸ“¤ UPLOAD DE DOCUMENTOS
+# Ã°Å¸â€œÂ¤ UPLOAD DE DOCUMENTOS
 # ======================================================
 @clients_bp.route("/operations/<int:operation_id>", methods=["DELETE"])
 @jwt_required()
@@ -2825,29 +3113,19 @@ def delete_client(client_id):
             )
             operation_notifications = cursor.fetchall()
 
+        ensure_documents_table(cursor, db)
+        sync_storage_documents_to_db(cursor, client_id, seller_id=to_int(client.get("vendedor_id")))
+        documents = []
         cursor.execute(
             """
-            SELECT 1
-            FROM INFORMATION_SCHEMA.TABLES
-            WHERE TABLE_SCHEMA = DATABASE()
-              AND TABLE_NAME = 'documentos'
-            LIMIT 1
-            """
+            SELECT *
+            FROM documentos
+            WHERE client_id = %s
+            ORDER BY id ASC
+            """,
+            (client_id,),
         )
-        has_documents_table = cursor.fetchone() is not None
-
-        documents = []
-        if has_documents_table:
-            cursor.execute(
-                """
-                SELECT *
-                FROM documentos
-                WHERE client_id = %s OR id = %s
-                ORDER BY id ASC
-                """,
-                (client_id, client_id),
-            )
-            documents = cursor.fetchall()
+        documents = cursor.fetchall()
 
         trash_id = add_to_trash(
             cursor,
@@ -2861,7 +3139,7 @@ def delete_client(client_id):
                 "operation_notifications": [
                     row_to_insert_dict(item) for item in operation_notifications
                 ],
-                "documents": [row_to_insert_dict(item) for item in documents],
+                "documents": [serialize_document_row_for_trash(item) for item in documents],
             },
             deleted_by=actor_id,
             deleted_role=role,
@@ -2884,15 +3162,7 @@ def delete_client(client_id):
             )
 
         cursor.execute("DELETE FROM operacoes WHERE cliente_id = %s", (client_id,))
-
-        if has_documents_table:
-            cursor.execute(
-                """
-                DELETE FROM documentos
-                WHERE client_id = %s OR id = %s
-                """,
-                (client_id, client_id),
-            )
+        cursor.execute("DELETE FROM documentos WHERE client_id = %s", (client_id,))
 
         cursor.execute("DELETE FROM clientes WHERE id = %s", (client_id,))
         log_audit(
@@ -2936,37 +3206,78 @@ def upload_document():
     client_id = request.form.get("client_id")
 
     if not client_id:
-        return jsonify({"error": "client_id Ã© obrigatÃ³rio"}), 400
+        return jsonify({"error": "client_id e obrigatorio"}), 400
 
     if not can_access_client(int(client_id)):
-        return jsonify({"error": "Acesso nÃ£o autorizado"}), 403
+        return jsonify({"error": "Acesso nao autorizado"}), 403
 
     if not request.files:
         return jsonify({"error": "Nenhum arquivo enviado"}), 400
 
-    client_folder = get_primary_client_folder(client_id)
-    os.makedirs(client_folder, exist_ok=True)
-
+    db = get_db()
+    cursor = db.cursor(dictionary=True)
     saved_files = {}
 
-    for field_name, file in request.files.items():
-        if file and allowed_file(file.filename):
+    try:
+        ensure_documents_table(cursor, db)
+        seller_id = resolve_client_seller_id(cursor, int(client_id))
+
+        for field_name, file in request.files.items():
+            if not file or not allowed_file(file.filename):
+                continue
+
             ext = file.filename.rsplit(".", 1)[1].lower()
             filename = f"{field_name}_{uuid.uuid4().hex}.{ext}"
-            file.save(os.path.join(client_folder, filename))
+            original_name = normalize_document_filename(file.filename) or filename
+            file_bytes = file.read()
+
+            cursor.execute(
+                """
+                INSERT INTO documentos (
+                    client_id,
+                    seller_id,
+                    document_type,
+                    file_name,
+                    original_name,
+                    content_type,
+                    file_size,
+                    file_data
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                """,
+                (
+                    int(client_id),
+                    seller_id,
+                    infer_document_type(field_name=field_name, filename=filename),
+                    filename,
+                    original_name,
+                    file.mimetype
+                    or mimetypes.guess_type(original_name)[0]
+                    or "application/octet-stream",
+                    len(file_bytes),
+                    file_bytes,
+                ),
+            )
             saved_files[field_name] = filename
 
-    if not saved_files:
-        return jsonify({"error": "Nenhum arquivo vÃ¡lido enviado"}), 400
+        if not saved_files:
+            db.rollback()
+            return jsonify({"error": "Nenhum arquivo valido enviado"}), 400
 
-    return jsonify({
-        "message": "Arquivos enviados com sucesso",
-        "files": saved_files
-    }), 201
-
+        db.commit()
+        return jsonify({
+            "message": "Arquivos enviados com sucesso",
+            "files": saved_files
+        }), 201
+    except Exception:
+        db.rollback()
+        return jsonify({"error": "Nao foi possivel salvar os documentos"}), 500
+    finally:
+        cursor.close()
+        db.close()
 
 # ======================================================
-# ðŸ“ƒ LISTAR DOCUMENTOS
+# Ã°Å¸â€œÆ’ LISTAR DOCUMENTOS
 # ======================================================
 @clients_bp.route("/clients/<int:client_id>/documents", methods=["GET", "OPTIONS"])
 @jwt_required(optional=True)
@@ -2975,7 +3286,7 @@ def list_documents(client_id):
         return "", 200
 
     if not can_access_client_documents(client_id):
-        return jsonify({"error": "Acesso nÃ£o autorizado"}), 403
+        return jsonify({"error": "Acesso nao autorizado"}), 403
 
     documents = list_client_documents_metadata(client_id)
 
@@ -2984,9 +3295,8 @@ def list_documents(client_id):
         "documents": documents
     }), 200
 
-
 # ======================================================
-# ðŸ“¥ DOWNLOAD DOCUMENTO
+# Ã°Å¸â€œÂ¥ DOWNLOAD DOCUMENTO
 # ======================================================
 @clients_bp.route(
     "/clients/<int:client_id>/documents/<filename>",
@@ -3000,19 +3310,37 @@ def download_document(client_id, filename):
     if not can_access_client_documents(client_id):
         return jsonify({"error": "Acesso nao autorizado"}), 403
 
+    db = get_db()
+    cursor = db.cursor(dictionary=True)
+    try:
+        ensure_documents_table(cursor, db)
+        if sync_storage_documents_to_db(cursor, client_id) > 0:
+            db.commit()
+
+        document, safe_filename = get_client_document_record(cursor, client_id, filename)
+        if document and document.get("file_data") is not None:
+            return send_file(
+                BytesIO(document.get("file_data")),
+                as_attachment=True,
+                download_name=document.get("original_name") or safe_filename,
+                mimetype=document.get("content_type") or "application/octet-stream",
+            )
+    finally:
+        cursor.close()
+        db.close()
+
     client_folder, safe_filename = find_client_document_file(client_id, filename)
     if not client_folder:
-        abort(404, description="Arquivo nao encontrado")
+        return jsonify({"error": "Arquivo nao encontrado"}), 404
 
-    return send_from_directory(
-        client_folder,
-        safe_filename,
-        as_attachment=True
+    return send_file(
+        os.path.join(client_folder, safe_filename),
+        as_attachment=True,
+        download_name=safe_filename,
     )
 
-
 # ======================================================
-# ðŸ—‘ï¸ EXCLUIR DOCUMENTO
+# Ã°Å¸â€”â€˜Ã¯Â¸Â EXCLUIR DOCUMENTO
 # ======================================================
 @clients_bp.route(
     "/clients/<int:client_id>/documents/<filename>",
@@ -3026,20 +3354,48 @@ def delete_document(client_id, filename):
     if not can_access_client(client_id):
         return jsonify({"error": "Acesso nao autorizado"}), 403
 
-    client_folder, safe_filename = find_client_document_file(client_id, filename)
-    if not client_folder:
-        return jsonify({"error": "Arquivo nao encontrado"}), 404
+    db = get_db()
+    cursor = db.cursor(dictionary=True)
+    try:
+        ensure_documents_table(cursor, db)
+        _, safe_filename = get_client_document_record(cursor, client_id, filename)
+        if not safe_filename:
+            return jsonify({"error": "Arquivo nao encontrado"}), 404
 
-    os.remove(os.path.join(client_folder, safe_filename))
+        cursor.execute(
+            """
+            DELETE FROM documentos
+            WHERE client_id = %s
+              AND file_name = %s
+            """,
+            (client_id, safe_filename),
+        )
+        removed_from_db = cursor.rowcount > 0
 
-    return jsonify({
-        "message": "Documento excluido com sucesso",
-        "filename": safe_filename
-    }), 200
+        client_folder, safe_file_from_storage = find_client_document_file(client_id, safe_filename)
+        removed_from_storage = False
+        if client_folder and safe_file_from_storage:
+            os.remove(os.path.join(client_folder, safe_file_from_storage))
+            removed_from_storage = True
 
+        if not removed_from_db and not removed_from_storage:
+            db.rollback()
+            return jsonify({"error": "Arquivo nao encontrado"}), 404
+
+        db.commit()
+        return jsonify({
+            "message": "Documento excluido com sucesso",
+            "filename": safe_filename
+        }), 200
+    except Exception:
+        db.rollback()
+        return jsonify({"error": "Nao foi possivel excluir o documento"}), 500
+    finally:
+        cursor.close()
+        db.close()
 
 # ======================================================
-# ðŸ“„ ADMIN ATUALIZA STATUS
+# Ã°Å¸â€œâ€ž ADMIN ATUALIZA STATUS
 # ======================================================
 
 
@@ -3340,7 +3696,7 @@ def update_operation(operation_id):
                     if not rejected_reason:
                         cursor.close()
                         db.close()
-                        return jsonify({"error": "Informe o motivo da reprovaÃ§Ã£o"}), 400
+                        return jsonify({"error": "Informe o motivo da reprovaÃƒÂ§ÃƒÂ£o"}), 400
                     data["motivo_reprovacao"] = rejected_reason
 
             if "link_formalizacao" in data and data.get("link_formalizacao") is not None:
@@ -3445,7 +3801,7 @@ def update_operation(operation_id):
 
 
 # ======================================================
-# ðŸ“„ ENVIAR OPERAÃ‡ÃƒO PARA ESTEIRA
+# Ã°Å¸â€œâ€ž ENVIAR OPERAÃƒâ€¡ÃƒÆ’O PARA ESTEIRA
 # ======================================================
 
 @clients_bp.route("/operations/<int:operation_id>/send", methods=["POST"])
@@ -3583,7 +3939,7 @@ def send_operation_to_pipeline(operation_id):
         if conn:
             conn.close()
 # ======================================================
-# ðŸ“„ ADMIN FASE COMERCIAL
+# Ã°Å¸â€œâ€ž ADMIN FASE COMERCIAL
 # ======================================================
 
 
@@ -3616,7 +3972,7 @@ def update_client_fase(client_id):
 
 
 # ======================================================
-# ðŸ“„ ADMIN - LISTAR ESTEIRA
+# Ã°Å¸â€œâ€ž ADMIN - LISTAR ESTEIRA
 # ======================================================
 
 @clients_bp.route("/operations/pipeline", methods=["GET"])
@@ -3716,7 +4072,7 @@ def get_pipeline():
 
 
 # ======================================================
-# ðŸ“Š ADMIN - RELATÃ“RIO DE OPERAÃ‡Ã•ES FINALIZADAS
+# Ã°Å¸â€œÅ  ADMIN - RELATÃƒâ€œRIO DE OPERAÃƒâ€¡Ãƒâ€¢ES FINALIZADAS
 # ======================================================
 
 @clients_bp.route("/operations/report", methods=["GET"])
@@ -3744,7 +4100,7 @@ def get_operations_report():
     allowed_status = {"APROVADO", "REPROVADO"}
 
     if status and status not in allowed_status:
-        return jsonify({"error": "status invÃ¡lido"}), 400
+        return jsonify({"error": "status invÃƒÂ¡lido"}), 400
 
     parsed_from = None
     parsed_to = None
@@ -3757,10 +4113,10 @@ def get_operations_report():
             parsed_to = datetime.strptime(normalize_date_text(date_to), "%Y-%m-%d")
             date_to = parsed_to.strftime("%Y-%m-%d")
     except ValueError:
-        return jsonify({"error": "Formato de data invÃ¡lido. Use YYYY-MM-DD."}), 400
+        return jsonify({"error": "Formato de data invÃƒÂ¡lido. Use YYYY-MM-DD."}), 400
 
     if parsed_from and parsed_to and parsed_from > parsed_to:
-        return jsonify({"error": "date_from nÃ£o pode ser maior que date_to"}), 400
+        return jsonify({"error": "date_from nÃƒÂ£o pode ser maior que date_to"}), 400
 
     db = get_db()
     cursor = db.cursor(dictionary=True)
@@ -3856,7 +4212,7 @@ def get_operations_report():
 
 
 # ======================================================
-# ðŸ“Š ADMIN - ESTATÃSTICAS DA ESTEIRA
+# Ã°Å¸â€œÅ  ADMIN - ESTATÃƒÂSTICAS DA ESTEIRA
 # ======================================================
 
 @clients_bp.route("/operations/stats", methods=["GET"])
@@ -3878,7 +4234,7 @@ def get_operations_stats():
     elif period == "month":
         date_filter = "MONTH(o.criado_em) = MONTH(CURDATE()) AND YEAR(o.criado_em)=YEAR(CURDATE())"
     else:
-        return jsonify({"error": "PerÃ­odo invÃ¡lido"}), 400
+        return jsonify({"error": "PerÃƒÂ­odo invÃƒÂ¡lido"}), 400
 
     active_status_placeholders = ", ".join(
         ["%s"] * len(PIPELINE_ACTIVE_STATUSES_WITH_LEGACY)
@@ -4727,3 +5083,4 @@ def get_dashboard_notifications():
             cursor.close()
         if db is not None:
             db.close()
+

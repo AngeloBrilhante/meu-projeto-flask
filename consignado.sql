@@ -104,13 +104,17 @@ DROP TABLE IF EXISTS `documentos`;
 CREATE TABLE `documentos` (
   `id` int NOT NULL AUTO_INCREMENT,
   `client_id` int NOT NULL,
-  `seller_id` int NOT NULL,
+  `seller_id` int DEFAULT NULL,
+  `document_type` varchar(60) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `file_name` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
   `original_name` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
-  `upload_date` datetime DEFAULT CURRENT_TIMESTAMP,
+  `content_type` varchar(120) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `file_size` int NOT NULL DEFAULT '0',
+  `file_data` longblob,
+  `upload_date` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
-  CONSTRAINT `documentos_ibfk_1` FOREIGN KEY (`id`) REFERENCES `clientes` (`id`),
-  CONSTRAINT `documentos_ibfk_2` FOREIGN KEY (`id`) REFERENCES `usuarios` (`id`)
+  KEY `idx_documentos_client_file` (`client_id`,`file_name`),
+  KEY `idx_documentos_client_upload` (`client_id`,`upload_date`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
@@ -204,7 +208,7 @@ CREATE TABLE `usuarios` (
   `email` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `senha_hash` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `criado_em` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
-  `role` enum('ADMIN','VENDEDOR','DIGITADOR_PORT_REFIN','DIGITADOR_NOVO_CARTAO') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'VENDEDOR',
+  `role` enum('ADMIN','GLOBAL','VENDEDOR','DIGITADOR_PORT_REFIN','DIGITADOR_NOVO_CARTAO') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'VENDEDOR',
   PRIMARY KEY (`id`),
   UNIQUE KEY `email` (`email`)
 ) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
