@@ -9,6 +9,7 @@ from app.routes.clients import (
     ensure_operation_notifications_table,
     ensure_operation_status_history_table,
     ensure_operations_extra_columns,
+    migrate_all_storage_documents_to_db,
     serialize_document_row_for_trash,
     sync_storage_documents_to_db,
 )
@@ -41,6 +42,10 @@ def normalize_role(role):
 
 def actor_is_global():
     return normalize_role(current_user_role()) == ROLE_GLOBAL
+
+
+def actor_is_admin_like():
+    return normalize_role(current_user_role()) in {ROLE_GLOBAL, "ADMIN"}
 
 
 def parse_bool(value):
@@ -613,6 +618,48 @@ def get_system_maintenance_status():
         ensure_system_settings_table(cursor, db)
         state = get_maintenance_state(cursor)
         return jsonify({"maintenance": state}), 200
+    finally:
+        cursor.close()
+        db.close()
+
+
+@system_bp.route("/system/documents/migrate-storage", methods=["POST"])
+@jwt_required()
+def migrate_storage_documents():
+    actor_id = current_user_id()
+    actor_role = normalize_role(current_user_role())
+    if not actor_is_admin_like():
+        return jsonify({"error": "Somente ADMIN ou GLOBAL pode migrar documentos"}), 403
+
+    db = get_db()
+    cursor = db.cursor(dictionary=True)
+    try:
+        ensure_documents_table(cursor, db)
+        result = migrate_all_storage_documents_to_db(cursor)
+        log_audit(
+            cursor,
+            actor_id=actor_id,
+            actor_role=actor_role,
+            action="MIGRATE_STORAGE_DOCUMENTS",
+            target_type="SYSTEM",
+            success=True,
+            metadata=result,
+        )
+        db.commit()
+        return jsonify({"message": "Migracao de documentos concluida", "result": result}), 200
+    except Exception:
+        db.rollback()
+        log_audit(
+            cursor,
+            actor_id=actor_id,
+            actor_role=actor_role,
+            action="MIGRATE_STORAGE_DOCUMENTS",
+            target_type="SYSTEM",
+            success=False,
+            reason="Falha ao migrar documentos legados",
+        )
+        db.commit()
+        return jsonify({"error": "Nao foi possivel migrar os documentos antigos"}), 500
     finally:
         cursor.close()
         db.close()

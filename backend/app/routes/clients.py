@@ -477,6 +477,56 @@ def sync_storage_documents_to_db(cursor, client_id, seller_id=None):
     return inserted
 
 
+def iter_storage_client_ids():
+    seen = set()
+    for storage_root in STORAGE_ROOTS:
+        clients_root = os.path.join(storage_root, "clients")
+        if not os.path.isdir(clients_root):
+            continue
+
+        for entry in os.listdir(clients_root):
+            folder_path = os.path.join(clients_root, entry)
+            if not os.path.isdir(folder_path):
+                continue
+
+            try:
+                client_id = int(str(entry).strip())
+            except (TypeError, ValueError):
+                continue
+
+            if client_id <= 0 or client_id in seen:
+                continue
+
+            seen.add(client_id)
+            yield client_id
+
+
+def migrate_all_storage_documents_to_db(cursor):
+    migrated_files = 0
+    migrated_clients = 0
+    scanned_clients = 0
+    skipped_missing_clients = []
+
+    for client_id in iter_storage_client_ids():
+        scanned_clients += 1
+        seller_id = resolve_client_seller_id(cursor, client_id)
+        if seller_id is None:
+            skipped_missing_clients.append(client_id)
+            continue
+
+        inserted = sync_storage_documents_to_db(cursor, client_id, seller_id=seller_id)
+        migrated_files += inserted
+        if inserted > 0:
+            migrated_clients += 1
+
+    return {
+        "scanned_clients": scanned_clients,
+        "migrated_clients": migrated_clients,
+        "migrated_files": migrated_files,
+        "missing_clients": skipped_missing_clients,
+    }
+
+
 def list_client_documents_metadata(client_id):
     db = get_db()
     cursor = db.cursor(dictionary=True)
