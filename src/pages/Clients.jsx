@@ -22,7 +22,7 @@ const STATUS_LABELS = {
   ANALISE_BANCO: "Analise do banco",
   PENDENCIA: "Pendencia",
   DEVOLVIDA_VENDEDOR: "Devolvida para vendedor",
-  APROVADO: "Aprovada",
+  APROVADO: "Paga",
   REPROVADO: "Reprovada",
 };
 
@@ -154,7 +154,7 @@ export default function Clients() {
         </label>
 
         <article className="clientsStatCard approved">
-          <span>Aprovadas</span>
+          <span>Pagas</span>
           <strong>{stats.aprovados || 0}</strong>
         </article>
 

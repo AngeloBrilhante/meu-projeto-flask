@@ -15,7 +15,7 @@ const STATUS_LABELS = {
   ANALISE_BANCO: "Analise do banco",
   PENDENCIA: "Pendencia",
   DEVOLVIDA_VENDEDOR: "Devolvida para vendedor",
-  APROVADO: "Aprovada",
+  APROVADO: "Paga",
   REPROVADO: "Reprovada",
 };
 
@@ -40,6 +40,7 @@ const PENDENCIA_TYPE_OPTIONS = [
   { value: "", label: "Tipo de pendencia" },
   { value: "DOCUMENTACAO", label: "Documentacao" },
   { value: "ASSINATURA", label: "Assinatura" },
+  { value: "CARTA_PERICIA", label: "Carta pericia" },
   { value: "MARGEM", label: "Margem" },
   { value: "BENEFICIO_BLOQUEADO", label: "Beneficio bloqueado" },
   { value: "DIVERGENCIA_CADASTRAL", label: "Divergencia cadastral" },
@@ -124,6 +125,10 @@ function getAndamentoLabel(status) {
   const normalized = normalizeAndamentoStatus(status);
   if (!normalized) return "Sem andamento";
   return STATUS_ANDAMENTO_LABELS[normalized] || normalized.replaceAll("_", " ");
+}
+
+function getPipelineReferenceAt(operation) {
+  return operation?.enviada_esteira_em || operation?.criado_em || "";
 }
 
 function usesProposalLabels(product) {
@@ -625,11 +630,11 @@ export default function Pipeline() {
     updateFlow(operation, "DEVOLVIDA_VENDEDOR");
   }
 
-  function handleAprovar(operation) {
-    const cliente = String(operation.nome || "").trim() || "cliente";
-    const confirmed = window.confirm(
-      `Confirma aprovar a operacao #${operation.id} de ${cliente}?`
-    );
+function handleAprovar(operation) {
+  const cliente = String(operation.nome || "").trim() || "cliente";
+  const confirmed = window.confirm(
+      `Confirma marcar como paga a operacao #${operation.id} de ${cliente}?`
+  );
 
     if (!confirmed) return;
     updateFlow(operation, "APROVADO");
@@ -665,7 +670,7 @@ export default function Pipeline() {
     if (!isAnaliseBanco) {
       const defaultLabel =
         normalized === "APROVADO"
-          ? "APROVADA"
+          ? "PAGA"
           : normalized === "REPROVADO"
           ? "REPROVADA"
           : getStatusLabel(normalized);
@@ -728,7 +733,7 @@ export default function Pipeline() {
     return operations.map((operation) => ({
       ...operation,
       normalizedStatus: normalizeStatus(operation.status),
-      priority: getPriorityMeta(operation.criado_em, nowMs),
+      priority: getPriorityMeta(getPipelineReferenceAt(operation), nowMs),
     }));
   }, [operations, nowMs]);
 
@@ -847,16 +852,16 @@ export default function Pipeline() {
         }
 
         if (fromDate || toDate) {
-          const createdAt = new Date(operation.criado_em || "");
-          if (Number.isNaN(createdAt.getTime())) {
+          const pipelineDate = new Date(getPipelineReferenceAt(operation));
+          if (Number.isNaN(pipelineDate.getTime())) {
             return false;
           }
 
-          if (fromDate && createdAt < fromDate) {
+          if (fromDate && pipelineDate < fromDate) {
             return false;
           }
 
-          if (toDate && createdAt > toDate) {
+          if (toDate && pipelineDate > toDate) {
             return false;
           }
         }
@@ -1358,7 +1363,7 @@ export default function Pipeline() {
                               disabled={isSaving}
                               onClick={() => handleAprovar(operation)}
                             >
-                              Aprovar
+                              Marcar pago
                             </button>
                             <button
                               type="button"

@@ -101,7 +101,7 @@ function buildPieDataset(rawItems) {
 
 function ProductPieChart({ items }) {
   if (!items.length) {
-    return <p className="chartEmpty">Sem aprovacoes no periodo para exibir por produto.</p>;
+    return <p className="chartEmpty">Sem pagamentos no periodo para exibir por produto.</p>;
   }
 
   const total = items.reduce((sum, item) => sum + item.value, 0);
@@ -119,7 +119,7 @@ function ProductPieChart({ items }) {
       >
         <div className="pieChartCenter">
           <strong>{formatCurrency(total)}</strong>
-          <span>Total aprovado</span>
+          <span>Total pago</span>
         </div>
       </div>
 
@@ -142,7 +142,7 @@ function ProductPieChart({ items }) {
 
 function VendorRankingChart({ items }) {
   if (!items.length) {
-    return <p className="chartEmpty">Sem aprovacoes no periodo para exibir ranking.</p>;
+    return <p className="chartEmpty">Sem pagamentos no periodo para exibir ranking.</p>;
   }
 
   const maxValue = Math.max(1, ...items.map((item) => Number(item.approved_value || 0)));
@@ -162,7 +162,7 @@ function VendorRankingChart({ items }) {
             <div className="rankingTrack">
               <div className="rankingValue" style={{ width: `${width}%` }} />
             </div>
-            <small>{Number(item.approved || 0)} aprovadas</small>
+            <small>{Number(item.approved || 0)} pagas</small>
           </div>
         );
       })}
@@ -294,21 +294,21 @@ export default function Dashboard() {
   const chartConfig = useMemo(() => {
     if (chartType === "product_pie") {
       return {
-        title: "Aprovacoes por produto",
-        description: "Distribuicao do valor aprovado por produto no periodo selecionado.",
+        title: "Pagamentos por produto",
+        description: "Distribuicao do valor pago por produto no periodo selecionado.",
       };
     }
 
     if (chartType === "vendor_rank") {
       return {
         title: "Ranking de vendedores",
-        description: "Comparativo do valor aprovado por vendedor no periodo selecionado.",
+        description: "Comparativo do valor pago por vendedor no periodo selecionado.",
       };
     }
 
     return {
-      title: "Aprovadas por mes",
-      description: "Historico anual do valor aprovado.",
+      title: "Pagas por mes",
+      description: "Historico anual do valor pago.",
     };
   }, [chartType]);
 
@@ -397,7 +397,7 @@ export default function Dashboard() {
             </article>
 
             <article className="metricCard">
-              <span>Operações aprovadas</span>
+              <span>Operacoes pagas</span>
               <strong>{operations.approved || 0}</strong>
               <small>quantidade no período</small>
             </article>
@@ -468,14 +468,14 @@ export default function Dashboard() {
             <article className="panel panelGoal">
               <h3>Meta mensal</h3>
               <p>
-                Progresso calculado pelas operações aprovadas deste período.
+                Progresso calculado pelas operacoes pagas deste periodo.
               </p>
 
               <GoalGauge percentage={progress.percentage} />
 
               <div className="goalNumbers">
                 <div>
-                  <span>Aprovado em R$</span>
+                  <span>Pago em R$</span>
                   <strong>{formatCurrency(operations.approved_value || 0)}</strong>
                 </div>
                 <div>
@@ -518,8 +518,8 @@ export default function Dashboard() {
                       <th>Vendedor</th>
                       <th>Geradas</th>
                       <th>Na esteira</th>
-                      <th>Aprovadas</th>
-                      <th>Valor aprovado</th>
+                      <th>Pagas</th>
+                      <th>Valor pago</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -548,3 +548,4 @@ export default function Dashboard() {
     </div>
   );
 }
+

@@ -37,7 +37,7 @@ export default function ClientStatus() {
         <select value={status} onChange={(e) => setStatus(e.target.value)}>
           <option value="">Selecione</option>
           <option value="em_analise">Em análise</option>
-          <option value="aprovado">Aprovado</option>
+          <option value="aprovado">Pago</option>
           <option value="recusado">Recusado</option>
           <option value="liberado">Liberado</option>
         </select>

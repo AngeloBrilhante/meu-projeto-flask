@@ -336,7 +336,7 @@ STATUS_LABELS = {
     "ANALISE_BANCO": "Analise do banco",
     "PENDENCIA": "Pendencia",
     "DEVOLVIDA_VENDEDOR": "Devolvida para vendedor",
-    "APROVADO": "Aprovada",
+    "APROVADO": "Paga",
     "REPROVADO": "Reprovada",
 }
 

@@ -12,6 +12,11 @@ const INITIAL_FILTERS = {
   search: "",
 };
 
+const STATUS_LABELS = {
+  APROVADO: "PAGO",
+  REPROVADO: "REPROVADO",
+};
+
 function getStoredRole() {
   try {
     const raw = localStorage.getItem("usuario");
@@ -66,10 +71,10 @@ export default function OperationsReport() {
   );
 
   const subtitle = isAdmin
-    ? "Aprovadas e reprovadas de todos os vendedores"
+    ? "Pagas e reprovadas de todos os vendedores"
     : isVendor
-    ? "Aprovadas e reprovadas apenas do seu usuario"
-    : "Aprovadas e reprovadas dos produtos permitidos para seu perfil";
+    ? "Pagas e reprovadas apenas do seu usuario"
+    : "Pagas e reprovadas dos produtos permitidos para seu perfil";
 
   async function loadReport(nextFilters = filters) {
     setLoading(true);
@@ -178,7 +183,7 @@ export default function OperationsReport() {
   }, [operations]);
 
   const totalLabel = useMemo(() => {
-    if (filters.status === "APROVADO") return "Total aprovado";
+    if (filters.status === "APROVADO") return "Total pago";
     if (filters.status === "REPROVADO") return "Total recusado";
     return "Total";
   }, [filters.status]);
@@ -212,7 +217,7 @@ export default function OperationsReport() {
 
         <select name="status" value={filters.status} onChange={handleChange}>
           <option value="">Todos os status</option>
-          <option value="APROVADO">Aprovado</option>
+          <option value="APROVADO">Pago</option>
           <option value="REPROVADO">Reprovado</option>
         </select>
 
@@ -265,7 +270,7 @@ export default function OperationsReport() {
 
       <div className="reportStats">
         <div className="statCard">{totalLabel}: {formatCurrency(stats.totalValor)}</div>
-        <div className="statCard approved">Aprovadas: {stats.aprovadas}</div>
+        <div className="statCard approved">Pagas: {stats.aprovadas}</div>
         <div className="statCard rejected">Reprovadas: {stats.reprovadas}</div>
       </div>
 
@@ -317,7 +322,7 @@ export default function OperationsReport() {
                         op.status === "APROVADO" ? "approved" : "rejected"
                       }`}
                     >
-                      {op.status}
+                      {STATUS_LABELS[op.status] || op.status}
                     </span>
                   </td>
                   <td>{formatDate(op.criado_em)}</td>
