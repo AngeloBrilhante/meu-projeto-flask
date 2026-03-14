@@ -577,6 +577,36 @@ export async function createUser(payload) {
   return data;
 }
 
+export async function listCompanies() {
+  const response = await fetch(`${API_URL}/companies`, {
+    headers: getAuthHeaders(),
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.error || "Erro ao carregar empresas");
+  }
+
+  return data;
+}
+
+export async function createCompany(payload) {
+  const response = await fetch(`${API_URL}/companies`, {
+    method: "POST",
+    headers: getAuthHeaders(true),
+    body: JSON.stringify(payload),
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.error || "Erro ao criar empresa");
+  }
+
+  return data;
+}
+
 export async function uploadCurrentUserAvatar(file) {
   const formData = new FormData();
   formData.append("avatar", file);

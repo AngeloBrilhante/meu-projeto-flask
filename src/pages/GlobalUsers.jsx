@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { createUser } from "../services/api";
+import { createCompany, createUser, listCompanies } from "../services/api";
 import "./GlobalUsers.css";
 
 const ROLE_OPTIONS = [
@@ -29,9 +29,16 @@ export default function GlobalUsers() {
     email: "",
     senha: "",
     role: "ADMIN",
+    empresa_id: "",
   });
   const [confirmSenha, setConfirmSenha] = useState("");
   const [loading, setLoading] = useState(false);
+  const [companies, setCompanies] = useState([]);
+  const [companyForm, setCompanyForm] = useState({
+    nome: "",
+    slug: "",
+  });
+  const [companyLoading, setCompanyLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const role = useMemo(() => getStoredRole(), []);
@@ -43,8 +50,37 @@ export default function GlobalUsers() {
     }
   }, [isGlobal, navigate]);
 
+  useEffect(() => {
+    if (!isGlobal) return;
+
+    async function loadCompanies() {
+      try {
+        const data = await listCompanies();
+        const items = Array.isArray(data?.companies) ? data.companies : [];
+        setCompanies(items);
+        if (items[0] && !form.empresa_id) {
+          setForm((prev) => ({
+            ...prev,
+            empresa_id: String(items[0].id),
+          }));
+        }
+      } catch (requestError) {
+        setError(requestError.message || "Nao foi possivel carregar as empresas.");
+      }
+    }
+
+    loadCompanies();
+  }, [isGlobal]);
+
   function handleChange(field, value) {
     setForm((prev) => ({
+      ...prev,
+      [field]: value,
+    }));
+  }
+
+  function handleCompanyChange(field, value) {
+    setCompanyForm((prev) => ({
       ...prev,
       [field]: value,
     }));
@@ -59,8 +95,9 @@ export default function GlobalUsers() {
     const email = String(form.email || "").trim();
     const senha = String(form.senha || "");
     const roleValue = String(form.role || "").trim();
+    const empresaId = String(form.empresa_id || "").trim();
 
-    if (!nome || !email || !senha || !roleValue) {
+    if (!nome || !email || !senha || !roleValue || !empresaId) {
       setError("Preencha todos os campos.");
       return;
     }
@@ -82,6 +119,7 @@ export default function GlobalUsers() {
         email,
         senha,
         role: roleValue,
+        empresa_id: Number(empresaId),
       });
       const created = result?.user || {};
       setSuccess(
@@ -92,6 +130,7 @@ export default function GlobalUsers() {
         email: "",
         senha: "",
         role: "ADMIN",
+        empresa_id: empresaId,
       });
       setConfirmSenha("");
     } catch (requestError) {
@@ -101,12 +140,74 @@ export default function GlobalUsers() {
     }
   }
 
+  async function handleCreateCompany(event) {
+    event.preventDefault();
+    setError("");
+    setSuccess("");
+
+    const nome = String(companyForm.nome || "").trim();
+    const slug = String(companyForm.slug || "").trim();
+
+    if (!nome) {
+      setError("Informe o nome da empresa.");
+      return;
+    }
+
+    try {
+      setCompanyLoading(true);
+      const result = await createCompany({ nome, slug });
+      const created = result?.company;
+      const refreshed = await listCompanies();
+      const items = Array.isArray(refreshed?.companies) ? refreshed.companies : [];
+      setCompanies(items);
+      if (created?.id) {
+        setForm((prev) => ({ ...prev, empresa_id: String(created.id) }));
+      }
+      setCompanyForm({ nome: "", slug: "" });
+      setSuccess(`Empresa criada: ${created?.nome || nome}`);
+    } catch (requestError) {
+      setError(requestError.message || "Nao foi possivel criar a empresa.");
+    } finally {
+      setCompanyLoading(false);
+    }
+  }
+
   return (
     <div className="globalUsersPage">
       <div className="globalUsersHead">
         <h1>Criacao de usuarios</h1>
         <p>Area exclusiva do perfil global para criar novos acessos.</p>
       </div>
+
+      <section className="globalUsersCard">
+        <h2>Empresas</h2>
+
+        <form className="globalUsersForm" onSubmit={handleCreateCompany}>
+          <label>
+            Nome da empresa
+            <input
+              type="text"
+              value={companyForm.nome}
+              onChange={(event) => handleCompanyChange("nome", event.target.value)}
+              placeholder="Ex.: Aureon Capital"
+            />
+          </label>
+
+          <label>
+            Slug
+            <input
+              type="text"
+              value={companyForm.slug}
+              onChange={(event) => handleCompanyChange("slug", event.target.value)}
+              placeholder="Ex.: aureon-capital"
+            />
+          </label>
+
+          <button type="submit" disabled={companyLoading}>
+            {companyLoading ? "Criando empresa..." : "Criar empresa"}
+          </button>
+        </form>
+      </section>
 
       <section className="globalUsersCard">
         <h2>Novo usuario</h2>
@@ -153,6 +254,22 @@ export default function GlobalUsers() {
           </label>
 
           <label>
+            Empresa
+            <select
+              value={form.empresa_id || ""}
+              onChange={(event) => handleChange("empresa_id", event.target.value)}
+              required
+            >
+              <option value="">Selecione</option>
+              {companies.map((company) => (
+                <option key={company.id} value={company.id}>
+                  {company.nome}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label>
             Senha
             <input
               type="password"
@@ -182,4 +299,3 @@ export default function GlobalUsers() {
     </div>
   );
 }
-

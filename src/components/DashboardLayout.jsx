@@ -133,6 +133,7 @@ export default function DashboardLayout() {
 
   const displayName = user?.nome || "Usuario";
   const displayEmail = user?.email || "";
+  const companyName = user?.empresa?.nome || "Aureon Capital";
   const avatarUrl = user?.foto_url || "";
   const displayInitial = useMemo(
     () => (displayName?.trim()?.charAt(0) || "U").toUpperCase(),
@@ -538,7 +539,7 @@ export default function DashboardLayout() {
             )}
           </div>
           <div>
-            <h2>Aureon Capital</h2>
+            <h2>{companyName}</h2>
             <span>{roleLabel}</span>
           </div>
         </div>

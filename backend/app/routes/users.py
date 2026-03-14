@@ -20,6 +20,13 @@ from flask_jwt_extended import (
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from app.database import get_db
+from app.utils.company import (
+    current_user_company_id,
+    ensure_company_scope_columns,
+    fetch_company_row,
+    list_companies,
+    normalize_company_slug,
+)
 from app.utils.security import (
     add_to_trash,
     build_otpauth_uri,
@@ -148,6 +155,7 @@ def ensure_user_role_enum(cursor, db):
 
 
 def ensure_user_profile_columns(cursor, db):
+    ensure_company_scope_columns(cursor, db)
     cursor.execute(
         """
         SELECT COLUMN_NAME
@@ -190,6 +198,7 @@ def serialize_user(row):
         return None
 
     user_id = int(row.get("id"))
+    company_id = int(row.get("empresa_id") or 0)
     return {
         "id": user_id,
         "nome": row.get("nome") or "",
@@ -199,6 +208,15 @@ def serialize_user(row):
         "bio": row.get("bio") or "",
         "foto_url": build_avatar_url(user_id, row.get("foto_arquivo")),
         "twofa_enabled": bool(row.get("twofa_enabled")),
+        "empresa_id": company_id or None,
+        "empresa": {
+            "id": company_id or None,
+            "nome": row.get("empresa_nome") or "",
+            "slug": row.get("empresa_slug") or "",
+            "logo_url": row.get("empresa_logo_url"),
+            "cor_primaria": row.get("empresa_cor_primaria"),
+            "cor_secundaria": row.get("empresa_cor_secundaria"),
+        },
     }
 
 
@@ -206,18 +224,25 @@ def fetch_user_row(cursor, user_id):
     cursor.execute(
         """
         SELECT
-            id,
-            nome,
-            email,
-            role,
-            COALESCE(telefone, '') AS telefone,
-            COALESCE(bio, '') AS bio,
-            foto_arquivo,
-            senha_hash,
-            twofa_secret,
-            COALESCE(twofa_enabled, 0) AS twofa_enabled
-        FROM usuarios
-        WHERE id = %s
+            u.id,
+            u.nome,
+            u.email,
+            u.role,
+            COALESCE(u.telefone, '') AS telefone,
+            COALESCE(u.bio, '') AS bio,
+            u.foto_arquivo,
+            u.senha_hash,
+            u.twofa_secret,
+            COALESCE(u.twofa_enabled, 0) AS twofa_enabled,
+            u.empresa_id,
+            e.nome AS empresa_nome,
+            e.slug AS empresa_slug,
+            e.logo_url AS empresa_logo_url,
+            e.cor_primaria AS empresa_cor_primaria,
+            e.cor_secundaria AS empresa_cor_secundaria
+        FROM usuarios u
+        LEFT JOIN empresas e ON e.id = u.empresa_id
+        WHERE u.id = %s
         LIMIT 1
         """,
         (int(user_id),),
@@ -244,6 +269,7 @@ def create_user():
     email = normalize_email(data.get("email"))
     senha = data.get("senha") or ""
     role = normalize_role(data.get("role"))
+    raw_empresa_id = data.get("empresa_id")
 
     if not nome or not email or not senha or not role:
         return jsonify({"error": "Dados obrigatorios faltando"}), 400
@@ -273,13 +299,29 @@ def create_user():
     try:
         ensure_user_role_enum(cursor, db)
         ensure_user_profile_columns(cursor, db)
+        actor_role = current_actor_role()
+        actor_company_id = current_user_company_id()
+
+        if actor_role == ROLE_GLOBAL:
+            if raw_empresa_id in (None, "", 0, "0"):
+                return jsonify({"error": "empresa_id e obrigatorio para GLOBAL"}), 400
+            try:
+                empresa_id = int(raw_empresa_id)
+            except (TypeError, ValueError):
+                return jsonify({"error": "empresa_id invalido"}), 400
+        else:
+            empresa_id = actor_company_id
+
+        company = fetch_company_row(cursor, empresa_id)
+        if not company:
+            return jsonify({"error": "Empresa nao encontrada"}), 404
 
         cursor.execute(
             """
-            INSERT INTO usuarios (nome, email, senha_hash, role)
-            VALUES (%s, %s, %s, %s)
+            INSERT INTO usuarios (nome, email, senha_hash, role, empresa_id)
+            VALUES (%s, %s, %s, %s, %s)
             """,
-            (nome, email, senha_hash, role),
+            (nome, email, senha_hash, role, empresa_id),
         )
         db.commit()
 
@@ -325,17 +367,24 @@ def login():
         cursor.execute(
             """
             SELECT
-                id,
-                nome,
-                email,
-                senha_hash,
-                role,
-                COALESCE(telefone, '') AS telefone,
-                COALESCE(bio, '') AS bio,
-                foto_arquivo,
-                COALESCE(twofa_enabled, 0) AS twofa_enabled
-            FROM usuarios
-            WHERE email = %s
+                u.id,
+                u.nome,
+                u.email,
+                u.senha_hash,
+                u.role,
+                COALESCE(u.telefone, '') AS telefone,
+                COALESCE(u.bio, '') AS bio,
+                u.foto_arquivo,
+                COALESCE(u.twofa_enabled, 0) AS twofa_enabled,
+                u.empresa_id,
+                e.nome AS empresa_nome,
+                e.slug AS empresa_slug,
+                e.logo_url AS empresa_logo_url,
+                e.cor_primaria AS empresa_cor_primaria,
+                e.cor_secundaria AS empresa_cor_secundaria
+            FROM usuarios u
+            LEFT JOIN empresas e ON e.id = u.empresa_id
+            WHERE u.email = %s
             LIMIT 1
             """,
             (email,),
@@ -357,6 +406,9 @@ def login():
             "nome": user.get("nome"),
             "email": user.get("email"),
             "role": normalize_role(user.get("role")),
+            "empresa_id": user.get("empresa_id"),
+            "empresa_nome": user.get("empresa_nome"),
+            "empresa_slug": user.get("empresa_slug"),
         },
     )
 
@@ -388,6 +440,74 @@ def get_current_user_profile():
             return jsonify({"error": "Usuario nao encontrado"}), 404
 
         return jsonify({"user": serialize_user(row)}), 200
+    finally:
+        cursor.close()
+        db.close()
+
+
+@users_bp.route("/companies", methods=["GET"])
+@jwt_required()
+def get_companies():
+    db = get_db()
+    cursor = db.cursor(dictionary=True)
+    try:
+        ensure_company_scope_columns(cursor, db)
+        if actor_is_global():
+            companies = list_companies(cursor)
+        else:
+            company = fetch_company_row(cursor, current_user_company_id())
+            companies = [company] if company else []
+        return jsonify({"companies": companies}), 200
+    finally:
+        cursor.close()
+        db.close()
+
+
+@users_bp.route("/companies", methods=["POST"])
+@jwt_required()
+def create_company():
+    if not actor_is_global():
+        return jsonify({"error": "Somente GLOBAL pode criar empresas"}), 403
+
+    data = request.get_json(silent=True) or {}
+    nome = str(data.get("nome") or "").strip()
+    slug = normalize_company_slug(data.get("slug") or nome)
+
+    if not nome:
+        return jsonify({"error": "nome e obrigatorio"}), 400
+    if not slug:
+        return jsonify({"error": "slug invalido"}), 400
+
+    logo_url = str(data.get("logo_url") or "").strip() or None
+    cor_primaria = str(data.get("cor_primaria") or "").strip() or None
+    cor_secundaria = str(data.get("cor_secundaria") or "").strip() or None
+
+    db = get_db()
+    cursor = db.cursor(dictionary=True)
+    try:
+        ensure_company_scope_columns(cursor, db)
+        cursor.execute(
+            """
+            INSERT INTO empresas (
+                nome,
+                slug,
+                logo_url,
+                cor_primaria,
+                cor_secundaria,
+                ativa
+            )
+            VALUES (%s, %s, %s, %s, %s, 1)
+            """,
+            (nome, slug, logo_url, cor_primaria, cor_secundaria),
+        )
+        db.commit()
+        company = fetch_company_row(cursor, cursor.lastrowid)
+        return jsonify({"message": "Empresa criada com sucesso", "company": company}), 201
+    except Exception as exc:
+        db.rollback()
+        if "Duplicate entry" in str(exc) and "uq_empresas_slug" in str(exc):
+            return jsonify({"error": "Slug ja cadastrado"}), 409
+        return jsonify({"error": "Nao foi possivel criar a empresa"}), 400
     finally:
         cursor.close()
         db.close()

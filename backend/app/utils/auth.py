@@ -1,5 +1,6 @@
 from flask_jwt_extended import get_jwt, get_jwt_identity
 from app.database import get_db
+from app.utils.company import current_user_company_id, ensure_company_scope_columns
 
 ROLE_ADMIN = "ADMIN"
 ROLE_GLOBAL = "GLOBAL"
@@ -27,10 +28,11 @@ def is_global():
 
 def can_access_client(client_id):
     """
-    ADMIN/GLOBAL: acesso total
+    GLOBAL: acesso total
+    ADMIN: somente clientes da propria empresa
     VENDEDOR: somente clientes vinculados a ele
     """
-    if is_admin():
+    if is_global():
         return True
 
     try:
@@ -41,13 +43,24 @@ def can_access_client(client_id):
     if not user_id:
         return False
 
+    company_id = current_user_company_id()
+    if company_id <= 0:
+        return False
+
     db = get_db()
     cursor = db.cursor(dictionary=True)
+    ensure_company_scope_columns(cursor, db)
 
-    cursor.execute(
-        "SELECT 1 FROM clientes WHERE id=%s AND vendedor_id=%s",
-        (client_id, user_id)
-    )
+    if is_admin():
+        cursor.execute(
+            "SELECT 1 FROM clientes WHERE id=%s AND empresa_id=%s",
+            (client_id, company_id)
+        )
+    else:
+        cursor.execute(
+            "SELECT 1 FROM clientes WHERE id=%s AND vendedor_id=%s AND empresa_id=%s",
+            (client_id, user_id, company_id)
+        )
 
     allowed = cursor.fetchone() is not None
 

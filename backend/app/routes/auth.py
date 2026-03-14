@@ -3,6 +3,7 @@ from flask_jwt_extended import create_access_token, get_jwt_identity, jwt_requir
 from werkzeug.security import check_password_hash
 
 from app.database import get_db
+from app.utils.company import ensure_company_scope_columns
 
 auth_bp = Blueprint("auth", __name__)
 
@@ -22,11 +23,25 @@ def login():
 
     db = get_db()
     cursor = db.cursor(dictionary=True)
+    ensure_company_scope_columns(cursor, db)
     cursor.execute(
         """
-        SELECT id, nome, email, senha_hash, role
+        SELECT
+            u.id,
+            u.nome,
+            u.email,
+            u.senha_hash,
+            u.role,
+            u.empresa_id,
+            e.nome AS empresa_nome,
+            e.slug AS empresa_slug,
+            e.logo_url AS empresa_logo_url,
+            e.cor_primaria AS empresa_cor_primaria,
+            e.cor_secundaria AS empresa_cor_secundaria
         FROM usuarios
-        WHERE email = %s
+        u
+        LEFT JOIN empresas e ON e.id = u.empresa_id
+        WHERE u.email = %s
         LIMIT 1
         """,
         (email,),
@@ -47,6 +62,9 @@ def login():
         additional_claims={
             "email": user["email"],
             "role": user["role"],
+            "empresa_id": user.get("empresa_id"),
+            "empresa_nome": user.get("empresa_nome"),
+            "empresa_slug": user.get("empresa_slug"),
         },
     )
 
@@ -60,6 +78,15 @@ def login():
                     "nome": user["nome"],
                     "email": user["email"],
                     "role": user["role"],
+                    "empresa_id": user.get("empresa_id"),
+                    "empresa": {
+                        "id": user.get("empresa_id"),
+                        "nome": user.get("empresa_nome") or "",
+                        "slug": user.get("empresa_slug") or "",
+                        "logo_url": user.get("empresa_logo_url"),
+                        "cor_primaria": user.get("empresa_cor_primaria"),
+                        "cor_secundaria": user.get("empresa_cor_secundaria"),
+                    },
                 },
             }
         ),
@@ -71,4 +98,3 @@ def login():
 @jwt_required()
 def me():
     return jsonify({"id": get_jwt_identity()}), 200
-
