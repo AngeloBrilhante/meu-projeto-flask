@@ -27,6 +27,29 @@
   font-size: 20px;
 }
 
+.globalUsersSectionHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.globalUsersSectionHead p {
+  margin: 6px 0 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.globalUsersCount {
+  min-width: fit-content;
+  border-radius: 999px;
+  padding: 8px 12px;
+  background: var(--surface-strong);
+  border: 1px solid var(--border-color);
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
 .globalUsersMessage {
   margin: 14px 0 0;
   border-radius: 10px;
@@ -94,6 +117,107 @@
   opacity: 0.65;
 }
 
+.globalUsersFilters {
+  margin-top: 16px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  align-items: end;
+}
+
+.globalUsersFilters label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.globalUsersFilters input,
+.globalUsersFilters select {
+  height: 38px;
+  border-radius: 10px;
+  border: 1px solid var(--border-color);
+  background: var(--surface-strong);
+  color: var(--text-primary);
+  padding: 0 10px;
+  outline: none;
+}
+
+.globalUsersFiltersSearch {
+  grid-column: span 2;
+}
+
+.globalUsersFilterActions {
+  display: flex;
+  gap: 10px;
+}
+
+.globalUsersFilterActions button,
+.globalUsersTable button {
+  height: 38px;
+  border: 0;
+  border-radius: 10px;
+  padding: 0 14px;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.globalUsersFilterActions button.secondary,
+.globalUsersTable button.secondary {
+  background: var(--surface-strong);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+}
+
+.globalUsersTable button.danger {
+  background: color-mix(in srgb, var(--danger) 86%, #7a0914);
+}
+
+.globalUsersFilterActions button:disabled,
+.globalUsersTable button:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.globalUsersTableWrap {
+  margin-top: 16px;
+  overflow-x: auto;
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+}
+
+.globalUsersTable {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 760px;
+}
+
+.globalUsersTable th,
+.globalUsersTable td {
+  padding: 12px 14px;
+  text-align: left;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.globalUsersTable thead th {
+  background: var(--surface-strong);
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.globalUsersTable tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.globalUsersEmpty {
+  text-align: center !important;
+  color: var(--text-secondary);
+  padding: 22px 14px !important;
+}
+
 @media (max-width: 900px) {
   .globalUsersForm {
     grid-template-columns: 1fr;
@@ -102,5 +226,21 @@
   .globalUsersForm button {
     grid-column: span 1;
   }
-}
 
+  .globalUsersSectionHead {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .globalUsersFilters {
+    grid-template-columns: 1fr;
+  }
+
+  .globalUsersFiltersSearch {
+    grid-column: span 1;
+  }
+
+  .globalUsersFilterActions {
+    flex-direction: column;
+  }
+}

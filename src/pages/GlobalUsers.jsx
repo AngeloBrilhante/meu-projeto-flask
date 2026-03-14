@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { createCompany, createUser, listCompanies } from "../services/api";
+import {
+  createCompany,
+  createUser,
+  deleteUser,
+  listCompanies,
+  listUsers,
+} from "../services/api";
 import "./GlobalUsers.css";
 
 const ROLE_OPTIONS = [
@@ -11,19 +17,33 @@ const ROLE_OPTIONS = [
   { value: "GLOBAL", label: "Global" },
 ];
 
-function getStoredRole() {
+function getStoredUser() {
   try {
     const raw = localStorage.getItem("usuario");
-    if (!raw) return "";
-    const user = JSON.parse(raw);
-    return String(user?.role || "").toUpperCase();
+    if (!raw) return null;
+    return JSON.parse(raw);
   } catch {
-    return "";
+    return null;
   }
+}
+
+function getStoredRole() {
+  return String(getStoredUser()?.role || "").toUpperCase();
+}
+
+function roleLabel(role) {
+  return (
+    ROLE_OPTIONS.find((option) => option.value === String(role || "").toUpperCase())?.label ||
+    String(role || "-")
+  );
 }
 
 export default function GlobalUsers() {
   const navigate = useNavigate();
+  const storedUser = useMemo(() => getStoredUser(), []);
+  const role = useMemo(() => getStoredRole(), []);
+  const isGlobal = role === "GLOBAL";
+
   const [form, setForm] = useState({
     nome: "",
     email: "",
@@ -32,17 +52,25 @@ export default function GlobalUsers() {
     empresa_id: "",
   });
   const [confirmSenha, setConfirmSenha] = useState("");
-  const [loading, setLoading] = useState(false);
   const [companies, setCompanies] = useState([]);
+  const [users, setUsers] = useState([]);
+  const [filters, setFilters] = useState({
+    empresa_id: "",
+    role: "",
+    q: "",
+  });
   const [companyForm, setCompanyForm] = useState({
     nome: "",
     slug: "",
   });
+  const [loading, setLoading] = useState(false);
   const [companyLoading, setCompanyLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
-  const role = useMemo(() => getStoredRole(), []);
-  const isGlobal = role === "GLOBAL";
+  const [usersLoading, setUsersLoading] = useState(false);
+  const [createError, setCreateError] = useState("");
+  const [createSuccess, setCreateSuccess] = useState("");
+  const [companyError, setCompanyError] = useState("");
+  const [companySuccess, setCompanySuccess] = useState("");
+  const [listError, setListError] = useState("");
 
   useEffect(() => {
     if (!isGlobal) {
@@ -50,30 +78,48 @@ export default function GlobalUsers() {
     }
   }, [isGlobal, navigate]);
 
+  async function loadCompaniesAndUsers(activeFilters = filters) {
+    setListError("");
+    setUsersLoading(true);
+
+    try {
+      const [companiesResponse, usersResponse] = await Promise.all([
+        listCompanies(),
+        listUsers(activeFilters),
+      ]);
+
+      const companyItems = Array.isArray(companiesResponse?.companies)
+        ? companiesResponse.companies
+        : [];
+      const userItems = Array.isArray(usersResponse?.users) ? usersResponse.users : [];
+
+      setCompanies(companyItems);
+      setUsers(userItems);
+      setForm((prev) => {
+        if (prev.empresa_id || !companyItems[0]) return prev;
+        return { ...prev, empresa_id: String(companyItems[0].id) };
+      });
+    } catch (requestError) {
+      setListError(requestError.message || "Nao foi possivel carregar os usuarios.");
+    } finally {
+      setUsersLoading(false);
+    }
+  }
+
   useEffect(() => {
     if (!isGlobal) return;
-
-    async function loadCompanies() {
-      try {
-        const data = await listCompanies();
-        const items = Array.isArray(data?.companies) ? data.companies : [];
-        setCompanies(items);
-        if (items[0] && !form.empresa_id) {
-          setForm((prev) => ({
-            ...prev,
-            empresa_id: String(items[0].id),
-          }));
-        }
-      } catch (requestError) {
-        setError(requestError.message || "Nao foi possivel carregar as empresas.");
-      }
-    }
-
-    loadCompanies();
+    loadCompaniesAndUsers();
   }, [isGlobal]);
 
   function handleChange(field, value) {
     setForm((prev) => ({
+      ...prev,
+      [field]: value,
+    }));
+  }
+
+  function handleFilterChange(field, value) {
+    setFilters((prev) => ({
       ...prev,
       [field]: value,
     }));
@@ -88,8 +134,8 @@ export default function GlobalUsers() {
 
   async function handleSubmit(event) {
     event.preventDefault();
-    setError("");
-    setSuccess("");
+    setCreateError("");
+    setCreateSuccess("");
 
     const nome = String(form.nome || "").trim();
     const email = String(form.email || "").trim();
@@ -98,17 +144,17 @@ export default function GlobalUsers() {
     const empresaId = String(form.empresa_id || "").trim();
 
     if (!nome || !email || !senha || !roleValue || !empresaId) {
-      setError("Preencha todos os campos.");
+      setCreateError("Preencha todos os campos.");
       return;
     }
 
     if (senha.length < 6) {
-      setError("A senha deve ter no minimo 6 caracteres.");
+      setCreateError("A senha deve ter no minimo 6 caracteres.");
       return;
     }
 
     if (senha !== confirmSenha) {
-      setError("As senhas nao conferem.");
+      setCreateError("As senhas nao conferem.");
       return;
     }
 
@@ -122,8 +168,8 @@ export default function GlobalUsers() {
         empresa_id: Number(empresaId),
       });
       const created = result?.user || {};
-      setSuccess(
-        `Usuario criado: ${created.nome || nome} (${created.email || email}) - ${created.role || roleValue}`
+      setCreateSuccess(
+        `Usuario criado: ${created.nome || nome} (${created.email || email}) - ${roleLabel(created.role || roleValue)}`
       );
       setForm({
         nome: "",
@@ -133,8 +179,9 @@ export default function GlobalUsers() {
         empresa_id: empresaId,
       });
       setConfirmSenha("");
+      await loadCompaniesAndUsers(filters);
     } catch (requestError) {
-      setError(requestError.message || "Nao foi possivel criar o usuario.");
+      setCreateError(requestError.message || "Nao foi possivel criar o usuario.");
     } finally {
       setLoading(false);
     }
@@ -142,14 +189,14 @@ export default function GlobalUsers() {
 
   async function handleCreateCompany(event) {
     event.preventDefault();
-    setError("");
-    setSuccess("");
+    setCompanyError("");
+    setCompanySuccess("");
 
     const nome = String(companyForm.nome || "").trim();
     const slug = String(companyForm.slug || "").trim();
 
     if (!nome) {
-      setError("Informe o nome da empresa.");
+      setCompanyError("Informe o nome da empresa.");
       return;
     }
 
@@ -157,30 +204,62 @@ export default function GlobalUsers() {
       setCompanyLoading(true);
       const result = await createCompany({ nome, slug });
       const created = result?.company;
-      const refreshed = await listCompanies();
-      const items = Array.isArray(refreshed?.companies) ? refreshed.companies : [];
-      setCompanies(items);
+      setCompanyForm({ nome: "", slug: "" });
+      setCompanySuccess(`Empresa criada: ${created?.nome || nome}`);
+      await loadCompaniesAndUsers(filters);
       if (created?.id) {
         setForm((prev) => ({ ...prev, empresa_id: String(created.id) }));
       }
-      setCompanyForm({ nome: "", slug: "" });
-      setSuccess(`Empresa criada: ${created?.nome || nome}`);
     } catch (requestError) {
-      setError(requestError.message || "Nao foi possivel criar a empresa.");
+      setCompanyError(requestError.message || "Nao foi possivel criar a empresa.");
     } finally {
       setCompanyLoading(false);
+    }
+  }
+
+  async function handleApplyFilters(event) {
+    event.preventDefault();
+    await loadCompaniesAndUsers(filters);
+  }
+
+  async function handleClearFilters() {
+    const nextFilters = { empresa_id: "", role: "", q: "" };
+    setFilters(nextFilters);
+    await loadCompaniesAndUsers(nextFilters);
+  }
+
+  async function handleDeleteUser(targetUser) {
+    const targetId = Number(targetUser?.id);
+    if (!Number.isFinite(targetId) || targetId <= 0) return;
+
+    const targetName = String(targetUser?.nome || "usuario").trim();
+    const confirmed = window.confirm(`Excluir ${targetName}? Essa acao exige o codigo 2FA do authenticator.`);
+    if (!confirmed) return;
+
+    const twofaCode = window.prompt("Digite o codigo 2FA de 6 digitos para confirmar a exclusao:");
+    if (twofaCode === null) return;
+
+    try {
+      setListError("");
+      await deleteUser(targetId, twofaCode);
+      setCreateSuccess(`Usuario excluido: ${targetName}`);
+      await loadCompaniesAndUsers(filters);
+    } catch (requestError) {
+      setListError(requestError.message || "Nao foi possivel excluir o usuario.");
     }
   }
 
   return (
     <div className="globalUsersPage">
       <div className="globalUsersHead">
-        <h1>Criacao de usuarios</h1>
-        <p>Area exclusiva do perfil global para criar novos acessos.</p>
+        <h1>Usuarios e empresas</h1>
+        <p>Area exclusiva do perfil global para criar empresas, usuarios e administrar acessos.</p>
       </div>
 
       <section className="globalUsersCard">
         <h2>Empresas</h2>
+        {companyError && <p className="globalUsersMessage error">{companyError}</p>}
+        {companySuccess && <p className="globalUsersMessage success">{companySuccess}</p>}
 
         <form className="globalUsersForm" onSubmit={handleCreateCompany}>
           <label>
@@ -189,7 +268,7 @@ export default function GlobalUsers() {
               type="text"
               value={companyForm.nome}
               onChange={(event) => handleCompanyChange("nome", event.target.value)}
-              placeholder="Ex.: Aureon Capital"
+              placeholder="Ex.: JRCRED"
             />
           </label>
 
@@ -199,7 +278,7 @@ export default function GlobalUsers() {
               type="text"
               value={companyForm.slug}
               onChange={(event) => handleCompanyChange("slug", event.target.value)}
-              placeholder="Ex.: aureon-capital"
+              placeholder="Ex.: jrcred"
             />
           </label>
 
@@ -211,9 +290,8 @@ export default function GlobalUsers() {
 
       <section className="globalUsersCard">
         <h2>Novo usuario</h2>
-
-        {error && <p className="globalUsersMessage error">{error}</p>}
-        {success && <p className="globalUsersMessage success">{success}</p>}
+        {createError && <p className="globalUsersMessage error">{createError}</p>}
+        {createSuccess && <p className="globalUsersMessage success">{createSuccess}</p>}
 
         <form className="globalUsersForm" onSubmit={handleSubmit}>
           <label>
@@ -295,6 +373,128 @@ export default function GlobalUsers() {
             {loading ? "Criando..." : "Criar usuario"}
           </button>
         </form>
+      </section>
+
+      <section className="globalUsersCard">
+        <div className="globalUsersSectionHead">
+          <div>
+            <h2>Usuarios cadastrados</h2>
+            <p>Filtre por empresa e perfil, e exclua com confirmacao por authenticator.</p>
+          </div>
+          <span className="globalUsersCount">{users.length} usuario(s)</span>
+        </div>
+
+        {listError && <p className="globalUsersMessage error">{listError}</p>}
+
+        <form className="globalUsersFilters" onSubmit={handleApplyFilters}>
+          <label>
+            Empresa
+            <select
+              value={filters.empresa_id}
+              onChange={(event) => handleFilterChange("empresa_id", event.target.value)}
+            >
+              <option value="">Todas</option>
+              {companies.map((company) => (
+                <option key={company.id} value={company.id}>
+                  {company.nome}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label>
+            Perfil
+            <select
+              value={filters.role}
+              onChange={(event) => handleFilterChange("role", event.target.value)}
+            >
+              <option value="">Todos</option>
+              {ROLE_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="globalUsersFiltersSearch">
+            Busca
+            <input
+              type="text"
+              value={filters.q}
+              onChange={(event) => handleFilterChange("q", event.target.value)}
+              placeholder="Nome, email ou empresa"
+            />
+          </label>
+
+          <div className="globalUsersFilterActions">
+            <button type="submit" disabled={usersLoading}>
+              {usersLoading ? "Filtrando..." : "Filtrar"}
+            </button>
+            <button
+              type="button"
+              className="secondary"
+              onClick={handleClearFilters}
+              disabled={usersLoading}
+            >
+              Limpar
+            </button>
+          </div>
+        </form>
+
+        <div className="globalUsersTableWrap">
+          <table className="globalUsersTable">
+            <thead>
+              <tr>
+                <th>Nome</th>
+                <th>Email</th>
+                <th>Empresa</th>
+                <th>Perfil</th>
+                <th>2FA</th>
+                <th>Acao</th>
+              </tr>
+            </thead>
+            <tbody>
+              {usersLoading ? (
+                <tr>
+                  <td colSpan="6" className="globalUsersEmpty">
+                    Carregando usuarios...
+                  </td>
+                </tr>
+              ) : users.length ? (
+                users.map((item) => {
+                  const isSelf = Number(item.id) === Number(storedUser?.id);
+                  return (
+                    <tr key={item.id}>
+                      <td>{item.nome || "-"}</td>
+                      <td>{item.email || "-"}</td>
+                      <td>{item.empresa?.nome || "-"}</td>
+                      <td>{roleLabel(item.role)}</td>
+                      <td>{item.twofa_enabled ? "Ativo" : "Inativo"}</td>
+                      <td>
+                        <button
+                          type="button"
+                          className="danger"
+                          onClick={() => handleDeleteUser(item)}
+                          disabled={isSelf}
+                          title={isSelf ? "Voce nao pode excluir sua propria conta" : "Excluir usuario"}
+                        >
+                          Excluir
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })
+              ) : (
+                <tr>
+                  <td colSpan="6" className="globalUsersEmpty">
+                    Nenhum usuario encontrado com os filtros atuais.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </section>
     </div>
   );

@@ -258,6 +258,88 @@ def require_global_twofa(cursor, actor_id):
     return jsonify({"error": error_message}), 403
 
 
+@users_bp.route("/users", methods=["GET"])
+@jwt_required()
+def list_users():
+    if not actor_is_global():
+        return jsonify({"error": "Somente GLOBAL pode listar todos os usuarios"}), 403
+
+    role_filter = normalize_role(request.args.get("role"))
+    company_id_raw = request.args.get("empresa_id")
+    search = str(request.args.get("q") or "").strip()
+
+    if role_filter and role_filter not in ALLOWED_USER_ROLES:
+        return jsonify({"error": "role invalido"}), 400
+
+    company_id = None
+    if company_id_raw not in (None, "", "0", 0):
+        try:
+            company_id = int(company_id_raw)
+        except (TypeError, ValueError):
+            return jsonify({"error": "empresa_id invalido"}), 400
+
+    db = get_db()
+    cursor = db.cursor(dictionary=True)
+
+    try:
+        ensure_user_profile_columns(cursor, db)
+
+        conditions = ["1=1"]
+        params = []
+
+        if role_filter:
+            conditions.append("UPPER(u.role) = %s")
+            params.append(role_filter)
+
+        if company_id:
+            conditions.append("u.empresa_id = %s")
+            params.append(company_id)
+
+        if search:
+            like_term = f"%{search}%"
+            conditions.append(
+                """
+                (
+                    u.nome LIKE %s
+                    OR u.email LIKE %s
+                    OR COALESCE(e.nome, '') LIKE %s
+                )
+                """
+            )
+            params.extend([like_term, like_term, like_term])
+
+        where_clause = " AND ".join(conditions)
+        cursor.execute(
+            f"""
+            SELECT
+                u.id,
+                u.nome,
+                u.email,
+                u.role,
+                COALESCE(u.telefone, '') AS telefone,
+                COALESCE(u.bio, '') AS bio,
+                u.foto_arquivo,
+                COALESCE(u.twofa_enabled, 0) AS twofa_enabled,
+                u.empresa_id,
+                e.nome AS empresa_nome,
+                e.slug AS empresa_slug,
+                e.logo_url AS empresa_logo_url,
+                e.cor_primaria AS empresa_cor_primaria,
+                e.cor_secundaria AS empresa_cor_secundaria
+            FROM usuarios u
+            LEFT JOIN empresas e ON e.id = u.empresa_id
+            WHERE {where_clause}
+            ORDER BY e.nome ASC, u.nome ASC, u.id ASC
+            """,
+            tuple(params),
+        )
+        rows = cursor.fetchall() or []
+        return jsonify({"users": [serialize_user(row) for row in rows], "total": len(rows)}), 200
+    finally:
+        cursor.close()
+        db.close()
+
+
 @users_bp.route("/users", methods=["POST"])
 @jwt_required()
 def create_user():

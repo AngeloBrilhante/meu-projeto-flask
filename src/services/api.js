@@ -577,6 +577,30 @@ export async function createUser(payload) {
   return data;
 }
 
+export async function listUsers(filters = {}) {
+  const params = new URLSearchParams();
+
+  Object.entries(filters).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== "") {
+      params.set(key, String(value));
+    }
+  });
+
+  const query = params.toString();
+  const url = query ? `${API_URL}/users?${query}` : `${API_URL}/users`;
+  const response = await fetch(url, {
+    headers: getAuthHeaders(),
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.error || "Erro ao carregar usuarios");
+  }
+
+  return data;
+}
+
 export async function listCompanies() {
   const response = await fetch(`${API_URL}/companies`, {
     headers: getAuthHeaders(),
@@ -749,6 +773,27 @@ export async function deleteClient(clientId, twofaCode) {
 
   if (!response.ok) {
     throw new Error(data.error || "Erro ao excluir cliente");
+  }
+
+  return data;
+}
+
+export async function deleteUser(userId, twofaCode) {
+  const payload = {};
+  if (twofaCode) {
+    payload.twofa_code = String(twofaCode).trim();
+  }
+
+  const response = await fetch(`${API_URL}/users/${userId}`, {
+    method: "DELETE",
+    headers: getAuthHeaders(true),
+    body: JSON.stringify(payload),
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.error || "Erro ao excluir usuario");
   }
 
   return data;
