@@ -1,7 +1,11 @@
 import { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { createClient } from "../services/api";
-import { DATE_INPUT_PLACEHOLDER, normalizeDateInputValue } from "../utils/date";
+import {
+  DATE_INPUT_PLACEHOLDER,
+  formatDateInputValue,
+  normalizeDateInputValue,
+} from "../utils/date";
 import "./CreateClient.css";
 
 const INITIAL_FORM = {
@@ -100,7 +104,7 @@ export default function CreateClient() {
     if (name === "data_nascimento" || name === "rg_data_emissao") {
       setForm((prev) => ({
         ...prev,
-        [name]: normalizeDateInputValue(value),
+        [name]: formatDateInputValue(value),
       }));
       return;
     }

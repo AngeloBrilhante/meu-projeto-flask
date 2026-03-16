@@ -1,7 +1,12 @@
 import { useEffect, useState } from "react";
 import { useOutletContext } from "react-router-dom";
 import { updateClient } from "../../services/api";
-import { DATE_INPUT_PLACEHOLDER, normalizeDateInputValue } from "../../utils/date";
+import {
+  DATE_INPUT_PLACEHOLDER,
+  formatDateDisplayValue,
+  formatDateInputValue,
+  normalizeDateInputValue,
+} from "../../utils/date";
 
 function formatCurrency(value) {
   const number = Number(value);
@@ -22,15 +27,7 @@ function formatCurrencyInput(value) {
 }
 
 function formatDate(value) {
-  const text = String(value || "").trim();
-  if (!text) return "-";
-
-  const isoMatch = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (isoMatch) {
-    return `${isoMatch[3]}/${isoMatch[2]}/${isoMatch[1]}`;
-  }
-
-  return text;
+  return formatDateDisplayValue(value);
 }
 
 function formatBool(value) {
@@ -41,7 +38,7 @@ function buildForm(client) {
   return {
     nome: client?.nome || "",
     cpf: client?.cpf || "",
-    data_nascimento: client?.data_nascimento || "",
+    data_nascimento: formatDateInputValue(client?.data_nascimento),
     especie: client?.especie || "",
     uf_beneficio: client?.uf_beneficio || "",
     numero_beneficio: client?.numero_beneficio || "",
@@ -53,7 +50,7 @@ function buildForm(client) {
     rg_numero: client?.rg_numero || "",
     rg_orgao_exp: client?.rg_orgao_exp || "",
     rg_uf: client?.rg_uf || "",
-    rg_data_emissao: client?.rg_data_emissao || "",
+    rg_data_emissao: formatDateInputValue(client?.rg_data_emissao),
     naturalidade: client?.naturalidade || "",
     cep: client?.cep || "",
     rua: client?.rua || "",
@@ -110,7 +107,7 @@ export default function ClientData() {
       type === "checkbox"
         ? checked
         : name === "data_nascimento" || name === "rg_data_emissao"
-        ? normalizeDateInputValue(value)
+        ? formatDateInputValue(value)
         : value;
 
     setForm((prev) => ({

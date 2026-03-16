@@ -1,7 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { getOperationsReport } from "../services/api";
-import { DATE_INPUT_PLACEHOLDER, normalizeDateInputValue } from "../utils/date";
+import {
+  DATE_INPUT_PLACEHOLDER,
+  formatDateInputValue,
+  normalizeDateInputValue,
+} from "../utils/date";
 import "./OperationsReport.css";
 
 const INITIAL_FILTERS = {
@@ -104,7 +108,7 @@ export default function OperationsReport() {
       ...prev,
       [name]:
         name === "date_from" || name === "date_to"
-          ? normalizeDateInputValue(value)
+          ? formatDateInputValue(value)
           : value,
     }));
   }

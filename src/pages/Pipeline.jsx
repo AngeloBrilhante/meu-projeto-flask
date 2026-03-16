@@ -5,7 +5,12 @@ import {
   getPipeline,
   updateOperation,
 } from "../services/api";
-import { DATE_INPUT_PLACEHOLDER, normalizeDateInputValue, parseDateFilterBoundary } from "../utils/date";
+import {
+  DATE_INPUT_PLACEHOLDER,
+  formatDateInputValue,
+  normalizeDateInputValue,
+  parseDateFilterBoundary,
+} from "../utils/date";
 import "./Pipeline.css";
 
 const STATUS_LABELS = {
@@ -919,7 +924,7 @@ function handleAprovar(operation) {
   function handleFilterChange(field, value) {
     const nextValue =
       field === "date_from" || field === "date_to"
-        ? normalizeDateInputValue(value)
+        ? formatDateInputValue(value)
         : value;
     setFilters((prev) => ({
       ...prev,

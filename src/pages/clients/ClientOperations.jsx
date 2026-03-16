@@ -6,7 +6,11 @@ import {
   hasOperationFicha,
   mergeOperationFicha,
 } from "../../constants/operationSchemas";
-import { DATE_INPUT_PLACEHOLDER, normalizeDateInputValue } from "../../utils/date";
+import {
+  DATE_INPUT_PLACEHOLDER,
+  formatDateInputValue,
+  normalizeDateInputValue,
+} from "../../utils/date";
 import {
   createOperation,
   deleteOperation,
@@ -426,7 +430,7 @@ export default function ClientOperations() {
                                       name: field.name,
                                       value:
                                         field.type === "date"
-                                          ? normalizeDateInputValue(event.target.value)
+                                          ? formatDateInputValue(event.target.value)
                                           : event.target.value,
                                     },
                                   })
