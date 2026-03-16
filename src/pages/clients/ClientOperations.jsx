@@ -112,6 +112,42 @@ function formatAndamentoStatus(status) {
   return STATUS_ANDAMENTO_LABELS[normalized] || normalized.replaceAll("_", " ");
 }
 
+function formatTextLabel(value) {
+  return String(value || "")
+    .trim()
+    .replaceAll("_", " ")
+    .toLowerCase()
+    .replace(/(^|\s)\S/g, (char) => char.toUpperCase());
+}
+
+function getStatusReason(operation) {
+  const normalizedStatus = normalizeStatus(operation?.status);
+  const pendenciaTipo = String(operation?.pendencia_tipo || "").trim();
+  const pendenciaMotivo = String(operation?.pendencia_motivo || "").trim();
+  const motivoReprovacao = String(operation?.motivo_reprovacao || "").trim();
+
+  if (normalizedStatus === "REPROVADO" && motivoReprovacao) {
+    return {
+      title: "Motivo da reprovacao",
+      typeLabel: "",
+      message: motivoReprovacao,
+    };
+  }
+
+  if (
+    (normalizedStatus === "PENDENCIA" || normalizedStatus === "DEVOLVIDA_VENDEDOR") &&
+    (pendenciaTipo || pendenciaMotivo)
+  ) {
+    return {
+      title: "Motivo da pendencia",
+      typeLabel: pendenciaTipo ? formatTextLabel(pendenciaTipo) : "",
+      message: pendenciaMotivo || "Sem comentario adicional.",
+    };
+  }
+
+  return null;
+}
+
 export default function ClientOperations() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -122,6 +158,7 @@ export default function ClientOperations() {
   const [editingOperationId, setEditingOperationId] = useState(null);
   const [form, setForm] = useState(EMPTY_FORM);
   const [removingOperationId, setRemovingOperationId] = useState(null);
+  const [statusDetailOperation, setStatusDetailOperation] = useState(null);
 
   const user = useMemo(() => getStoredUser(), []);
   const role = String(user?.role || "").toUpperCase();
@@ -525,9 +562,19 @@ export default function ClientOperations() {
                       </button>
                     </td>
                     <td>
-                      <span className={`operationStatusBadge ${normalizedStatus}`}>
-                        {formatStatus(normalizedStatus)}
-                      </span>
+                      {getStatusReason(operation) ? (
+                        <button
+                          type="button"
+                          className={`operationStatusBadge statusDetailButton ${normalizedStatus}`}
+                          onClick={() => setStatusDetailOperation(operation)}
+                        >
+                          {formatStatus(normalizedStatus)}
+                        </button>
+                      ) : (
+                        <span className={`operationStatusBadge ${normalizedStatus}`}>
+                          {formatStatus(normalizedStatus)}
+                        </span>
+                      )}
                     </td>
                     <td>
                       <span className="operationProgressBadge">
@@ -597,6 +644,52 @@ export default function ClientOperations() {
               })}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {statusDetailOperation && (
+        <div
+          className="clientModalOverlay"
+          role="presentation"
+          onClick={() => setStatusDetailOperation(null)}
+        >
+          <div
+            className="clientStatusReasonModal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="status-reason-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="clientStatusReasonHead">
+              <div>
+                <span className="clientStatusReasonKicker">
+                  {formatStatus(statusDetailOperation.status)}
+                </span>
+                <h4 id="status-reason-title">
+                  {getStatusReason(statusDetailOperation)?.title || "Detalhes do status"}
+                </h4>
+              </div>
+              <button
+                type="button"
+                className="clientGhostButton"
+                onClick={() => setStatusDetailOperation(null)}
+              >
+                Fechar
+              </button>
+            </div>
+
+            {getStatusReason(statusDetailOperation)?.typeLabel && (
+              <div className="clientStatusReasonBlock">
+                <span>Tipo</span>
+                <strong>{getStatusReason(statusDetailOperation)?.typeLabel}</strong>
+              </div>
+            )}
+
+            <div className="clientStatusReasonBlock">
+              <span>Comentario</span>
+              <p>{getStatusReason(statusDetailOperation)?.message || "-"}</p>
+            </div>
+          </div>
         </div>
       )}
     </div>
