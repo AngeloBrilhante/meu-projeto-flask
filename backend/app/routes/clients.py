@@ -5076,17 +5076,19 @@ def list_user_notifications():
         cursor.execute(
             f"""
             SELECT
-                id,
-                operation_id,
-                previous_status,
-                next_status,
-                title,
-                message,
-                read_at,
-                created_at
-            FROM operation_notifications
-            WHERE {where_clause}
-            ORDER BY created_at DESC, id DESC
+                n.id,
+                n.operation_id,
+                o.cliente_id,
+                n.previous_status,
+                n.next_status,
+                n.title,
+                n.message,
+                n.read_at,
+                n.created_at
+            FROM operation_notifications n
+            LEFT JOIN operacoes o ON o.id = n.operation_id
+            WHERE {where_clause.replace("user_id", "n.user_id").replace("read_at", "n.read_at")}
+            ORDER BY n.created_at DESC, n.id DESC
             LIMIT %s
             """,
             tuple(params_with_limit),

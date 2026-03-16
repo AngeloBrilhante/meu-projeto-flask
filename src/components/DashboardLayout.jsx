@@ -476,6 +476,11 @@ export default function DashboardLayout() {
     }
   }
 
+  function isCommentNotification(notification) {
+    const title = String(notification?.title || "").trim().toUpperCase();
+    return title.includes("NOVO COMENTARIO");
+  }
+
   async function handleNotificationClick(notification) {
     if (!notification) return;
 
@@ -486,6 +491,13 @@ export default function DashboardLayout() {
     }
 
     setNotificationsOpen(false);
+
+    if (notification.operation_id && notification.cliente_id && isCommentNotification(notification)) {
+      navigate(
+        `/clients/${notification.cliente_id}/comentarios?operation_id=${notification.operation_id}`
+      );
+      return;
+    }
 
     if (notification.operation_id) {
       navigate(`/operations/${notification.operation_id}/ficha`);
