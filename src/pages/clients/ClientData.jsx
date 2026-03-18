@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useOutletContext } from "react-router-dom";
 import { updateClient } from "../../services/api";
 import {
@@ -34,6 +34,16 @@ function formatBool(value) {
   return value ? "Sim" : "Nao";
 }
 
+function buildBeneficios(client) {
+  if (Array.isArray(client?.beneficios) && client.beneficios.length > 0) {
+    return client.beneficios;
+  }
+  if (client?.numero_beneficio) {
+    return [client.numero_beneficio];
+  }
+  return [""];
+}
+
 function buildForm(client) {
   return {
     nome: client?.nome || "",
@@ -41,7 +51,7 @@ function buildForm(client) {
     data_nascimento: formatDateInputValue(client?.data_nascimento),
     especie: client?.especie || "",
     uf_beneficio: client?.uf_beneficio || "",
-    numero_beneficio: client?.numero_beneficio || "",
+    beneficios: buildBeneficios(client),
     salario: formatCurrencyInput(client?.salario),
     nome_mae: client?.nome_mae || "",
     telefone: client?.telefone || "",
@@ -59,6 +69,17 @@ function buildForm(client) {
   };
 }
 
+function getStoredRole() {
+  try {
+    const raw = localStorage.getItem("usuario");
+    if (!raw) return "";
+    const parsed = JSON.parse(raw);
+    return String(parsed?.role || "").toUpperCase();
+  } catch {
+    return "";
+  }
+}
+
 export default function ClientData() {
   const { client, refreshClient } = useOutletContext() || {};
   const [isEditing, setIsEditing] = useState(false);
@@ -66,6 +87,9 @@ export default function ClientData() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [form, setForm] = useState(() => buildForm(client));
+  const role = useMemo(() => getStoredRole(), []);
+  const canEditClient =
+    role === "GLOBAL" || role === "ADMIN" || role === "VENDEDOR";
 
   useEffect(() => {
     if (!isEditing) {
@@ -77,6 +101,11 @@ export default function ClientData() {
     return <p className="clientSectionText">Cliente nao encontrado.</p>;
   }
 
+  const beneficios =
+    Array.isArray(form.beneficios) && form.beneficios.length > 0
+      ? form.beneficios
+      : [""];
+
   const fields = [
     ["Nome", client.nome],
     ["CPF", client.cpf],
@@ -84,7 +113,12 @@ export default function ClientData() {
     ["Data de nascimento", formatDate(client.data_nascimento)],
     ["Especie", client.especie],
     ["UF do beneficio", client.uf_beneficio],
-    ["Numero do beneficio", client.numero_beneficio],
+    [
+      "Beneficios",
+      Array.isArray(client.beneficios) && client.beneficios.length > 0
+        ? client.beneficios.join(", ")
+        : client.numero_beneficio,
+    ],
     ["Salario", formatCurrency(client.salario)],
     ["Nome da mae", client.nome_mae],
     ["Telefone", client.telefone],
@@ -116,6 +150,36 @@ export default function ClientData() {
     }));
   }
 
+  function handleBeneficioChange(index, value) {
+    setForm((prev) => {
+      const nextBeneficios = [...(prev.beneficios || [""])];
+      nextBeneficios[index] = value;
+      return {
+        ...prev,
+        beneficios: nextBeneficios,
+      };
+    });
+  }
+
+  function handleAddBeneficio() {
+    setForm((prev) => ({
+      ...prev,
+      beneficios: [...(prev.beneficios || [""]), ""],
+    }));
+  }
+
+  function handleRemoveBeneficio(index) {
+    setForm((prev) => {
+      const nextBeneficios = [...(prev.beneficios || [""])].filter(
+        (_, currentIndex) => currentIndex !== index
+      );
+      return {
+        ...prev,
+        beneficios: nextBeneficios.length > 0 ? nextBeneficios : [""],
+      };
+    });
+  }
+
   function handleCancel() {
     setIsEditing(false);
     setError("");
@@ -130,8 +194,14 @@ export default function ClientData() {
     setSuccess("");
 
     try {
+      const normalizedBeneficios = beneficios
+        .map((item) => String(item || "").trim())
+        .filter(Boolean);
+
       await updateClient(client.id, {
         ...form,
+        numero_beneficio: normalizedBeneficios[0] || "",
+        beneficios: normalizedBeneficios,
         data_nascimento: normalizeDateInputValue(form.data_nascimento),
         rg_data_emissao: normalizeDateInputValue(form.rg_data_emissao),
       });
@@ -153,11 +223,13 @@ export default function ClientData() {
         <div>
           <h2>Dados do cliente</h2>
           <p className="clientSectionText">
-            {isEditing ? "Edite os dados abaixo e salve quando concluir." : "Visualizacao completa dos dados cadastrados."}
+            {isEditing
+              ? "Edite os dados abaixo e salve quando concluir."
+              : "Visualizacao completa dos dados cadastrados."}
           </p>
         </div>
 
-        {!isEditing && (
+        {!isEditing && canEditClient && (
           <button
             type="button"
             className="clientPrimaryButton"
@@ -209,15 +281,40 @@ export default function ClientData() {
               <input name="uf_beneficio" value={form.uf_beneficio} onChange={handleChange} maxLength={2} />
             </label>
 
-            <label className="clientEditField">
-              <span>Numero do beneficio</span>
-              <input
-                name="numero_beneficio"
-                value={form.numero_beneficio}
-                onChange={handleChange}
-                inputMode="numeric"
-              />
-            </label>
+            <div className="clientEditField clientBenefitsField">
+              <div className="clientFieldHeader">
+                <span>Beneficios</span>
+                <button
+                  type="button"
+                  className="clientGhostButton"
+                  onClick={handleAddBeneficio}
+                >
+                  +
+                </button>
+              </div>
+              <div className="clientBenefitsList">
+                {beneficios.map((beneficio, index) => (
+                  <div key={`beneficio-${index}`} className="clientBenefitRow">
+                    <input
+                      value={beneficio}
+                      onChange={(event) =>
+                        handleBeneficioChange(index, event.target.value)
+                      }
+                      inputMode="numeric"
+                    />
+                    {beneficios.length > 1 && (
+                      <button
+                        type="button"
+                        className="clientGhostButton"
+                        onClick={() => handleRemoveBeneficio(index)}
+                      >
+                        Remover
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
 
             <label className="clientEditField">
               <span>Salario</span>

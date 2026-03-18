@@ -3,6 +3,7 @@ import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import {
   getOperationStatusHistory,
   getPipeline,
+  sendOperationToPipeline,
   updateOperation,
 } from "../services/api";
 import {
@@ -253,6 +254,14 @@ function onlyDigits(value) {
   return String(value || "").replace(/\D/g, "");
 }
 
+function getStoredUser() {
+  try {
+    return JSON.parse(localStorage.getItem("usuario") || "null");
+  } catch {
+    return null;
+  }
+}
+
 function getPipelineViewFromPath(pathname) {
   const normalized = String(pathname || "").trim().toLowerCase();
   return normalized.endsWith("/pipeline/prontas")
@@ -264,6 +273,10 @@ export default function Pipeline() {
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams] = useSearchParams();
+  const user = useMemo(() => getStoredUser(), []);
+  const role = String(user?.role || "").toUpperCase();
+  const isVendor = role === "VENDEDOR";
+  const canAccessReadyPipeline = role === "ADMIN" || role === "GLOBAL" || role.startsWith("DIGITADOR");
   const [operations, setOperations] = useState([]);
   const [drafts, setDrafts] = useState({});
   const [loading, setLoading] = useState(false);
@@ -354,6 +367,12 @@ export default function Pipeline() {
   useEffect(() => {
     setPipelineView(routePipelineView);
   }, [routePipelineView]);
+
+  useEffect(() => {
+    if (isVendor && routePipelineView === PIPELINE_VIEW_OPTIONS.READY) {
+      navigate("/pipeline", { replace: true });
+    }
+  }, [isVendor, navigate, routePipelineView]);
 
   useEffect(() => {
     setFilters((prev) => {
@@ -633,6 +652,23 @@ export default function Pipeline() {
     }
 
     updateFlow(operation, "DEVOLVIDA_VENDEDOR");
+  }
+
+  async function handleReturnToPipeline(operation) {
+    try {
+      setSavingOperationId(operation.id);
+      await sendOperationToPipeline(operation.id);
+      if (openHistory[operation.id]) {
+        await loadOperationHistory(operation.id, { force: true });
+      }
+      await fetchPipeline();
+      window.dispatchEvent(new Event("pipeline:changed"));
+    } catch (error) {
+      console.error("Erro ao devolver operacao para a esteira:", error);
+      alert(error.message || "Nao foi possivel devolver a operacao para a esteira");
+    } finally {
+      setSavingOperationId(null);
+    }
   }
 
 function handleAprovar(operation) {
@@ -961,17 +997,19 @@ function handleAprovar(operation) {
         >
           Esteira principal ({activeCount})
         </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={pipelineView === PIPELINE_VIEW_OPTIONS.READY}
-          className={`pipelineViewTab${
-            pipelineView === PIPELINE_VIEW_OPTIONS.READY ? " active" : ""
-          }`}
-          onClick={() => handlePipelineViewChange(PIPELINE_VIEW_OPTIONS.READY)}
-        >
-          Prontas para digitar ({readyCount})
-        </button>
+        {canAccessReadyPipeline && (
+          <button
+            type="button"
+            role="tab"
+            aria-selected={pipelineView === PIPELINE_VIEW_OPTIONS.READY}
+            className={`pipelineViewTab${
+              pipelineView === PIPELINE_VIEW_OPTIONS.READY ? " active" : ""
+            }`}
+            onClick={() => handlePipelineViewChange(PIPELINE_VIEW_OPTIONS.READY)}
+          >
+            Prontas para digitar ({readyCount})
+          </button>
+        )}
       </div>
 
       <div className="pipelineFilters">
@@ -1124,9 +1162,13 @@ function handleAprovar(operation) {
                 const historyOpen = Boolean(openHistory[operation.id]);
                 const historyItems = historyByOperation[operation.id] || [];
                 const historyLoading = loadingHistoryOperationId === operation.id;
-                const canManageFlow = !["APROVADO", "REPROVADO"].includes(
+                const canManageFlow = !isVendor && !["APROVADO", "REPROVADO"].includes(
                   operation.normalizedStatus
                 );
+                const canResendToPipeline =
+                  isVendor &&
+                  (operation.normalizedStatus === "AGUARDANDO_FORMALIZACAO" ||
+                    operation.normalizedStatus === "DEVOLVIDA_VENDEDOR");
                 const andamentoAtual = normalizeAndamentoStatus(
                   Object.prototype.hasOwnProperty.call(draft, "status_andamento")
                     ? draft.status_andamento
@@ -1209,16 +1251,18 @@ function handleAprovar(operation) {
                           </div>
                         </div>
 
-                        <button
-                          type="button"
-                          className={`toggleFormButton${formalizacaoAberta ? " active" : ""}`}
-                          disabled={isSaving}
-                          onClick={() => toggleFormalizacaoEditor(operation.id)}
-                        >
-                          {formalizacaoAberta ? "Fechar edicao" : "Editar dados"}
-                        </button>
+                        {!isVendor && (
+                          <button
+                            type="button"
+                            className={`toggleFormButton${formalizacaoAberta ? " active" : ""}`}
+                            disabled={isSaving}
+                            onClick={() => toggleFormalizacaoEditor(operation.id)}
+                          >
+                            {formalizacaoAberta ? "Fechar edicao" : "Editar dados"}
+                          </button>
+                        )}
 
-                        {formalizacaoAberta && (
+                        {!isVendor && formalizacaoAberta && (
                           <div className="proposalStackField">
                             <input
                               type="text"
@@ -1310,7 +1354,18 @@ function handleAprovar(operation) {
                           </button>
                         )}
 
-                        {operation.normalizedStatus === "PRONTA_DIGITAR" && (
+                        {canResendToPipeline && (
+                          <button
+                            type="button"
+                            className="returnBtn"
+                            disabled={isSaving}
+                            onClick={() => handleReturnToPipeline(operation)}
+                          >
+                            Devolver para esteira
+                          </button>
+                        )}
+
+                        {!isVendor && operation.normalizedStatus === "PRONTA_DIGITAR" && (
                           <>
                             <button
                               type="button"
@@ -1331,7 +1386,7 @@ function handleAprovar(operation) {
                           </>
                         )}
 
-                        {operation.normalizedStatus === "EM_DIGITACAO" && (
+                        {!isVendor && operation.normalizedStatus === "EM_DIGITACAO" && (
                           <>
                             <button
                               type="button"
@@ -1352,7 +1407,7 @@ function handleAprovar(operation) {
                           </>
                         )}
 
-                        {operation.normalizedStatus === "ANALISE_BANCO" && (
+                        {!isVendor && operation.normalizedStatus === "ANALISE_BANCO" && (
                           <>
                             <button
                               type="button"
@@ -1381,7 +1436,7 @@ function handleAprovar(operation) {
                           </>
                         )}
 
-	                        {operation.normalizedStatus === "AGUARDANDO_FORMALIZACAO" && (
+		                        {!isVendor && operation.normalizedStatus === "AGUARDANDO_FORMALIZACAO" && (
 	                          <>
 	                            <button
 	                              type="button"
@@ -1402,7 +1457,7 @@ function handleAprovar(operation) {
 	                          </>
 	                        )}
 
-                        {operation.normalizedStatus === "PENDENCIA" && (
+                        {!isVendor && operation.normalizedStatus === "PENDENCIA" && (
                           <>
                             <button
                               type="button"
@@ -1450,7 +1505,7 @@ function handleAprovar(operation) {
                         <p className="pipelineInlineHint">Aguardando vendedor reenviar.</p>
                       )}
 
-                      {pendenciaAberta && (
+                      {!isVendor && pendenciaAberta && (
                         <div className="pipelineActionPanel">
                           <h4>Pendencia</h4>
                           <div className="proposalStackField">
@@ -1525,7 +1580,7 @@ function handleAprovar(operation) {
                         </div>
                       )}
 
-                      {reprovacaoAberta && (
+                      {!isVendor && reprovacaoAberta && (
                         <div className="pipelineActionPanel reprovacaoPanel">
                           <h4>Reprovacao</h4>
                           <div className="proposalStackField">

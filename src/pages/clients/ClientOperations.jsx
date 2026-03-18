@@ -29,7 +29,7 @@ const PRODUCT_OPTIONS = [
   { value: "PORTABILIDADE", label: "Portabilidade" },
   { value: "REFINANCIAMENTO", label: "Refinanciamento" },
   { value: "PORTABILIDADE_REFIN", label: "Port + Refin" },
-  { value: "CARTAO", label: "Cartão" },
+  { value: "CARTAO", label: "CartÃ£o" },
 ];
 
 const STATUS_LABELS = {
@@ -163,6 +163,8 @@ export default function ClientOperations() {
   const user = useMemo(() => getStoredUser(), []);
   const role = String(user?.role || "").toUpperCase();
   const isGlobal = role === "GLOBAL";
+  const isDigitador = role.startsWith("DIGITADOR");
+  const canManageOperations = !isDigitador;
   const formSchema = getOperationSchema(form.produto);
 
   async function loadOperations() {
@@ -170,7 +172,7 @@ export default function ClientOperations() {
       const data = await listClientOperations(id);
       setOperations(Array.isArray(data) ? data : []);
     } catch (error) {
-      console.error("Erro ao carregar operações:", error);
+      console.error("Erro ao carregar operaÃ§Ãµes:", error);
       setOperations([]);
     }
   }
@@ -258,7 +260,7 @@ export default function ClientOperations() {
     }
 
     if (!formSchema) {
-      alert("Não existe ficha configurada para este produto.");
+      alert("NÃ£o existe ficha configurada para este produto.");
       return;
     }
 
@@ -272,17 +274,17 @@ export default function ClientOperations() {
 
       if (editingOperationId) {
         await updateOperation(editingOperationId, payload);
-        alert("Operação editada com sucesso");
+        alert("OperaÃ§Ã£o editada com sucesso");
       } else {
         await createOperation(id, payload);
-        alert("Operação criada com sucesso");
+        alert("OperaÃ§Ã£o criada com sucesso");
       }
 
       resetForm("");
       await loadOperations();
     } catch (error) {
-      console.error("Erro ao salvar operação:", error);
-      alert(error.message || "Não foi possível salvar a operação");
+      console.error("Erro ao salvar operaÃ§Ã£o:", error);
+      alert(error.message || "NÃ£o foi possÃ­vel salvar a operaÃ§Ã£o");
     } finally {
       setLoading(false);
     }
@@ -293,9 +295,9 @@ export default function ClientOperations() {
       await sendOperationToPipeline(operationId);
       await loadOperations();
       window.dispatchEvent(new Event("pipeline:changed"));
-      alert("Operação enviada para esteira");
+      alert("OperaÃ§Ã£o enviada para esteira");
     } catch (error) {
-      alert(error.message || "Não foi possível enviar para esteira");
+      alert(error.message || "NÃ£o foi possÃ­vel enviar para esteira");
     }
   }
 
@@ -318,6 +320,10 @@ export default function ClientOperations() {
 
   function openFicha(operationId) {
     navigate(`/operations/${operationId}/ficha`);
+  }
+
+  function openComments(operationId) {
+    navigate(`/clients/${id}/comentarios?operation_id=${operationId}`);
   }
 
   async function handleCopyFormalizationLink(link) {
@@ -366,10 +372,11 @@ export default function ClientOperations() {
 
   return (
     <div className="clientSection clientOperationsSection">
-      <h2>Operações</h2>
+      <h2>OperaÃ§Ãµes</h2>
 
-      <form onSubmit={handleSubmit} className="operationsFormCard">
-        <h3>{editingOperationId ? "Editar operação" : "Nova operação"}</h3>
+      {canManageOperations && (
+        <form onSubmit={handleSubmit} className="operationsFormCard">
+        <h3>{editingOperationId ? "Editar operaÃ§Ã£o" : "Nova operaÃ§Ã£o"}</h3>
 
         <label className="operationsField operationProductField">
           <span>Produto</span>
@@ -390,13 +397,13 @@ export default function ClientOperations() {
 
         {!form.produto && (
           <p className="operationFichaHint">
-            Selecione o produto para abrir a ficha específica.
+            Selecione o produto para abrir a ficha especÃ­fica.
           </p>
         )}
 
         {form.produto && !formSchema && (
           <p className="operationFichaHint">
-            Não existe ficha configurada para este produto.
+            NÃ£o existe ficha configurada para este produto.
           </p>
         )}
 
@@ -425,55 +432,93 @@ export default function ClientOperations() {
                       <label className="operationsField" key={field.name}>
                         <span>{field.label}</span>
 
-                        {Array.isArray(field.options) ? (
-                          <select
-                            name={field.name}
-                            value={value}
-                            onChange={handleFichaChange}
-                            required={field.required}
-                          >
-                            {!hasEmptyOption && <option value="">Selecione</option>}
-                            {!hasCurrentOption && value && (
-                              <option value={value}>{value}</option>
-                            )}
-                            {field.options.map((option) => (
-                              <option key={option.value} value={option.value}>
-                                {option.label}
-                              </option>
-                            ))}
-                          </select>
-		                        ) : (
-		                          <input
-		                            type={field.type === "date" ? "text" : field.type || "text"}
-		                            name={field.name}
-		                            value={value}
-		                            readOnly={field.readOnly || field.name === "vendedor_nome"}
-		                            inputMode={
-                                  field.type === "date"
-                                    ? "numeric"
-                                    : field.inputMode
+	                        {Array.isArray(field.options) ? (
+	                          <select
+	                            name={field.name}
+	                            value={value}
+	                            onChange={handleFichaChange}
+	                            required={field.required}
+	                          >
+	                            {!hasEmptyOption && <option value="">Selecione</option>}
+	                            {!hasCurrentOption && value && (
+	                              <option value={value}>{value}</option>
+	                            )}
+	                            {field.options.map((option) => (
+	                              <option key={option.value} value={option.value}>
+	                                {option.label}
+	                              </option>
+	                            ))}
+	                          </select>
+	                        ) : field.name === "numero_beneficio" &&
+	                          Array.isArray(client?.beneficios) &&
+	                          client.beneficios.length > 0 ? (
+	                          <select
+	                            name={field.name}
+	                            value={value}
+	                            onChange={handleFichaChange}
+	                            required={field.required}
+	                          >
+	                            <option value="">Selecione</option>
+	                            {client.beneficios.map((beneficio) => (
+	                              <option key={beneficio} value={beneficio}>
+	                                {beneficio}
+	                              </option>
+	                            ))}
+	                          </select>
+	                        ) : (
+	                          <input
+	                            type={
+	                              field.type === "date" ||
+                                  field.decimalFlexible ||
+                                  field.name === "saldo_quitacao"
+	                                ? "text"
+	                                : field.type || "text"
+	                            }
+	                            name={field.name}
+	                            value={value}
+	                            readOnly={field.readOnly || field.name === "vendedor_nome"}
+	                            inputMode={
+	                              field.type === "date"
+	                                ? "numeric"
+	                                : field.inputMode
+	                            }
+	                            min={
+	                              field.type === "number" &&
+                                  !field.decimalFlexible &&
+                                  field.name !== "saldo_quitacao"
+	                                ? field.min
+	                                : undefined
+	                            }
+	                            step={
+	                              field.type === "number" &&
+                                  !field.decimalFlexible &&
+                                  field.name !== "saldo_quitacao"
+	                                ? field.step
+	                                : undefined
+	                            }
+	                            pattern={
+                                  field.decimalFlexible || field.name === "saldo_quitacao"
+                                    ? "[0-9.,\\s-]*"
+                                    : undefined
                                 }
-		                            min={field.type === "number" ? field.min : undefined}
-		                            step={field.type === "number" ? field.step : undefined}
-		                            pattern={field.decimalFlexible ? "[0-9.,\\s-]*" : undefined}
 	                            placeholder={
-                                  field.placeholder ||
-                                  (field.type === "date" ? DATE_INPUT_PLACEHOLDER : undefined)
-                                }
-		                            required={field.required}
-			                            onChange={(event) =>
-                                  handleFichaChange({
-                                    target: {
-                                      name: field.name,
-                                      value:
-                                        field.type === "date"
-                                          ? formatDateInputValue(event.target.value)
-                                          : event.target.value,
-                                    },
-                                  })
-                                }
-		                          />
-		                        )}
+	                              field.placeholder ||
+	                              (field.type === "date" ? DATE_INPUT_PLACEHOLDER : undefined)
+	                            }
+	                            required={field.required}
+	                            onChange={(event) =>
+	                              handleFichaChange({
+	                                target: {
+	                                  name: field.name,
+	                                  value:
+	                                    field.type === "date"
+	                                      ? formatDateInputValue(event.target.value)
+	                                      : event.target.value,
+	                                },
+	                              })
+	                            }
+	                          />
+	                        )}
                       </label>
                     );
                   })}
@@ -489,7 +534,7 @@ export default function ClientOperations() {
             className="clientPrimaryButton"
             disabled={loading || !formSchema}
           >
-            {loading ? "Salvando..." : editingOperationId ? "Salvar edição" : "Criar operação"}
+            {loading ? "Salvando..." : editingOperationId ? "Salvar ediÃ§Ã£o" : "Criar operaÃ§Ã£o"}
           </button>
 
           {editingOperationId && (
@@ -498,16 +543,17 @@ export default function ClientOperations() {
               className="clientGhostButton"
               onClick={() => resetForm("")}
             >
-              Cancelar edição
+              Cancelar ediÃ§Ã£o
             </button>
           )}
         </div>
-      </form>
+        </form>
+      )}
 
-      <h3>Operações cadastradas</h3>
+      <h3>OperaÃ§Ãµes cadastradas</h3>
 
       {sortedOperations.length === 0 ? (
-        <p className="clientSectionText">Nenhuma operação cadastrada.</p>
+        <p className="clientSectionText">Nenhuma operaÃ§Ã£o cadastrada.</p>
       ) : (
         <div className="operationsTableWrap">
           <table className="operationsTable">
@@ -525,8 +571,8 @@ export default function ClientOperations() {
                 <th>Digitador</th>
                 <th>N. proposta</th>
                 <th>Link formalizacao</th>
-                <th>Pendência banco</th>
-                <th>Ação</th>
+                <th>PendÃªncia banco</th>
+                <th>AÃ§Ã£o</th>
               </tr>
             </thead>
             <tbody>
@@ -601,7 +647,7 @@ export default function ClientOperations() {
                     <td>{operation.pendencia_motivo || "-"}</td>
                     <td>
                       <div className="operationTableActions">
-                        {canEdit && (
+                        {canManageOperations && canEdit && (
                           <button
                             type="button"
                             className="clientGhostButton"
@@ -611,7 +657,7 @@ export default function ClientOperations() {
                           </button>
                         )}
 
-                        {canSend && (
+                        {canManageOperations && canSend && (
                           <button
                             type="button"
                             className="clientPrimaryButton"
@@ -624,6 +670,14 @@ export default function ClientOperations() {
                               : "Reenviar para analise"}
                           </button>
                         )}
+
+                        <button
+                          type="button"
+                          className="clientGhostButton"
+                          onClick={() => openComments(operation.id)}
+                        >
+                          Comentarios
+                        </button>
 
                         {isGlobal && (
                           <button

@@ -107,16 +107,6 @@ export default function ClientLayout() {
         >
           Operacoes
         </button>
-
-        <button
-          type="button"
-          className={
-            isActive("comentarios") ? "clientTabButton active" : "clientTabButton"
-          }
-          onClick={() => navigate("comentarios")}
-        >
-          Comentarios
-        </button>
       </div>
 
       <section className="clientContentCard">

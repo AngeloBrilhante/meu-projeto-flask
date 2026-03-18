@@ -93,6 +93,7 @@ DIGITADOR_PRODUCT_PERMISSIONS = {
 PIPELINE_ALLOWED_ROLES = {
     ROLE_GLOBAL,
     ROLE_ADMIN,
+    ROLE_VENDOR,
     *DIGITADOR_PRODUCT_PERMISSIONS.keys(),
 }
 
@@ -1059,7 +1060,7 @@ def ensure_clients_extra_columns(cursor, db):
         FROM INFORMATION_SCHEMA.COLUMNS
         WHERE TABLE_SCHEMA = DATABASE()
           AND TABLE_NAME = 'clientes'
-          AND COLUMN_NAME IN ('email', 'analfabeto')
+          AND COLUMN_NAME IN ('email', 'analfabeto', 'beneficios_json')
         """
     )
 
@@ -1067,6 +1068,7 @@ def ensure_clients_extra_columns(cursor, db):
     changed = False
     email_column = existing.get("email")
     analfabeto_column = existing.get("analfabeto")
+    beneficios_json_column = existing.get("beneficios_json")
 
     if not email_column:
         cursor.execute(
@@ -1092,6 +1094,12 @@ def ensure_clients_extra_columns(cursor, db):
                 "ALTER TABLE clientes MODIFY COLUMN analfabeto TINYINT(1) NOT NULL DEFAULT 0"
             )
             changed = True
+
+    if not beneficios_json_column:
+        cursor.execute(
+            "ALTER TABLE clientes ADD COLUMN beneficios_json LONGTEXT NULL AFTER numero_beneficio"
+        )
+        changed = True
 
     if changed:
         db.commit()
@@ -1742,6 +1750,60 @@ def to_number(value):
         return 0.0
 
 
+def normalize_beneficio_number(value):
+    digits = only_digits(value)
+    if digits:
+        return digits
+    return normalize_text(value)
+
+
+def normalize_beneficios_list(raw_values, fallback_primary=""):
+    values = raw_values
+    if isinstance(values, str):
+        values = [item.strip() for item in values.split(",")]
+    elif not isinstance(values, (list, tuple)):
+        values = []
+
+    normalized = []
+    seen = set()
+
+    for item in [*values, fallback_primary]:
+        text = normalize_beneficio_number(item)
+        if not text:
+            continue
+        if text in seen:
+            continue
+        seen.add(text)
+        normalized.append(text)
+
+    return normalized
+
+
+def parse_client_beneficios(value, fallback_primary=""):
+    payload = value
+    if isinstance(payload, (bytes, bytearray, memoryview)):
+        payload = bytes(payload).decode("utf-8", errors="ignore")
+
+    if isinstance(payload, str):
+        text = payload.strip()
+        if text:
+            try:
+                payload = json.loads(text)
+            except json.JSONDecodeError:
+                payload = []
+        else:
+            payload = []
+
+    return normalize_beneficios_list(payload, fallback_primary=fallback_primary)
+
+
+def serialize_client_beneficios(beneficios):
+    normalized = normalize_beneficios_list(beneficios)
+    if not normalized:
+        return None
+    return json.dumps(normalized, ensure_ascii=False)
+
+
 def serialize_client_record(client):
     if not client:
         return client
@@ -1749,6 +1811,12 @@ def serialize_client_record(client):
     client["data_nascimento"] = normalize_date_field(client.get("data_nascimento"))
     client["rg_data_emissao"] = normalize_date_field(client.get("rg_data_emissao"))
     client["analfabeto"] = bool(to_int(client.get("analfabeto")))
+    beneficios = parse_client_beneficios(
+        client.get("beneficios_json"),
+        fallback_primary=client.get("numero_beneficio"),
+    )
+    client["beneficios"] = beneficios
+    client["numero_beneficio"] = beneficios[0] if beneficios else ""
     return client
 
 
@@ -1835,7 +1903,6 @@ def create_client():
         "data_nascimento",
         "especie",
         "uf_beneficio",
-        "numero_beneficio",
         "salario",
         "nome_mae",
         "rg_numero",
@@ -1855,6 +1922,14 @@ def create_client():
         value = data.get(field)
         if value is None or str(value).strip() == "":
             missing_fields.append(field)
+
+    beneficios = normalize_beneficios_list(
+        data.get("beneficios"),
+        fallback_primary=data.get("numero_beneficio"),
+    )
+    numero_beneficio = beneficios[0] if beneficios else ""
+    if not numero_beneficio:
+        missing_fields.append("numero_beneficio")
 
     if missing_fields:
         return jsonify({
@@ -1891,7 +1966,6 @@ def create_client():
 
     nome = normalize_text(data.get("nome"))
     especie = normalize_text(data.get("especie"))
-    numero_beneficio = normalize_text(data.get("numero_beneficio"))
     nome_mae = normalize_text(data.get("nome_mae"))
     rg_numero = normalize_text(data.get("rg_numero"))
     rg_orgao_exp = normalize_text(data.get("rg_orgao_exp"))
@@ -2043,6 +2117,10 @@ def create_client():
             cep,
             *address_values,
         ]
+
+        if "beneficios_json" in column_meta:
+            insert_columns.append("beneficios_json")
+            insert_values.append(serialize_client_beneficios(beneficios))
 
         if "empresa_id" in column_meta:
             insert_columns = ["empresa_id", *insert_columns]
@@ -2238,6 +2316,34 @@ def list_clients():
             WHERE c.empresa_id=%s
             ORDER BY c.criado_em DESC
         """, (company_id,))
+    elif is_digitador_role(role):
+        product_conditions = []
+        product_params = []
+        apply_role_product_scope(role, product_conditions, product_params, "o.produto")
+        product_clause = (
+            f" AND {' AND '.join(product_conditions)}" if product_conditions else ""
+        )
+
+        cursor.execute(
+            f"""
+            SELECT DISTINCT
+                c.*,
+                (
+                    SELECT x.status
+                    FROM operacoes x
+                    WHERE x.cliente_id = c.id
+                    ORDER BY x.criado_em DESC
+                    LIMIT 1
+                ) AS last_operation_status
+            FROM clientes c
+            JOIN operacoes o ON o.cliente_id = c.id
+            WHERE c.empresa_id=%s
+              AND o.empresa_id=%s
+              {product_clause}
+            ORDER BY c.criado_em DESC
+            """,
+            (company_id, company_id, *product_params),
+        )
     else:
         cursor.execute("""
             SELECT 
@@ -2255,11 +2361,7 @@ def list_clients():
             ORDER BY c.criado_em DESC
         """, (current_user_id(), company_id))
 
-    clients = cursor.fetchall()
-    for client in clients:
-        client["data_nascimento"] = normalize_date_field(client.get("data_nascimento"))
-        client["rg_data_emissao"] = normalize_date_field(client.get("rg_data_emissao"))
-        client["analfabeto"] = bool(to_int(client.get("analfabeto")))
+    clients = [serialize_client_record(client) for client in cursor.fetchall()]
 
     cursor.close()
     db.close()
@@ -2388,16 +2490,22 @@ def search_global():
 @clients_bp.route("/clients/<int:client_id>/operations", methods=["GET"])
 @jwt_required()
 def list_operations(client_id):
-
     if not can_access_client(client_id):
         return jsonify({"error": "Acesso nÃƒÂ£o autorizado"}), 403
 
+    role = normalize_role(current_user_role())
     db = get_db()
     cursor = db.cursor(dictionary=True)
     ensure_operations_extra_columns(cursor, db)
 
+    conditions = ["o.cliente_id = %s"]
+    params = [client_id]
+    apply_company_scope(role, conditions, params, "o.empresa_id")
+    apply_role_product_scope(role, conditions, params, "o.produto")
+    where_clause = " AND ".join(conditions)
+
     cursor.execute(
-        """
+        f"""
         SELECT
             o.*,
             c.vendedor_id,
@@ -2407,10 +2515,10 @@ def list_operations(client_id):
         JOIN clientes c ON c.id = o.cliente_id
         LEFT JOIN usuarios v ON v.id = c.vendedor_id
         LEFT JOIN usuarios d ON d.id = o.digitador_id
-        WHERE o.cliente_id = %s
+        WHERE {where_clause}
         ORDER BY o.criado_em DESC
         """,
-        (client_id,),
+        tuple(params),
     )
 
     operations = [
@@ -2770,6 +2878,10 @@ def get_client(client_id):
 @clients_bp.route("/clients/<int:client_id>", methods=["PUT"])
 @jwt_required()
 def update_client(client_id):
+    role = normalize_role(current_user_role())
+    if role not in {ROLE_ADMIN, ROLE_GLOBAL, ROLE_VENDOR}:
+        return jsonify({"error": "Permissao negada"}), 403
+
     if not can_access_client(client_id):
         return jsonify({"error": "Acesso nao autorizado"}), 403
 
@@ -2780,7 +2892,6 @@ def update_client(client_id):
         "data_nascimento",
         "especie",
         "uf_beneficio",
-        "numero_beneficio",
         "salario",
         "nome_mae",
         "rg_numero",
@@ -2800,6 +2911,14 @@ def update_client(client_id):
         value = data.get(field)
         if value is None or str(value).strip() == "":
             missing_fields.append(field)
+
+    beneficios = normalize_beneficios_list(
+        data.get("beneficios"),
+        fallback_primary=data.get("numero_beneficio"),
+    )
+    numero_beneficio = beneficios[0] if beneficios else ""
+    if not numero_beneficio:
+        missing_fields.append("numero_beneficio")
 
     if missing_fields:
         return jsonify(
@@ -2838,7 +2957,6 @@ def update_client(client_id):
 
     nome = normalize_text(data.get("nome"))
     especie = normalize_text(data.get("especie"))
-    numero_beneficio = normalize_text(data.get("numero_beneficio"))
     nome_mae = normalize_text(data.get("nome_mae"))
     rg_numero = normalize_text(data.get("rg_numero"))
     rg_orgao_exp = normalize_text(data.get("rg_orgao_exp"))
@@ -2978,6 +3096,9 @@ def update_client(client_id):
             "cep": cep,
             **dict(zip(address_columns, address_values)),
         }
+        if "beneficios_json" in column_meta:
+            update_columns.append("beneficios_json")
+            update_values["beneficios_json"] = serialize_client_beneficios(beneficios)
         update_sql = ", ".join([f"{column_name} = %s" for column_name in update_columns])
         update_params = [update_values[column_name] for column_name in update_columns]
         update_params.append(client_id)
@@ -4179,7 +4300,10 @@ def get_pipeline():
     apply_company_scope(role, conditions, params, "o.empresa_id")
     apply_role_product_scope(role, conditions, params, "o.produto")
 
-    if is_digitador_role(role):
+    if role == ROLE_VENDOR:
+        conditions.append("c.vendedor_id = %s")
+        params.append(user_id)
+    elif is_digitador_role(role):
         ready_placeholders = ", ".join(
             ["%s"] * len(PIPELINE_READY_VISIBLE_STATUSES_WITH_LEGACY)
         )

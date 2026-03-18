@@ -43,6 +43,13 @@
   color: var(--text-secondary);
 }
 
+.createFieldHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
 .createCheckboxField {
   justify-content: flex-end;
 }
@@ -85,6 +92,42 @@
 .createField select:focus {
   outline: none;
   border-color: var(--accent);
+}
+
+.createBenefitList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.createBenefitRow {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.createBenefitRow input {
+  flex: 1;
+}
+
+.createInlineAddButton,
+.createInlineRemoveButton {
+  border: 1px solid var(--border-color);
+  background: var(--surface-strong);
+  color: var(--text-primary);
+  border-radius: 10px;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.createInlineAddButton {
+  width: 32px;
+  height: 32px;
+}
+
+.createInlineRemoveButton {
+  height: 40px;
+  padding: 0 10px;
 }
 
 .createFieldHint,

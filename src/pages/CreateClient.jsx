@@ -1,10 +1,9 @@
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { createClient } from "../services/api";
 import {
   DATE_INPUT_PLACEHOLDER,
   formatDateInputValue,
-  normalizeDateInputValue,
 } from "../utils/date";
 import "./CreateClient.css";
 
@@ -14,7 +13,7 @@ const INITIAL_FORM = {
   data_nascimento: "",
   especie: "",
   uf_beneficio: "",
-  numero_beneficio: "",
+  beneficios: [""],
   salario: "",
   nome_mae: "",
   rg_numero: "",
@@ -39,6 +38,13 @@ export default function CreateClient() {
   const [cepError, setCepError] = useState("");
   const lastCepLookupRef = useRef("");
   const cepRequestRef = useRef(0);
+
+  const beneficios = useMemo(() => {
+    if (Array.isArray(form.beneficios) && form.beneficios.length > 0) {
+      return form.beneficios;
+    }
+    return [""];
+  }, [form.beneficios]);
 
   function onlyDigits(value) {
     return String(value || "").replace(/\D/g, "");
@@ -129,12 +135,50 @@ export default function CreateClient() {
     setForm((prev) => ({ ...prev, [name]: value }));
   }
 
+  function handleBeneficioChange(index, value) {
+    setForm((prev) => {
+      const nextBeneficios = [...(prev.beneficios || [""])];
+      nextBeneficios[index] = value;
+      return {
+        ...prev,
+        beneficios: nextBeneficios,
+      };
+    });
+  }
+
+  function handleAddBeneficio() {
+    setForm((prev) => ({
+      ...prev,
+      beneficios: [...(prev.beneficios || [""]), ""],
+    }));
+  }
+
+  function handleRemoveBeneficio(index) {
+    setForm((prev) => {
+      const nextBeneficios = [...(prev.beneficios || [""])].filter(
+        (_, currentIndex) => currentIndex !== index
+      );
+      return {
+        ...prev,
+        beneficios: nextBeneficios.length > 0 ? nextBeneficios : [""],
+      };
+    });
+  }
+
   async function handleSubmit(event) {
     event.preventDefault();
     setSaving(true);
 
     try {
-      await createClient(form);
+      const normalizedBeneficios = beneficios
+        .map((item) => String(item || "").trim())
+        .filter(Boolean);
+
+      await createClient({
+        ...form,
+        numero_beneficio: normalizedBeneficios[0] || "",
+        beneficios: normalizedBeneficios,
+      });
 
       alert("Cliente cadastrado com sucesso!");
       navigate("/clients");
@@ -189,7 +233,7 @@ export default function CreateClient() {
             </label>
 
             <label className="createField">
-              <span>Espécie</span>
+              <span>Especie</span>
               <input
                 name="especie"
                 value={form.especie}
@@ -198,7 +242,7 @@ export default function CreateClient() {
             </label>
 
             <label className="createField">
-              <span>UF benefício</span>
+              <span>UF beneficio</span>
               <input
                 name="uf_beneficio"
                 maxLength={2}
@@ -207,17 +251,43 @@ export default function CreateClient() {
               />
             </label>
 
-            <label className="createField">
-              <span>Número benefício</span>
-              <input
-                name="numero_beneficio"
-                value={form.numero_beneficio}
-                onChange={handleChange}
-              />
-            </label>
+            <div className="createField">
+              <div className="createFieldHeader">
+                <span>Numero beneficio</span>
+                <button
+                  type="button"
+                  className="createInlineAddButton"
+                  onClick={handleAddBeneficio}
+                >
+                  +
+                </button>
+              </div>
+
+              <div className="createBenefitList">
+                {beneficios.map((beneficio, index) => (
+                  <div key={`beneficio-${index}`} className="createBenefitRow">
+                    <input
+                      value={beneficio}
+                      onChange={(event) =>
+                        handleBeneficioChange(index, event.target.value)
+                      }
+                    />
+                    {beneficios.length > 1 && (
+                      <button
+                        type="button"
+                        className="createInlineRemoveButton"
+                        onClick={() => handleRemoveBeneficio(index)}
+                      >
+                        Remover
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
 
             <label className="createField">
-              <span>Salário</span>
+              <span>Salario</span>
               <input
                 name="salario"
                 value={form.salario}
@@ -229,7 +299,7 @@ export default function CreateClient() {
             </label>
 
             <label className="createField span2">
-              <span>Nome da mãe</span>
+              <span>Nome da mae</span>
               <input
                 name="nome_mae"
                 value={form.nome_mae}
@@ -238,7 +308,7 @@ export default function CreateClient() {
             </label>
 
             <label className="createField">
-              <span>RG número</span>
+              <span>RG numero</span>
               <input
                 name="rg_numero"
                 value={form.rg_numero}
@@ -247,7 +317,7 @@ export default function CreateClient() {
             </label>
 
             <label className="createField">
-              <span>RG órgão emissor</span>
+              <span>RG orgao emissor</span>
               <input
                 name="rg_orgao_exp"
                 value={form.rg_orgao_exp}
@@ -266,7 +336,7 @@ export default function CreateClient() {
             </label>
 
             <label className="createField">
-              <span>Data emissão RG</span>
+              <span>Data emissao RG</span>
               <input
                 type="text"
                 name="rg_data_emissao"
@@ -341,7 +411,7 @@ export default function CreateClient() {
             </label>
 
             <label className="createField">
-              <span>Número</span>
+              <span>Numero</span>
               <input
                 name="numero"
                 value={form.numero}

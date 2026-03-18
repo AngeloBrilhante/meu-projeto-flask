@@ -176,6 +176,13 @@
   color: var(--text-secondary);
 }
 
+.clientFieldHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
 .clientEditField input {
   height: 38px;
   border: 1px solid var(--border-color);
@@ -188,6 +195,26 @@
 .clientEditField input:focus {
   outline: none;
   border-color: var(--accent);
+}
+
+.clientBenefitsField {
+  gap: 8px;
+}
+
+.clientBenefitsList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.clientBenefitRow {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.clientBenefitRow input {
+  flex: 1;
 }
 
 .clientEditCheckbox {

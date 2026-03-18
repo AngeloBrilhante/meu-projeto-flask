@@ -62,6 +62,7 @@ export default function Clients() {
   const navigate = useNavigate();
   const role = getStoredRole();
   const isGlobal = role === "GLOBAL";
+  const canCreateClient = role === "GLOBAL" || role === "ADMIN" || role === "VENDEDOR";
 
   useEffect(() => {
     fetchClients();
@@ -134,13 +135,15 @@ export default function Clients() {
           <p>Busca, acompanhamento de esteira e status de operacoes.</p>
         </div>
 
-        <button
-          type="button"
-          className="clientsPrimaryButton"
-          onClick={() => navigate("/clients/new")}
-        >
-          Novo cliente
-        </button>
+        {canCreateClient && (
+          <button
+            type="button"
+            className="clientsPrimaryButton"
+            onClick={() => navigate("/clients/new")}
+          >
+            Novo cliente
+          </button>
+        )}
       </div>
 
       <div className="clientsStats">
@@ -187,7 +190,7 @@ export default function Clients() {
               <tr>
                 <th>Nome</th>
                 <th>CPF</th>
-                <th>Beneficio</th>
+                <th>Beneficios</th>
                 <th>Esteira</th>
                 {isGlobal && <th>Acoes</th>}
               </tr>
@@ -203,7 +206,11 @@ export default function Clients() {
                   >
                     <td>{client.nome}</td>
                     <td>{client.cpf}</td>
-                    <td>{client.numero_beneficio || "-"}</td>
+                    <td>
+                      {Array.isArray(client.beneficios) && client.beneficios.length > 0
+                        ? client.beneficios.join(", ")
+                        : client.numero_beneficio || "-"}
+                    </td>
                     <td>
                       <span className={`clientsStatusBadge ${status}`}>
                         {statusLabel(status)}

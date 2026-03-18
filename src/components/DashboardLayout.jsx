@@ -120,7 +120,8 @@ export default function DashboardLayout() {
   const isAdmin = role === "ADMIN" || isGlobal;
   const isVendor = role === "VENDEDOR";
   const isDigitador = role.startsWith("DIGITADOR");
-  const canAccessPipeline = isAdmin || isDigitador;
+  const canAccessPipeline = isAdmin || isDigitador || isVendor;
+  const canAccessReadyPipeline = isAdmin || isDigitador;
   const canAccessReport = isAdmin || isVendor || isDigitador;
 
   const roleLabel = isGlobal
@@ -182,22 +183,23 @@ export default function DashboardLayout() {
       });
 
       if (canAccessPipeline) {
-        options.push(
-          {
-            key: "pipeline-active-search",
-            title: `Buscar "${trimmedGlobalSearch}" na Esteira`,
-            subtitle: "Abre a esteira com filtro aplicado",
-            scope: "Esteira",
-            route: buildSearchRoute("/pipeline", trimmedGlobalSearch),
-          },
-          {
-            key: "pipeline-ready-search",
-            title: `Buscar "${trimmedGlobalSearch}" em Prontas para digitar`,
-            subtitle: "Abre a esteira de prontas com filtro aplicado",
-            scope: "Prontas",
-            route: buildSearchRoute("/pipeline/prontas", trimmedGlobalSearch),
-          }
-        );
+        options.push({
+          key: "pipeline-active-search",
+          title: `Buscar "${trimmedGlobalSearch}" na Esteira`,
+          subtitle: "Abre a esteira com filtro aplicado",
+          scope: "Esteira",
+          route: buildSearchRoute("/pipeline", trimmedGlobalSearch),
+        });
+      }
+
+      if (canAccessReadyPipeline) {
+        options.push({
+          key: "pipeline-ready-search",
+          title: `Buscar "${trimmedGlobalSearch}" em Prontas para digitar`,
+          subtitle: "Abre a esteira de prontas com filtro aplicado",
+          scope: "Prontas",
+          route: buildSearchRoute("/pipeline/prontas", trimmedGlobalSearch),
+        });
       }
 
       if (canAccessReport) {
@@ -212,7 +214,7 @@ export default function DashboardLayout() {
     }
 
     return options.slice(0, 20);
-  }, [searchClients, trimmedGlobalSearch, canAccessPipeline, canAccessReport]);
+  }, [searchClients, trimmedGlobalSearch, canAccessPipeline, canAccessReadyPipeline, canAccessReport]);
 
   useEffect(() => {
     let mounted = true;
@@ -604,14 +606,16 @@ export default function DashboardLayout() {
               >
                 Esteira
               </NavLink>
-              <NavLink
-                to="/pipeline/prontas"
-                className={({ isActive }) =>
-                  isActive ? "sidebarLink active" : "sidebarLink"
-                }
-              >
-                Prontas para digitar
-              </NavLink>
+              {canAccessReadyPipeline && (
+                <NavLink
+                  to="/pipeline/prontas"
+                  className={({ isActive }) =>
+                    isActive ? "sidebarLink active" : "sidebarLink"
+                  }
+                >
+                  Prontas para digitar
+                </NavLink>
+              )}
             </>
           )}
 

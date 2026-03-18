@@ -31,6 +31,7 @@ def can_access_client(client_id):
     GLOBAL: acesso total
     ADMIN: somente clientes da propria empresa
     VENDEDOR: somente clientes vinculados a ele
+    DIGITADOR: clientes com operacoes do escopo de produto dele
     """
     if is_global():
         return True
@@ -51,10 +52,46 @@ def can_access_client(client_id):
     cursor = db.cursor(dictionary=True)
     ensure_company_scope_columns(cursor, db)
 
+    role = current_user_role()
+
     if is_admin():
         cursor.execute(
             "SELECT 1 FROM clientes WHERE id=%s AND empresa_id=%s",
             (client_id, company_id)
+        )
+    elif role.startswith("DIGITADOR"):
+        if role == "DIGITADOR_PORT_REFIN":
+            allowed_products = (
+                "PORTABILIDADE",
+                "REFINANCIAMENTO",
+                "PORTABILIDADE_REFIN",
+            )
+        elif role == "DIGITADOR_NOVO_CARTAO":
+            allowed_products = (
+                "NOVO",
+                "CARTAO",
+            )
+        else:
+            allowed_products = ()
+
+        if not allowed_products:
+            cursor.close()
+            db.close()
+            return False
+
+        placeholders = ", ".join(["%s"] * len(allowed_products))
+        cursor.execute(
+            f"""
+            SELECT 1
+            FROM clientes c
+            JOIN operacoes o ON o.cliente_id = c.id
+            WHERE c.id=%s
+              AND c.empresa_id=%s
+              AND o.empresa_id=%s
+              AND UPPER(o.produto) IN ({placeholders})
+            LIMIT 1
+            """,
+            (client_id, company_id, company_id, *allowed_products),
         )
     else:
         cursor.execute(
