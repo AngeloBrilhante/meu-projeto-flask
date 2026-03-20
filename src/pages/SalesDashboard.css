@@ -1,4 +1,9 @@
 .salesDashboardPage {
+  --sales-gold: #d4a84f;
+  --sales-gold-soft: rgba(212, 168, 79, 0.22);
+  --sales-gold-glow: rgba(212, 168, 79, 0.12);
+  --sales-grid-dark: rgba(130, 158, 255, 0.08);
+  --sales-grid-light: rgba(255, 255, 255, 0.035);
   display: grid;
   gap: 1.5rem;
 }
@@ -7,11 +12,49 @@
 .salesPanel,
 .salesSummaryCard,
 .salesDashboardEmpty {
+  position: relative;
+  overflow: hidden;
   border: 1px solid var(--border-color, rgba(107, 142, 255, 0.22));
   background:
-    linear-gradient(180deg, rgba(13, 34, 78, 0.96) 0%, rgba(12, 29, 67, 0.98) 100%);
+    linear-gradient(180deg, rgba(18, 40, 89, 0.98) 0%, rgba(10, 24, 56, 0.99) 100%);
   border-radius: 24px;
   box-shadow: 0 18px 45px rgba(3, 10, 25, 0.24);
+}
+
+.salesHeroCard::before,
+.salesPanel::before,
+.salesSummaryCard::before,
+.salesDashboardEmpty::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(90deg, transparent 0, transparent calc(100% - 1px), var(--sales-grid-light) calc(100% - 1px)),
+    linear-gradient(180deg, transparent 0, transparent calc(100% - 1px), var(--sales-grid-light) calc(100% - 1px)),
+    repeating-linear-gradient(90deg, transparent 0 63px, var(--sales-grid-dark) 63px 64px),
+    repeating-linear-gradient(180deg, transparent 0 63px, var(--sales-grid-dark) 63px 64px);
+  opacity: 0.65;
+  pointer-events: none;
+}
+
+.salesHeroCard::after,
+.salesPanel::after,
+.salesSummaryCard::after {
+  content: "";
+  position: absolute;
+  inset: 0 auto auto 0;
+  width: 100%;
+  height: 3px;
+  background: linear-gradient(90deg, rgba(212, 168, 79, 0.72), rgba(212, 168, 79, 0.02));
+  pointer-events: none;
+}
+
+.salesHeroCard > *,
+.salesPanel > *,
+.salesSummaryCard > *,
+.salesDashboardEmpty > * {
+  position: relative;
+  z-index: 1;
 }
 
 .salesHeroCard {
@@ -19,6 +62,7 @@
   justify-content: space-between;
   gap: 1.5rem;
   padding: 1.75rem 1.85rem;
+  border-top: 1px solid var(--sales-gold-soft);
 }
 
 .salesHeroEyebrow {
@@ -26,12 +70,13 @@
   align-items: center;
   padding: 0.32rem 0.72rem;
   border-radius: 999px;
-  background: rgba(89, 120, 255, 0.18);
-  color: #b9c9ff;
+  background: linear-gradient(135deg, rgba(212, 168, 79, 0.24), rgba(89, 120, 255, 0.16));
+  color: #f8d893;
   font-size: 0.78rem;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+  border: 1px solid rgba(212, 168, 79, 0.28);
 }
 
 .salesHeroCard h1 {
@@ -65,11 +110,13 @@
 .salesHeroFilters select {
   height: 48px;
   border-radius: 14px;
-  border: 1px solid rgba(95, 126, 255, 0.35);
-  background: rgba(14, 34, 74, 0.88);
+  border: 1px solid rgba(95, 126, 255, 0.3);
+  background:
+    linear-gradient(180deg, rgba(14, 34, 74, 0.92) 0%, rgba(10, 25, 55, 0.92) 100%);
   color: var(--text-color, #f8fbff);
   padding: 0 0.95rem;
   font: inherit;
+  box-shadow: inset 0 0 0 1px rgba(212, 168, 79, 0.06);
 }
 
 .salesSummaryGrid {
@@ -82,6 +129,11 @@
   padding: 1.25rem 1.35rem;
   display: grid;
   gap: 0.4rem;
+  border-radius: 20px;
+  border-color: rgba(105, 136, 255, 0.24);
+  box-shadow:
+    0 16px 36px rgba(3, 10, 25, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
 .salesCardIcon,
@@ -96,9 +148,10 @@
   width: 44px;
   height: 44px;
   border-radius: 14px;
-  background: rgba(92, 123, 255, 0.14);
-  border: 1px solid rgba(123, 150, 255, 0.2);
+  background: linear-gradient(180deg, rgba(92, 123, 255, 0.18), rgba(14, 34, 74, 0.26));
+  border: 1px solid rgba(123, 150, 255, 0.24);
   margin-bottom: 0.35rem;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
 .salesCardIcon svg,
@@ -114,7 +167,22 @@
 
 .salesSummaryCard.accent {
   background:
-    linear-gradient(180deg, rgba(17, 65, 145, 0.98) 0%, rgba(14, 52, 119, 0.98) 100%);
+    linear-gradient(180deg, rgba(19, 72, 160, 0.98) 0%, rgba(10, 48, 112, 0.98) 100%);
+}
+
+.salesSummaryCard.warm {
+  border-color: rgba(212, 168, 79, 0.3);
+  background:
+    linear-gradient(180deg, rgba(54, 43, 17, 0.96) 0%, rgba(30, 24, 11, 0.98) 100%);
+  box-shadow:
+    0 18px 40px rgba(19, 14, 6, 0.3),
+    inset 0 1px 0 rgba(255, 230, 173, 0.05);
+}
+
+.salesSummaryCard.warm .salesCardIcon {
+  background: linear-gradient(180deg, rgba(212, 168, 79, 0.22), rgba(84, 58, 10, 0.24));
+  border-color: rgba(212, 168, 79, 0.3);
+  color: #ffe2a8;
 }
 
 .salesSummaryCard span {
@@ -136,6 +204,7 @@
   padding: 1.35rem;
   display: grid;
   gap: 1rem;
+  border-top: 1px solid var(--sales-gold-soft);
 }
 
 .salesPanelHeader {
@@ -163,9 +232,11 @@
   min-width: 220px;
   padding: 0.95rem 1rem;
   border-radius: 18px;
-  border: 1px solid rgba(90, 120, 255, 0.25);
-  background: rgba(10, 24, 56, 0.78);
+  border: 1px solid rgba(212, 168, 79, 0.22);
+  background:
+    linear-gradient(180deg, rgba(29, 33, 56, 0.84) 0%, rgba(17, 21, 37, 0.92) 100%);
   text-align: right;
+  box-shadow: inset 0 0 0 1px rgba(212, 168, 79, 0.04);
 }
 
 .salesPanelHighlight span,
@@ -184,37 +255,61 @@
 .salesTableWrap {
   overflow: auto;
   border-radius: 18px;
-  border: 1px solid rgba(95, 126, 255, 0.2);
+  border: 1px solid rgba(212, 168, 79, 0.18);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.02),
+    0 8px 24px rgba(5, 10, 24, 0.18);
 }
 
 .salesTable {
   width: 100%;
   min-width: 820px;
   border-collapse: collapse;
-  background: rgba(8, 22, 49, 0.72);
+  background:
+    linear-gradient(180deg, rgba(9, 22, 48, 0.88) 0%, rgba(8, 18, 41, 0.94) 100%);
 }
 
 .salesTable thead th {
   padding: 0.9rem 1rem;
   text-align: left;
-  background: linear-gradient(180deg, #0c3f8f 0%, #0a2e6c 100%);
+  background:
+    linear-gradient(180deg, rgba(14, 52, 118, 0.98) 0%, rgba(10, 38, 87, 0.98) 100%);
   color: #f7fbff;
   font-size: 0.84rem;
   font-weight: 800;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   white-space: nowrap;
+  border-right: 1px solid rgba(212, 168, 79, 0.2);
+  border-bottom: 1px solid rgba(212, 168, 79, 0.26);
+  box-shadow: inset 0 1px 0 rgba(255, 221, 161, 0.08);
+}
+
+.salesTable thead th:last-child {
+  border-right: none;
 }
 
 .salesTable tbody td {
   padding: 0.9rem 1rem;
   border-top: 1px solid rgba(120, 151, 255, 0.12);
+  border-right: 1px solid rgba(111, 137, 218, 0.08);
   color: var(--text-color, #ecf3ff);
   white-space: nowrap;
+  background:
+    linear-gradient(180deg, rgba(13, 29, 65, 0.56) 0%, rgba(10, 24, 53, 0.56) 100%);
+}
+
+.salesTable tbody td:last-child {
+  border-right: none;
 }
 
 .salesTable tbody tr:hover {
-  background: rgba(84, 117, 255, 0.08);
+  background: rgba(212, 168, 79, 0.08);
+}
+
+.salesTable tbody tr:hover td {
+  background:
+    linear-gradient(180deg, rgba(38, 40, 24, 0.72) 0%, rgba(30, 31, 19, 0.72) 100%);
 }
 
 .salesStatusBadge {
@@ -241,16 +336,16 @@
 }
 
 .salesStatusBadge.success::before {
-  content: "✓";
+  content: "\2713";
 }
 
 .salesStatusBadge.warning {
-  background: rgba(245, 158, 11, 0.2);
-  color: #fcd34d;
+  background: rgba(212, 168, 79, 0.2);
+  color: #f5d489;
 }
 
 .salesStatusBadge.warning::before {
-  content: "△";
+  content: "\25B3";
 }
 
 .salesStatusBadge.muted {
@@ -259,7 +354,7 @@
 }
 
 .salesStatusBadge.muted::before {
-  content: "•";
+  content: "\2022";
 }
 
 .salesMatrixTable td,
@@ -298,13 +393,25 @@
 [data-theme="light"] .salesSummaryCard,
 [data-theme="light"] .salesDashboardEmpty {
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(243, 247, 255, 0.98) 100%);
+    linear-gradient(180deg, rgba(255, 255, 255, 0.99) 0%, rgba(246, 248, 254, 0.99) 100%);
   box-shadow: 0 16px 36px rgba(30, 41, 59, 0.08);
 }
 
+[data-theme="light"] .salesHeroCard::before,
+[data-theme="light"] .salesPanel::before,
+[data-theme="light"] .salesSummaryCard::before,
+[data-theme="light"] .salesDashboardEmpty::before {
+  background:
+    linear-gradient(90deg, transparent 0, transparent calc(100% - 1px), rgba(214, 221, 238, 0.55) calc(100% - 1px)),
+    linear-gradient(180deg, transparent 0, transparent calc(100% - 1px), rgba(214, 221, 238, 0.55) calc(100% - 1px)),
+    repeating-linear-gradient(90deg, transparent 0 63px, rgba(214, 221, 238, 0.55) 63px 64px),
+    repeating-linear-gradient(180deg, transparent 0 63px, rgba(214, 221, 238, 0.55) 63px 64px);
+  opacity: 0.55;
+}
+
 [data-theme="light"] .salesHeroEyebrow {
-  background: rgba(37, 99, 235, 0.12);
-  color: #1d4ed8;
+  background: linear-gradient(135deg, rgba(212, 168, 79, 0.18), rgba(37, 99, 235, 0.08));
+  color: #9a6b14;
 }
 
 [data-theme="light"] .salesHeroCard h1,
@@ -338,10 +445,22 @@
     linear-gradient(180deg, rgba(236, 244, 255, 0.98) 0%, rgba(223, 237, 255, 0.98) 100%);
 }
 
+[data-theme="light"] .salesSummaryCard.warm {
+  background:
+    linear-gradient(180deg, rgba(255, 248, 233, 0.99) 0%, rgba(251, 241, 214, 0.99) 100%);
+  border-color: rgba(212, 168, 79, 0.28);
+}
+
 [data-theme="light"] .salesCardIcon {
   background: rgba(37, 99, 235, 0.08);
   border-color: rgba(37, 99, 235, 0.14);
   color: #1d4ed8;
+}
+
+[data-theme="light"] .salesSummaryCard.warm .salesCardIcon {
+  background: rgba(212, 168, 79, 0.12);
+  border-color: rgba(212, 168, 79, 0.22);
+  color: #9a6b14;
 }
 
 [data-theme="light"] .salesPanelHighlight,
@@ -359,6 +478,11 @@
 
 [data-theme="light"] .salesTable tbody tr:hover {
   background: rgba(37, 99, 235, 0.05);
+}
+
+[data-theme="light"] .salesTable tbody tr:hover td {
+  background:
+    linear-gradient(180deg, rgba(255, 249, 236, 0.94) 0%, rgba(250, 244, 226, 0.94) 100%);
 }
 
 @media (max-width: 1100px) {

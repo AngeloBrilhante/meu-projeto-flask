@@ -266,7 +266,7 @@ export default function SalesDashboard() {
               <small>Meta vigente definida na dashboard.</small>
             </article>
 
-            <article className="salesSummaryCard">
+            <article className="salesSummaryCard warm">
               <div className="salesCardIcon">
                 <IconGap />
               </div>
