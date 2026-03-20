@@ -21,11 +21,13 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 from app.database import get_db
 from app.utils.company import (
+    column_exists,
     current_user_company_id,
     ensure_company_scope_columns,
     fetch_company_row,
     list_companies,
     normalize_company_slug,
+    table_exists,
 )
 from app.utils.security import (
     add_to_trash,
@@ -155,7 +157,6 @@ def ensure_user_role_enum(cursor, db):
 
 
 def ensure_user_profile_columns(cursor, db):
-    ensure_company_scope_columns(cursor, db)
     cursor.execute(
         """
         SELECT COLUMN_NAME
@@ -220,28 +221,72 @@ def serialize_user(row):
     }
 
 
-def fetch_user_row(cursor, user_id):
+def fetch_user_by_email(cursor, email):
+    has_user_company = column_exists(cursor, "usuarios", "empresa_id")
+    has_empresas = table_exists(cursor, "empresas")
+    has_telefone = column_exists(cursor, "usuarios", "telefone")
+    has_bio = column_exists(cursor, "usuarios", "bio")
+    has_foto_arquivo = column_exists(cursor, "usuarios", "foto_arquivo")
+    has_twofa_enabled = column_exists(cursor, "usuarios", "twofa_enabled")
+
     cursor.execute(
-        """
+        f"""
+        SELECT
+            u.id,
+            u.nome,
+            u.email,
+            u.senha_hash,
+            u.role,
+            {("COALESCE(u.telefone, '')" if has_telefone else "''")} AS telefone,
+            {("COALESCE(u.bio, '')" if has_bio else "''")} AS bio,
+            {("u.foto_arquivo" if has_foto_arquivo else "NULL")} AS foto_arquivo,
+            {("COALESCE(u.twofa_enabled, 0)" if has_twofa_enabled else "0")} AS twofa_enabled,
+            {("u.empresa_id" if has_user_company else "NULL")} AS empresa_id,
+            {("e.nome" if has_user_company and has_empresas else "NULL")} AS empresa_nome,
+            {("e.slug" if has_user_company and has_empresas else "NULL")} AS empresa_slug,
+            {("e.logo_url" if has_user_company and has_empresas else "NULL")} AS empresa_logo_url,
+            {("e.cor_primaria" if has_user_company and has_empresas else "NULL")} AS empresa_cor_primaria,
+            {("e.cor_secundaria" if has_user_company and has_empresas else "NULL")} AS empresa_cor_secundaria
+        FROM usuarios u
+        {("LEFT JOIN empresas e ON e.id = u.empresa_id" if has_user_company and has_empresas else "")}
+        WHERE u.email = %s
+        LIMIT 1
+        """,
+        (email,),
+    )
+    return cursor.fetchone()
+
+
+def fetch_user_row(cursor, user_id):
+    has_user_company = column_exists(cursor, "usuarios", "empresa_id")
+    has_empresas = table_exists(cursor, "empresas")
+    has_telefone = column_exists(cursor, "usuarios", "telefone")
+    has_bio = column_exists(cursor, "usuarios", "bio")
+    has_foto_arquivo = column_exists(cursor, "usuarios", "foto_arquivo")
+    has_twofa_enabled = column_exists(cursor, "usuarios", "twofa_enabled")
+    has_twofa_secret = column_exists(cursor, "usuarios", "twofa_secret")
+
+    cursor.execute(
+        f"""
         SELECT
             u.id,
             u.nome,
             u.email,
             u.role,
-            COALESCE(u.telefone, '') AS telefone,
-            COALESCE(u.bio, '') AS bio,
-            u.foto_arquivo,
+            {("COALESCE(u.telefone, '')" if has_telefone else "''")} AS telefone,
+            {("COALESCE(u.bio, '')" if has_bio else "''")} AS bio,
+            {("u.foto_arquivo" if has_foto_arquivo else "NULL")} AS foto_arquivo,
             u.senha_hash,
-            u.twofa_secret,
-            COALESCE(u.twofa_enabled, 0) AS twofa_enabled,
-            u.empresa_id,
-            e.nome AS empresa_nome,
-            e.slug AS empresa_slug,
-            e.logo_url AS empresa_logo_url,
-            e.cor_primaria AS empresa_cor_primaria,
-            e.cor_secundaria AS empresa_cor_secundaria
+            {("u.twofa_secret" if has_twofa_secret else "NULL")} AS twofa_secret,
+            {("COALESCE(u.twofa_enabled, 0)" if has_twofa_enabled else "0")} AS twofa_enabled,
+            {("u.empresa_id" if has_user_company else "NULL")} AS empresa_id,
+            {("e.nome" if has_user_company and has_empresas else "NULL")} AS empresa_nome,
+            {("e.slug" if has_user_company and has_empresas else "NULL")} AS empresa_slug,
+            {("e.logo_url" if has_user_company and has_empresas else "NULL")} AS empresa_logo_url,
+            {("e.cor_primaria" if has_user_company and has_empresas else "NULL")} AS empresa_cor_primaria,
+            {("e.cor_secundaria" if has_user_company and has_empresas else "NULL")} AS empresa_cor_secundaria
         FROM usuarios u
-        LEFT JOIN empresas e ON e.id = u.empresa_id
+        {("LEFT JOIN empresas e ON e.id = u.empresa_id" if has_user_company and has_empresas else "")}
         WHERE u.id = %s
         LIMIT 1
         """,
@@ -445,33 +490,7 @@ def login():
     try:
         ensure_user_role_enum(cursor, db)
         ensure_user_profile_columns(cursor, db)
-
-        cursor.execute(
-            """
-            SELECT
-                u.id,
-                u.nome,
-                u.email,
-                u.senha_hash,
-                u.role,
-                COALESCE(u.telefone, '') AS telefone,
-                COALESCE(u.bio, '') AS bio,
-                u.foto_arquivo,
-                COALESCE(u.twofa_enabled, 0) AS twofa_enabled,
-                u.empresa_id,
-                e.nome AS empresa_nome,
-                e.slug AS empresa_slug,
-                e.logo_url AS empresa_logo_url,
-                e.cor_primaria AS empresa_cor_primaria,
-                e.cor_secundaria AS empresa_cor_secundaria
-            FROM usuarios u
-            LEFT JOIN empresas e ON e.id = u.empresa_id
-            WHERE u.email = %s
-            LIMIT 1
-            """,
-            (email,),
-        )
-        user = cursor.fetchone()
+        user = fetch_user_by_email(cursor, email)
     finally:
         cursor.close()
         db.close()

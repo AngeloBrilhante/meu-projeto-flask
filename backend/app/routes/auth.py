@@ -3,9 +3,57 @@ from flask_jwt_extended import create_access_token, get_jwt_identity, jwt_requir
 from werkzeug.security import check_password_hash
 
 from app.database import get_db
-from app.utils.company import ensure_company_scope_columns
+from app.utils.company import column_exists, table_exists
 
 auth_bp = Blueprint("auth", __name__)
+
+
+def fetch_login_user(cursor, email):
+    has_user_company = column_exists(cursor, "usuarios", "empresa_id")
+    has_empresas = table_exists(cursor, "empresas")
+
+    company_select = "u.empresa_id" if has_user_company else "NULL"
+    company_join = (
+        "LEFT JOIN empresas e ON e.id = u.empresa_id"
+        if has_user_company and has_empresas
+        else ""
+    )
+    company_fields = (
+        """
+            e.nome AS empresa_nome,
+            e.slug AS empresa_slug,
+            e.logo_url AS empresa_logo_url,
+            e.cor_primaria AS empresa_cor_primaria,
+            e.cor_secundaria AS empresa_cor_secundaria
+        """
+        if has_user_company and has_empresas
+        else """
+            NULL AS empresa_nome,
+            NULL AS empresa_slug,
+            NULL AS empresa_logo_url,
+            NULL AS empresa_cor_primaria,
+            NULL AS empresa_cor_secundaria
+        """
+    )
+
+    cursor.execute(
+        f"""
+        SELECT
+            u.id,
+            u.nome,
+            u.email,
+            u.senha_hash,
+            u.role,
+            {company_select} AS empresa_id,
+            {company_fields}
+        FROM usuarios u
+        {company_join}
+        WHERE u.email = %s
+        LIMIT 1
+        """,
+        (email,),
+    )
+    return cursor.fetchone()
 
 
 @auth_bp.route("/login", methods=["POST"])
@@ -23,30 +71,7 @@ def login():
 
     db = get_db()
     cursor = db.cursor(dictionary=True)
-    ensure_company_scope_columns(cursor, db)
-    cursor.execute(
-        """
-        SELECT
-            u.id,
-            u.nome,
-            u.email,
-            u.senha_hash,
-            u.role,
-            u.empresa_id,
-            e.nome AS empresa_nome,
-            e.slug AS empresa_slug,
-            e.logo_url AS empresa_logo_url,
-            e.cor_primaria AS empresa_cor_primaria,
-            e.cor_secundaria AS empresa_cor_secundaria
-        FROM usuarios
-        u
-        LEFT JOIN empresas e ON e.id = u.empresa_id
-        WHERE u.email = %s
-        LIMIT 1
-        """,
-        (email,),
-    )
-    user = cursor.fetchone()
+    user = fetch_login_user(cursor, email)
     cursor.close()
     db.close()
 

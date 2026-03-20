@@ -173,101 +173,125 @@ def ensure_company_scope_columns(cursor, db):
         )
         changed = changed or cursor.rowcount > 0
 
-    if "documentos" in table_columns and "seller_id" in table_columns.get("documentos", set()):
-        cursor.execute(
-            """
-            UPDATE documentos d
-            LEFT JOIN clientes c ON c.id = d.client_id
-            LEFT JOIN usuarios u ON u.id = d.seller_id
-            SET d.empresa_id = COALESCE(c.empresa_id, u.empresa_id, %s)
-            WHERE d.empresa_id IS NULL OR d.empresa_id = 0
-            """,
-            (default_company_id,),
-        )
-        changed = changed or cursor.rowcount > 0
-
-    if "dashboard_goals" in table_columns:
-        cursor.execute(
-            """
-            UPDATE dashboard_goals dg
-            LEFT JOIN usuarios u ON u.id = NULLIF(dg.vendedor_id, 0)
-            LEFT JOIN usuarios uu ON uu.id = dg.updated_by
-            SET dg.empresa_id = COALESCE(u.empresa_id, uu.empresa_id, %s)
-            WHERE dg.empresa_id IS NULL OR dg.empresa_id = 0
-            """,
-            (default_company_id,),
-        )
-        changed = changed or cursor.rowcount > 0
-
-    if "operation_comments" in table_columns and "operacoes" in table_columns:
-        cursor.execute(
-            """
-            UPDATE operation_comments oc
-            JOIN operacoes o ON o.id = oc.operation_id
-            SET oc.empresa_id = COALESCE(o.empresa_id, %s)
-            WHERE oc.empresa_id IS NULL OR oc.empresa_id = 0
-            """,
-            (default_company_id,),
-        )
-        changed = changed or cursor.rowcount > 0
-
-    if "operation_notifications" in table_columns and "operacoes" in table_columns:
-        cursor.execute(
-            """
-            UPDATE operation_notifications onf
-            JOIN operacoes o ON o.id = onf.operation_id
-            SET onf.empresa_id = COALESCE(o.empresa_id, %s)
-            WHERE onf.empresa_id IS NULL OR onf.empresa_id = 0
-            """,
-            (default_company_id,),
-        )
-        changed = changed or cursor.rowcount > 0
-
-    if "operation_status_history" in table_columns and "operacoes" in table_columns:
-        cursor.execute(
-            """
-            UPDATE operation_status_history osh
-            JOIN operacoes o ON o.id = osh.operation_id
-            SET osh.empresa_id = COALESCE(o.empresa_id, %s)
-            WHERE osh.empresa_id IS NULL OR osh.empresa_id = 0
-            """,
-            (default_company_id,),
-        )
-        changed = changed or cursor.rowcount > 0
-
-    if "dashboard_goals" in table_columns:
-        cursor.execute(
-            """
-            SELECT INDEX_NAME
-            FROM INFORMATION_SCHEMA.STATISTICS
-            WHERE TABLE_SCHEMA = DATABASE()
-              AND TABLE_NAME = 'dashboard_goals'
-              AND NON_UNIQUE = 0
-            """
-        )
-        unique_indexes = {row.get("INDEX_NAME") for row in cursor.fetchall()}
-        if "uk_dashboard_goal_scope" in unique_indexes:
-            cursor.execute("ALTER TABLE dashboard_goals DROP INDEX uk_dashboard_goal_scope")
-            changed = True
-
-        cursor.execute(
-            """
-            SELECT 1
-            FROM INFORMATION_SCHEMA.STATISTICS
-            WHERE TABLE_SCHEMA = DATABASE()
-              AND TABLE_NAME = 'dashboard_goals'
-              AND INDEX_NAME = 'uk_dashboard_goal_scope_company'
-            LIMIT 1
-            """
-        )
-        if cursor.fetchone() is None:
+    try:
+        if "documentos" in table_columns and "seller_id" in table_columns.get("documentos", set()):
             cursor.execute(
                 """
-                CREATE UNIQUE INDEX uk_dashboard_goal_scope_company
-                ON dashboard_goals (empresa_id, year, month, vendedor_id)
+                UPDATE documentos d
+                LEFT JOIN clientes c ON c.id = d.client_id
+                LEFT JOIN usuarios u ON u.id = d.seller_id
+                SET d.empresa_id = COALESCE(c.empresa_id, u.empresa_id, %s)
+                WHERE d.empresa_id IS NULL OR d.empresa_id = 0
+                """,
+                (default_company_id,),
+            )
+            changed = changed or cursor.rowcount > 0
+    except Exception as exc:
+        db.rollback()
+        print(f"[company] documentos migration skipped: {exc}")
+
+    try:
+        if "dashboard_goals" in table_columns:
+            cursor.execute(
+                """
+                UPDATE dashboard_goals dg
+                LEFT JOIN usuarios u ON u.id = NULLIF(dg.vendedor_id, 0)
+                LEFT JOIN usuarios uu ON uu.id = dg.updated_by
+                SET dg.empresa_id = COALESCE(u.empresa_id, uu.empresa_id, %s)
+                WHERE dg.empresa_id IS NULL OR dg.empresa_id = 0
+                """,
+                (default_company_id,),
+            )
+            changed = changed or cursor.rowcount > 0
+    except Exception as exc:
+        db.rollback()
+        print(f"[company] dashboard_goals migration skipped: {exc}")
+
+    try:
+        if "operation_comments" in table_columns and "operacoes" in table_columns:
+            cursor.execute(
+                """
+                UPDATE operation_comments oc
+                JOIN operacoes o ON o.id = oc.operation_id
+                SET oc.empresa_id = COALESCE(o.empresa_id, %s)
+                WHERE oc.empresa_id IS NULL OR oc.empresa_id = 0
+                """,
+                (default_company_id,),
+            )
+            changed = changed or cursor.rowcount > 0
+    except Exception as exc:
+        db.rollback()
+        print(f"[company] operation_comments migration skipped: {exc}")
+
+    try:
+        if "operation_notifications" in table_columns and "operacoes" in table_columns:
+            cursor.execute(
+                """
+                UPDATE operation_notifications onf
+                JOIN operacoes o ON o.id = onf.operation_id
+                SET onf.empresa_id = COALESCE(o.empresa_id, %s)
+                WHERE onf.empresa_id IS NULL OR onf.empresa_id = 0
+                """,
+                (default_company_id,),
+            )
+            changed = changed or cursor.rowcount > 0
+    except Exception as exc:
+        db.rollback()
+        print(f"[company] operation_notifications migration skipped: {exc}")
+
+    try:
+        if "operation_status_history" in table_columns and "operacoes" in table_columns:
+            cursor.execute(
+                """
+                UPDATE operation_status_history osh
+                JOIN operacoes o ON o.id = osh.operation_id
+                SET osh.empresa_id = COALESCE(o.empresa_id, %s)
+                WHERE osh.empresa_id IS NULL OR osh.empresa_id = 0
+                """,
+                (default_company_id,),
+            )
+            changed = changed or cursor.rowcount > 0
+    except Exception as exc:
+        db.rollback()
+        print(f"[company] operation_status_history migration skipped: {exc}")
+
+    try:
+        if "dashboard_goals" in table_columns:
+            cursor.execute(
+                """
+                SELECT INDEX_NAME
+                FROM INFORMATION_SCHEMA.STATISTICS
+                WHERE TABLE_SCHEMA = DATABASE()
+                  AND TABLE_NAME = 'dashboard_goals'
+                  AND NON_UNIQUE = 0
                 """
             )
-            changed = True
+            unique_indexes = {row.get("INDEX_NAME") for row in cursor.fetchall()}
+            if "uk_dashboard_goal_scope" in unique_indexes:
+                cursor.execute("ALTER TABLE dashboard_goals DROP INDEX uk_dashboard_goal_scope")
+                changed = True
+
+            cursor.execute(
+                """
+                SELECT 1
+                FROM INFORMATION_SCHEMA.STATISTICS
+                WHERE TABLE_SCHEMA = DATABASE()
+                  AND TABLE_NAME = 'dashboard_goals'
+                  AND INDEX_NAME = 'uk_dashboard_goal_scope_company'
+                LIMIT 1
+                """
+            )
+            if cursor.fetchone() is None:
+                cursor.execute(
+                    """
+                    CREATE UNIQUE INDEX uk_dashboard_goal_scope_company
+                    ON dashboard_goals (empresa_id, year, month, vendedor_id)
+                    """
+                )
+                changed = True
+    except Exception as exc:
+        db.rollback()
+        print(f"[company] dashboard_goals indexes skipped: {exc}")
 
     index_targets = (
         ("usuarios", "idx_usuarios_empresa"),
@@ -295,10 +319,14 @@ def ensure_company_scope_columns(cursor, db):
         )
         if cursor.fetchone() is not None:
             continue
-        cursor.execute(
-            f"CREATE INDEX {index_name} ON {table_name} (empresa_id)"
-        )
-        changed = True
+        try:
+            cursor.execute(
+                f"CREATE INDEX {index_name} ON {table_name} (empresa_id)"
+            )
+            changed = True
+        except Exception as exc:
+            db.rollback()
+            print(f"[company] index {index_name} skipped: {exc}")
 
     if changed:
         db.commit()
@@ -374,3 +402,32 @@ def list_companies(cursor, only_active=False):
         """
     )
     return cursor.fetchall()
+
+
+def table_exists(cursor, table_name):
+    cursor.execute(
+        """
+        SELECT 1
+        FROM INFORMATION_SCHEMA.TABLES
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = %s
+        LIMIT 1
+        """,
+        (table_name,),
+    )
+    return cursor.fetchone() is not None
+
+
+def column_exists(cursor, table_name, column_name):
+    cursor.execute(
+        """
+        SELECT 1
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = %s
+          AND COLUMN_NAME = %s
+        LIMIT 1
+        """,
+        (table_name, column_name),
+    )
+    return cursor.fetchone() is not None
