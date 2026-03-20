@@ -6,6 +6,7 @@ from flask import (
     Blueprint,
     Response,
     abort,
+    current_app,
     has_request_context,
     jsonify,
     request,
@@ -295,6 +296,33 @@ def fetch_user_row(cursor, user_id):
     return cursor.fetchone()
 
 
+def fetch_basic_user_row(cursor, user_id):
+    cursor.execute(
+        """
+        SELECT
+            id,
+            nome,
+            email,
+            role,
+            '' AS telefone,
+            '' AS bio,
+            NULL AS foto_arquivo,
+            0 AS twofa_enabled,
+            NULL AS empresa_id,
+            NULL AS empresa_nome,
+            NULL AS empresa_slug,
+            NULL AS empresa_logo_url,
+            NULL AS empresa_cor_primaria,
+            NULL AS empresa_cor_secundaria
+        FROM usuarios
+        WHERE id = %s
+        LIMIT 1
+        """,
+        (int(user_id),),
+    )
+    return cursor.fetchone()
+
+
 def require_global_twofa(cursor, actor_id):
     code = get_twofa_code_from_request()
     valid, error_message = verify_user_twofa(cursor, actor_id, code)
@@ -534,8 +562,17 @@ def get_current_user_profile():
     cursor = db.cursor(dictionary=True)
 
     try:
-        ensure_user_profile_columns(cursor, db)
-        row = fetch_user_row(cursor, user_id)
+        try:
+            ensure_user_profile_columns(cursor, db)
+            row = fetch_user_row(cursor, user_id)
+        except Exception as exc:
+            db.rollback()
+            current_app.logger.warning(
+                "Fallback ao carregar /api/users/me para usuario %s: %s",
+                user_id,
+                exc,
+            )
+            row = fetch_basic_user_row(cursor, user_id)
 
         if not row:
             return jsonify({"error": "Usuario nao encontrado"}), 404
