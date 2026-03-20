@@ -5116,6 +5116,8 @@ def get_sales_board():
     period_start, period_end, period_error = parse_dashboard_period(month, year)
     if period_error:
         return jsonify({"error": period_error}), 400
+    year_start = datetime(year, 1, 1)
+    year_end = datetime(year + 1, 1, 1)
 
     actor_company_id = current_user_company_id()
     if role == ROLE_GLOBAL:

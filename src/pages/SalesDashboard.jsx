@@ -279,7 +279,12 @@ export default function SalesDashboard() {
           <section className="salesPanel">
             <div className="salesPanelHeader">
               <div>
-                <h2>Metas vs realizado — por vendedor</h2>
+                <h2>
+                  <span className="salesSectionIcon">
+                    <IconTable />
+                  </span>
+                  Metas vs realizado - por vendedor
+                </h2>
                 <p>Comparativo do mes selecionado com status visual de atingimento.</p>
               </div>
 
@@ -336,7 +341,12 @@ export default function SalesDashboard() {
           <section className="salesPanel">
             <div className="salesPanelHeader">
               <div>
-                <h2>Atingimento mensal (%) — todos os vendedores</h2>
+                <h2>
+                  <span className="salesSectionIcon">
+                    <IconTrend />
+                  </span>
+                  Atingimento mensal (%) - todos os vendedores
+                </h2>
                 <p>
                   Percentual por mes com base no valor pago versus a meta daquele
                   vendedor.
@@ -395,5 +405,3 @@ export default function SalesDashboard() {
     </div>
   );
 }
-
-
