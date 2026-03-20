@@ -1118,6 +1118,7 @@ def ensure_operations_extra_columns(cursor, db):
           AND TABLE_NAME = 'operacoes'
           AND COLUMN_NAME IN (
               'status',
+              'data_pagamento',
               'enviada_esteira_em',
               'link_formalizacao',
               'devolvida_em',
@@ -1148,6 +1149,15 @@ def ensure_operations_extra_columns(cursor, db):
         if status_type != "varchar" or status_len < 50:
             cursor.execute(
                 "ALTER TABLE operacoes MODIFY COLUMN status VARCHAR(50) NOT NULL"
+            )
+            changed = True
+
+    data_pagamento_column = existing.get("data_pagamento")
+    if data_pagamento_column:
+        data_pagamento_type = str(data_pagamento_column.get("DATA_TYPE") or "").lower()
+        if data_pagamento_type != "datetime":
+            cursor.execute(
+                "ALTER TABLE operacoes MODIFY COLUMN data_pagamento DATETIME NULL"
             )
             changed = True
 
@@ -4429,7 +4439,7 @@ def get_operations_report():
 
     status_date_expr = """
         CASE
-            WHEN o.status = 'APROVADO' THEN COALESCE(o.data_pagamento, osh.final_status_at, o.criado_em)
+            WHEN o.status = 'APROVADO' THEN COALESCE(osh.final_status_at, o.data_pagamento, o.criado_em)
             ELSE COALESCE(osh.final_status_at, o.criado_em)
         END
     """
