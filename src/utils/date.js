@@ -38,6 +38,16 @@ export function formatDateDisplayValue(value) {
   return date.toLocaleDateString("pt-BR", { timeZone: "UTC" });
 }
 
+export function formatDateTimeDisplayValue(value, fallback = "-") {
+  const text = String(value || "").trim();
+  if (!text) return fallback;
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return text;
+
+  return date.toLocaleString("pt-BR");
+}
+
 export function normalizeDateInputValue(value) {
   const text = String(value || "").trim();
   if (!text) return "";

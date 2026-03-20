@@ -8,6 +8,7 @@ import {
   markNotificationAsRead,
 } from "../services/api";
 import "../pages/Dashboard.css";
+import { formatDateTimeDisplayValue } from "../utils/date";
 
 function getStoredUser() {
   try {
@@ -47,13 +48,6 @@ function IconBell() {
       <path d="M12 22a2.2 2.2 0 0 0 2.1-1.6h-4.2A2.2 2.2 0 0 0 12 22zm7-5.2-1.1-1.8a3.7 3.7 0 0 1-.5-1.9v-2.5A5.4 5.4 0 0 0 13 5.3V4.8a1 1 0 1 0-2 0v.5a5.4 5.4 0 0 0-4.4 5.3v2.5a3.7 3.7 0 0 1-.5 1.9L5 16.8a1.1 1.1 0 0 0 .9 1.7h12.2a1.1 1.1 0 0 0 .9-1.7z" />
     </svg>
   );
-}
-
-function formatDateTime(value) {
-  if (!value) return "";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleString("pt-BR");
 }
 
 function formatCpf(value) {
@@ -742,7 +736,7 @@ export default function DashboardLayout() {
                           >
                             <strong>{notification.title || "Atualizacao de operacao"}</strong>
                             <span>{notification.message || "-"}</span>
-                            <small>{formatDateTime(notification.created_at)}</small>
+                            <small>{formatDateTimeDisplayValue(notification.created_at, "")}</small>
                           </button>
 
                           <div className="notificationItemActions">

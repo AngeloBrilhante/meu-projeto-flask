@@ -4,6 +4,7 @@ import { getOperationsReport } from "../services/api";
 import {
   DATE_INPUT_PLACEHOLDER,
   formatDateInputValue,
+  formatDateTimeDisplayValue,
   normalizeDateInputValue,
 } from "../utils/date";
 import "./OperationsReport.css";
@@ -43,15 +44,6 @@ function formatCurrency(value) {
     style: "currency",
     currency: "BRL",
   });
-}
-
-function formatDate(value) {
-  if (!value) return "-";
-
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-
-  return date.toLocaleString("pt-BR", { timeZone: "UTC" });
 }
 
 function toCsvValue(value) {
@@ -149,7 +141,7 @@ export default function OperationsReport() {
       op.valor_liberado,
       op.prazo,
       op.status,
-      formatDate(op.status_changed_at || op.criado_em),
+      formatDateTimeDisplayValue(op.status_changed_at || op.criado_em),
     ]);
 
     const csvContent = [headers, ...rows]
@@ -335,7 +327,7 @@ export default function OperationsReport() {
                       {STATUS_LABELS[op.status] || op.status}
                     </span>
                   </td>
-                  <td>{formatDate(op.status_changed_at || op.criado_em)}</td>
+                  <td>{formatDateTimeDisplayValue(op.status_changed_at || op.criado_em)}</td>
                 </tr>
               ))}
           </tbody>
