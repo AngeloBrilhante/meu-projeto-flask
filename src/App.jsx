@@ -18,6 +18,7 @@ import OperationsReport from "./pages/OperationsReport";
 import OperationDossier from "./pages/OperationDossier";
 import Profile from "./pages/Profile";
 import GlobalUsers from "./pages/GlobalUsers";
+import SalesDashboard from "./pages/SalesDashboard";
 
 
 export default function App() {
@@ -35,8 +36,9 @@ export default function App() {
             </ProtectedRoute>
           }
         >
-          <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/profile" element={<Profile />} />
+	          <Route path="/dashboard" element={<Dashboard />} />
+	          <Route path="/sales-dashboard" element={<SalesDashboard />} />
+	          <Route path="/profile" element={<Profile />} />
           <Route path="/clients" element={<Clients />} />
           <Route path="/clients/new" element={<CreateClient />} />
           <Route path="/pipeline" element={<Pipeline />} />

@@ -499,6 +499,33 @@ export async function getDashboardSummary(filters = {}) {
   return data;
 }
 
+export async function getSalesDashboard(filters = {}) {
+  const params = new URLSearchParams();
+
+  Object.entries(filters).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== "") {
+      params.set(key, value);
+    }
+  });
+
+  const query = params.toString();
+  const url = query
+    ? `${API_URL}/dashboard/sales-board?${query}`
+    : `${API_URL}/dashboard/sales-board`;
+
+  const response = await fetch(url, {
+    headers: getAuthHeaders(),
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.error || "Erro ao carregar dashboard comercial");
+  }
+
+  return data;
+}
+
 export async function updateDashboardGoal(payload) {
   const response = await fetch(`${API_URL}/dashboard/goal`, {
     method: "PUT",

@@ -117,6 +117,7 @@ export default function DashboardLayout() {
   const canAccessPipeline = isAdmin || isDigitador || isVendor;
   const canAccessReadyPipeline = isAdmin || isDigitador;
   const canAccessReport = isAdmin || isVendor || isDigitador;
+  const canAccessSalesBoard = isAdmin;
 
   const roleLabel = isGlobal
     ? "Painel global"
@@ -553,16 +554,26 @@ export default function DashboardLayout() {
         </div>
 
         <nav className="sidebarNav">
-          <NavLink
-            to="/dashboard"
-            className={({ isActive }) =>
-              isActive ? "sidebarLink active" : "sidebarLink"
-            }
-          >
-            Dashboard
-          </NavLink>
-          <NavLink
-            to="/profile"
+	          <NavLink
+	            to="/dashboard"
+	            className={({ isActive }) =>
+	              isActive ? "sidebarLink active" : "sidebarLink"
+	            }
+	          >
+	            Dashboard
+	          </NavLink>
+	          {canAccessSalesBoard && (
+	            <NavLink
+	              to="/sales-dashboard"
+	              className={({ isActive }) =>
+	                isActive ? "sidebarLink active" : "sidebarLink"
+	              }
+	            >
+	              Dashboard vendas
+	            </NavLink>
+	          )}
+	          <NavLink
+	            to="/profile"
             className={({ isActive }) =>
               isActive ? "sidebarLink active" : "sidebarLink"
             }

@@ -5098,6 +5098,356 @@ def get_dashboard_summary():
 
 
 # ======================================================
+# DASHBOARD - VENDAS GERENCIAL
+# ======================================================
+
+@clients_bp.route("/dashboard/sales-board", methods=["GET"])
+@jwt_required()
+def get_sales_board():
+    role = normalize_role(current_user_role())
+    if role not in {ROLE_ADMIN, ROLE_GLOBAL}:
+        return jsonify({"error": "Acesso restrito"}), 403
+
+    now = datetime.now()
+    month = request.args.get("month", type=int) or now.month
+    year = request.args.get("year", type=int) or now.year
+    requested_company_id = request.args.get("empresa_id", type=int)
+
+    period_start, period_end, period_error = parse_dashboard_period(month, year)
+    if period_error:
+        return jsonify({"error": period_error}), 400
+
+    actor_company_id = current_user_company_id()
+    if role == ROLE_GLOBAL:
+        selected_company_id = requested_company_id or 0
+    else:
+        selected_company_id = actor_company_id
+
+    year_start = datetime(year, 1, 1)
+    year_end = datetime(year + 1, 1, 1)
+
+    db = get_db()
+    cursor = db.cursor(dictionary=True)
+
+    try:
+        ensure_dashboard_goals_table(cursor, db)
+        ensure_operations_extra_columns(cursor, db)
+
+        company = None
+        if selected_company_id > 0:
+            cursor.execute(
+                """
+                SELECT id, nome, slug
+                FROM empresas
+                WHERE id = %s
+                LIMIT 1
+                """,
+                (selected_company_id,),
+            )
+            company = cursor.fetchone()
+            if not company:
+                return jsonify({"error": "Empresa nao encontrada"}), 404
+
+        vendor_conditions = ["UPPER(u.role) = 'VENDEDOR'"]
+        vendor_params = []
+        if selected_company_id > 0:
+            vendor_conditions.append("u.empresa_id = %s")
+            vendor_params.append(selected_company_id)
+
+        cursor.execute(
+            f"""
+            SELECT
+                u.id,
+                u.nome,
+                u.empresa_id,
+                COALESCE(e.nome, '') AS empresa_nome
+            FROM usuarios u
+            LEFT JOIN empresas e ON e.id = u.empresa_id
+            WHERE {" AND ".join(vendor_conditions)}
+            ORDER BY u.nome ASC
+            """,
+            tuple(vendor_params),
+        )
+        vendor_rows = cursor.fetchall() or []
+
+        goal_scope_clause = ""
+        goal_scope_params = [year]
+        if selected_company_id > 0:
+            goal_scope_clause = " AND dg.empresa_id = %s"
+            goal_scope_params.append(selected_company_id)
+
+        cursor.execute(
+            f"""
+            SELECT
+                dg.vendedor_id,
+                dg.month,
+                COALESCE(SUM(dg.target), 0) AS target
+            FROM dashboard_goals dg
+            WHERE dg.year = %s
+              AND dg.vendedor_id <> 0
+              {goal_scope_clause}
+            GROUP BY dg.vendedor_id, dg.month
+            """,
+            tuple(goal_scope_params),
+        )
+        vendor_goal_rows = cursor.fetchall() or []
+
+        vendor_goals = {}
+        vendor_goal_totals_by_month = {index: 0.0 for index in range(1, 13)}
+        for row in vendor_goal_rows:
+            vendor_id = to_int(row.get("vendedor_id"))
+            month_num = to_int(row.get("month"))
+            if vendor_id <= 0 or month_num < 1 or month_num > 12:
+                continue
+
+            target_value = round(to_number(row.get("target")), 2)
+            vendor_goals.setdefault(vendor_id, {})[month_num] = target_value
+            vendor_goal_totals_by_month[month_num] += target_value
+
+        cursor.execute(
+            f"""
+            SELECT
+                dg.month,
+                COALESCE(SUM(dg.target), 0) AS target
+            FROM dashboard_goals dg
+            WHERE dg.year = %s
+              AND dg.vendedor_id = 0
+              {goal_scope_clause}
+            GROUP BY dg.month
+            """,
+            tuple(goal_scope_params),
+        )
+        general_goal_rows = cursor.fetchall() or []
+        general_goals = {
+            to_int(row.get("month")): round(to_number(row.get("target")), 2)
+            for row in general_goal_rows
+            if 1 <= to_int(row.get("month")) <= 12
+        }
+
+        approved_scope_clause = ""
+        approved_scope_params = [year_start, year_end]
+        if selected_company_id > 0:
+            approved_scope_clause = " AND o.empresa_id = %s"
+            approved_scope_params.append(selected_company_id)
+
+        cursor.execute(
+            f"""
+            SELECT
+                c.vendedor_id,
+                MONTH(COALESCE(o.data_pagamento, o.criado_em)) AS month_num,
+                COUNT(*) AS paid_count,
+                COALESCE(
+                    SUM(COALESCE(o.valor_liberado, o.valor_solicitado, 0)),
+                    0
+                ) AS approved_value
+            FROM operacoes o
+            JOIN clientes c ON c.id = o.cliente_id
+            WHERE o.status = 'APROVADO'
+              AND COALESCE(o.data_pagamento, o.criado_em) >= %s
+              AND COALESCE(o.data_pagamento, o.criado_em) < %s
+              {approved_scope_clause}
+            GROUP BY c.vendedor_id, MONTH(COALESCE(o.data_pagamento, o.criado_em))
+            """,
+            tuple(approved_scope_params),
+        )
+        approved_rows = cursor.fetchall() or []
+
+        vendor_approved_map = {}
+        vendor_paid_count_map = {}
+        for row in approved_rows:
+            vendor_id = to_int(row.get("vendedor_id"))
+            month_num = to_int(row.get("month_num"))
+            if vendor_id <= 0 or month_num < 1 or month_num > 12:
+                continue
+
+            vendor_approved_map.setdefault(vendor_id, {})[month_num] = round(
+                to_number(row.get("approved_value")), 2
+            )
+            vendor_paid_count_map.setdefault(vendor_id, {})[month_num] = to_int(
+                row.get("paid_count")
+            )
+
+        total_realized_params = [year_start, period_end]
+        total_realized_scope_clause = ""
+        if selected_company_id > 0:
+            total_realized_scope_clause = " AND o.empresa_id = %s"
+            total_realized_params.append(selected_company_id)
+
+        cursor.execute(
+            f"""
+            SELECT
+                COALESCE(SUM(COALESCE(o.valor_liberado, o.valor_solicitado, 0)), 0) AS total
+            FROM operacoes o
+            WHERE o.status = 'APROVADO'
+              AND COALESCE(o.data_pagamento, o.criado_em) >= %s
+              AND COALESCE(o.data_pagamento, o.criado_em) < %s
+              {total_realized_scope_clause}
+            """,
+            tuple(total_realized_params),
+        )
+        total_realized_ytd = round(to_number((cursor.fetchone() or {}).get("total")), 2)
+
+        total_realized_month_params = [period_start, period_end]
+        if selected_company_id > 0:
+            total_realized_month_params.append(selected_company_id)
+
+        cursor.execute(
+            f"""
+            SELECT
+                COALESCE(SUM(COALESCE(o.valor_liberado, o.valor_solicitado, 0)), 0) AS total
+            FROM operacoes o
+            WHERE o.status = 'APROVADO'
+              AND COALESCE(o.data_pagamento, o.criado_em) >= %s
+              AND COALESCE(o.data_pagamento, o.criado_em) < %s
+              {total_realized_scope_clause}
+            """,
+            tuple(total_realized_month_params),
+        )
+        total_realized_month = round(to_number((cursor.fetchone() or {}).get("total")), 2)
+
+        total_target_ytd = 0.0
+        total_target_month = 0.0
+        for month_index in range(1, month + 1):
+            vendor_target_total = round(vendor_goal_totals_by_month.get(month_index, 0), 2)
+            month_target = (
+                vendor_target_total
+                if vendor_target_total > 0
+                else round(to_number(general_goals.get(month_index)), 2)
+            )
+            total_target_ytd += month_target
+            if month_index == month:
+                total_target_month = month_target
+
+        sales_rows = []
+        monthly_matrix = []
+        active_vendors = 0
+
+        for vendor in vendor_rows:
+            vendor_id = to_int(vendor.get("id"))
+            vendor_name = str(vendor.get("nome") or "-").strip() or "-"
+            company_name = str(vendor.get("empresa_nome") or "").strip()
+            monthly_realized = vendor_approved_map.get(vendor_id, {})
+            monthly_counts = vendor_paid_count_map.get(vendor_id, {})
+            monthly_targets = vendor_goals.get(vendor_id, {})
+
+            realized = round(to_number(monthly_realized.get(month)), 2)
+            target = round(to_number(monthly_targets.get(month)), 2)
+            paid_count = to_int(monthly_counts.get(month))
+            ytd_realized = round(
+                sum(
+                    to_number(value)
+                    for month_num, value in monthly_realized.items()
+                    if month_num <= month
+                ),
+                2,
+            )
+
+            if realized > 0 or target > 0 or ytd_realized > 0:
+                active_vendors += 1
+
+            if target > 0:
+                attainment = round((realized / target) * 100, 2)
+                status = "ATINGIDA" if realized >= target else "ABAIXO"
+            else:
+                attainment = None
+                status = "SEM_META"
+
+            sales_rows.append(
+                {
+                    "vendedor_id": vendor_id,
+                    "vendedor_nome": vendor_name,
+                    "empresa_id": to_int(vendor.get("empresa_id")),
+                    "empresa_nome": company_name,
+                    "realized": realized,
+                    "target": target,
+                    "attainment": attainment,
+                    "status": status,
+                    "paid_count": paid_count,
+                    "ytd_realized": ytd_realized,
+                }
+            )
+
+            months_payload = []
+            for month_index in range(1, 13):
+                month_realized = round(to_number(monthly_realized.get(month_index)), 2)
+                month_target = round(to_number(monthly_targets.get(month_index)), 2)
+                month_attainment = (
+                    round((month_realized / month_target) * 100, 2)
+                    if month_target > 0
+                    else None
+                )
+                months_payload.append(
+                    {
+                        "month": month_index,
+                        "label": MONTH_LABELS[month_index - 1],
+                        "realized": month_realized,
+                        "target": month_target,
+                        "attainment": month_attainment,
+                    }
+                )
+
+            monthly_matrix.append(
+                {
+                    "vendedor_id": vendor_id,
+                    "vendedor_nome": vendor_name,
+                    "empresa_nome": company_name,
+                    "months": months_payload,
+                }
+            )
+
+        sales_rows.sort(
+            key=lambda item: (
+                -to_number(item.get("realized")),
+                str(item.get("vendedor_nome") or "").lower(),
+            )
+        )
+        monthly_matrix.sort(
+            key=lambda item: str(item.get("vendedor_nome") or "").lower()
+        )
+
+        period_label = (
+            f"{MONTH_LABELS[0]} - {MONTH_LABELS[month - 1]} {year}"
+            if month > 1
+            else f"{MONTH_LABELS[month - 1]} {year}"
+        )
+
+        return jsonify(
+            {
+                "period": {
+                    "month": month,
+                    "year": year,
+                    "label": period_label,
+                },
+                "company": {
+                    "id": selected_company_id,
+                    "nome": (company or {}).get("nome") if company else "",
+                    "scope": "COMPANY" if selected_company_id > 0 else "ALL",
+                },
+                "totals": {
+                    "realized_ytd": round(total_realized_ytd, 2),
+                    "target_ytd": round(total_target_ytd, 2),
+                    "gap_ytd": round(max(total_target_ytd - total_realized_ytd, 0), 2),
+                    "realized_month": round(total_realized_month, 2),
+                    "target_month": round(total_target_month, 2),
+                    "active_vendors": active_vendors,
+                },
+                "months": [
+                    {
+                        "month": month_index,
+                        "label": MONTH_LABELS[month_index - 1],
+                    }
+                    for month_index in range(1, 13)
+                ],
+                "vendors": sales_rows,
+                "monthly_matrix": monthly_matrix,
+            }
+        ), 200
+    finally:
+        cursor.close()
+        db.close()
+
+
+# ======================================================
 # DASHBOARD - ATUALIZAR META
 # ======================================================
 
