@@ -84,6 +84,34 @@
   gap: 0.4rem;
 }
 
+.salesCardIcon,
+.salesSectionIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #dbe7ff;
+}
+
+.salesCardIcon {
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  background: rgba(92, 123, 255, 0.14);
+  border: 1px solid rgba(123, 150, 255, 0.2);
+  margin-bottom: 0.35rem;
+}
+
+.salesCardIcon svg,
+.salesSectionIcon svg {
+  width: 21px;
+  height: 21px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 .salesSummaryCard.accent {
   background:
     linear-gradient(180deg, rgba(17, 65, 145, 0.98) 0%, rgba(14, 52, 119, 0.98) 100%);
@@ -121,6 +149,9 @@
   margin: 0;
   font-size: 1.15rem;
   color: var(--text-color, #f8fbff);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
 }
 
 .salesPanelHeader p {
@@ -190,6 +221,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 0.35rem;
   min-width: 94px;
   padding: 0.38rem 0.72rem;
   border-radius: 999px;
@@ -198,9 +230,18 @@
   letter-spacing: 0.03em;
 }
 
+.salesStatusBadge::before {
+  font-size: 0.85rem;
+  line-height: 1;
+}
+
 .salesStatusBadge.success {
   background: rgba(34, 197, 94, 0.18);
   color: #86efac;
+}
+
+.salesStatusBadge.success::before {
+  content: "✓";
 }
 
 .salesStatusBadge.warning {
@@ -208,9 +249,17 @@
   color: #fcd34d;
 }
 
+.salesStatusBadge.warning::before {
+  content: "△";
+}
+
 .salesStatusBadge.muted {
   background: rgba(148, 163, 184, 0.18);
   color: #cbd5e1;
+}
+
+.salesStatusBadge.muted::before {
+  content: "•";
 }
 
 .salesMatrixTable td,
@@ -287,6 +336,12 @@
 [data-theme="light"] .salesSummaryCard.accent {
   background:
     linear-gradient(180deg, rgba(236, 244, 255, 0.98) 0%, rgba(223, 237, 255, 0.98) 100%);
+}
+
+[data-theme="light"] .salesCardIcon {
+  background: rgba(37, 99, 235, 0.08);
+  border-color: rgba(37, 99, 235, 0.14);
+  color: #1d4ed8;
 }
 
 [data-theme="light"] .salesPanelHighlight,

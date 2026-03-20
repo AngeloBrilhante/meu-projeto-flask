@@ -5428,6 +5428,9 @@ def get_sales_board():
                 "monthly_matrix": monthly_matrix,
             }
         ), 200
+    except Exception:
+        current_app.logger.exception("Erro ao carregar dashboard comercial")
+        return jsonify({"error": "Erro ao carregar dashboard comercial"}), 500
     finally:
         cursor.close()
         db.close()

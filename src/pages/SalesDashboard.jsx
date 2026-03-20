@@ -2,6 +2,55 @@ import { useEffect, useMemo, useState } from "react";
 import { getSalesDashboard, listCompanies } from "../services/api";
 import "./SalesDashboard.css";
 
+function IconTarget() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <circle cx="12" cy="12" r="8.5" />
+      <circle cx="12" cy="12" r="4.5" />
+      <circle cx="12" cy="12" r="1.9" />
+    </svg>
+  );
+}
+
+function IconCash() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <rect x="3.5" y="6" width="17" height="12" rx="2.6" />
+      <circle cx="12" cy="12" r="2.6" />
+      <path d="M7 9.5h0M17 14.5h0" />
+    </svg>
+  );
+}
+
+function IconGap() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M4 18h16" />
+      <path d="m7 15 3.2-3.4 2.8 2.3L18 8" />
+      <path d="M18 8h-3V5" />
+    </svg>
+  );
+}
+
+function IconTable() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <rect x="3.5" y="5" width="17" height="14" rx="2" />
+      <path d="M3.5 10h17M9 5v14M15 5v14" />
+    </svg>
+  );
+}
+
+function IconTrend() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M4 18h16" />
+      <path d="m6.5 15.5 3.7-4 2.8 2.6 4.5-5.6" />
+      <path d="M17.5 8.5h-3V5.5" />
+    </svg>
+  );
+}
+
 function getStoredUser() {
   try {
     const raw = localStorage.getItem("usuario");
@@ -200,18 +249,27 @@ export default function SalesDashboard() {
         <>
           <section className="salesSummaryGrid">
             <article className="salesSummaryCard">
+              <div className="salesCardIcon">
+                <IconCash />
+              </div>
               <span>Ja vendido no mes</span>
               <strong>{formatCurrency(totals.realized_month)}</strong>
               <small>Total pago no mes selecionado.</small>
             </article>
 
             <article className="salesSummaryCard accent">
+              <div className="salesCardIcon">
+                <IconTarget />
+              </div>
               <span>Meta do mes</span>
               <strong>{formatCurrency(totals.target_month)}</strong>
               <small>Meta vigente definida na dashboard.</small>
             </article>
 
             <article className="salesSummaryCard">
+              <div className="salesCardIcon">
+                <IconGap />
+              </div>
               <span>Falta para a meta</span>
               <strong>{formatCurrency(totals.gap_month)}</strong>
               <small>{selectedCompanyName || "Escopo selecionado"}</small>
@@ -337,3 +395,5 @@ export default function SalesDashboard() {
     </div>
   );
 }
+
+

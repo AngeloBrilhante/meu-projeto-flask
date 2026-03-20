@@ -516,14 +516,7 @@ export async function getSalesDashboard(filters = {}) {
   const response = await fetch(url, {
     headers: getAuthHeaders(),
   });
-
-  const data = await response.json();
-
-  if (!response.ok) {
-    throw new Error(data.error || "Erro ao carregar dashboard comercial");
-  }
-
-  return data;
+  return parseApiJson(response, "Erro ao carregar dashboard comercial");
 }
 
 export async function updateDashboardGoal(payload) {
@@ -632,14 +625,7 @@ export async function listCompanies() {
   const response = await fetch(`${API_URL}/companies`, {
     headers: getAuthHeaders(),
   });
-
-  const data = await response.json();
-
-  if (!response.ok) {
-    throw new Error(data.error || "Erro ao carregar empresas");
-  }
-
-  return data;
+  return parseApiJson(response, "Erro ao carregar empresas");
 }
 
 export async function createCompany(payload) {
