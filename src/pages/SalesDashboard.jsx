@@ -200,26 +200,20 @@ export default function SalesDashboard() {
         <>
           <section className="salesSummaryGrid">
             <article className="salesSummaryCard">
-              <span>Total realizado</span>
-              <strong>{formatCurrency(totals.realized_ytd)}</strong>
-              <small>Soma das vendas pagas no periodo acumulado.</small>
+              <span>Ja vendido no mes</span>
+              <strong>{formatCurrency(totals.realized_month)}</strong>
+              <small>Total pago no mes selecionado.</small>
             </article>
 
             <article className="salesSummaryCard accent">
-              <span>Total meta</span>
-              <strong>{formatCurrency(totals.target_ytd)}</strong>
-              <small>Meta acumulada conforme cadastro mensal.</small>
+              <span>Meta do mes</span>
+              <strong>{formatCurrency(totals.target_month)}</strong>
+              <small>Meta vigente definida na dashboard.</small>
             </article>
 
             <article className="salesSummaryCard">
-              <span>Gap no periodo</span>
-              <strong>{formatCurrency(totals.gap_ytd)}</strong>
-              <small>Quanto falta para fechar a meta acumulada.</small>
-            </article>
-
-            <article className="salesSummaryCard">
-              <span>Vendedores ativos</span>
-              <strong>{Number(totals.active_vendors || 0)}</strong>
+              <span>Falta para a meta</span>
+              <strong>{formatCurrency(totals.gap_month)}</strong>
               <small>{selectedCompanyName || "Escopo selecionado"}</small>
             </article>
           </section>

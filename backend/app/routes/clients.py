@@ -5123,9 +5123,6 @@ def get_sales_board():
     else:
         selected_company_id = actor_company_id
 
-    year_start = datetime(year, 1, 1)
-    year_end = datetime(year + 1, 1, 1)
-
     db = get_db()
     cursor = db.cursor(dictionary=True)
 
@@ -5267,25 +5264,9 @@ def get_sales_board():
                 row.get("paid_count")
             )
 
-        total_realized_params = [year_start, period_end]
         total_realized_scope_clause = ""
         if selected_company_id > 0:
             total_realized_scope_clause = " AND o.empresa_id = %s"
-            total_realized_params.append(selected_company_id)
-
-        cursor.execute(
-            f"""
-            SELECT
-                COALESCE(SUM(COALESCE(o.valor_liberado, o.valor_solicitado, 0)), 0) AS total
-            FROM operacoes o
-            WHERE o.status = 'APROVADO'
-              AND COALESCE(o.data_pagamento, o.criado_em) >= %s
-              AND COALESCE(o.data_pagamento, o.criado_em) < %s
-              {total_realized_scope_clause}
-            """,
-            tuple(total_realized_params),
-        )
-        total_realized_ytd = round(to_number((cursor.fetchone() or {}).get("total")), 2)
 
         total_realized_month_params = [period_start, period_end]
         if selected_company_id > 0:
@@ -5305,22 +5286,17 @@ def get_sales_board():
         )
         total_realized_month = round(to_number((cursor.fetchone() or {}).get("total")), 2)
 
-        total_target_ytd = 0.0
-        total_target_month = 0.0
-        for month_index in range(1, month + 1):
-            vendor_target_total = round(vendor_goal_totals_by_month.get(month_index, 0), 2)
-            month_target = (
-                vendor_target_total
-                if vendor_target_total > 0
-                else round(to_number(general_goals.get(month_index)), 2)
-            )
-            total_target_ytd += month_target
-            if month_index == month:
-                total_target_month = month_target
+        current_month_vendor_target_total = round(
+            vendor_goal_totals_by_month.get(month, 0), 2
+        )
+        total_target_month = (
+            current_month_vendor_target_total
+            if current_month_vendor_target_total > 0
+            else round(to_number(general_goals.get(month)), 2)
+        )
 
         sales_rows = []
         monthly_matrix = []
-        active_vendors = 0
 
         for vendor in vendor_rows:
             vendor_id = to_int(vendor.get("id"))
@@ -5331,7 +5307,15 @@ def get_sales_board():
             monthly_targets = vendor_goals.get(vendor_id, {})
 
             realized = round(to_number(monthly_realized.get(month)), 2)
-            target = round(to_number(monthly_targets.get(month)), 2)
+            target = round(
+                to_number(
+                    monthly_targets.get(
+                        month,
+                        general_goals.get(month, DEFAULT_MONTHLY_GOAL),
+                    )
+                ),
+                2,
+            )
             paid_count = to_int(monthly_counts.get(month))
             ytd_realized = round(
                 sum(
@@ -5341,9 +5325,6 @@ def get_sales_board():
                 ),
                 2,
             )
-
-            if realized > 0 or target > 0 or ytd_realized > 0:
-                active_vendors += 1
 
             if target > 0:
                 attainment = round((realized / target) * 100, 2)
@@ -5370,7 +5351,15 @@ def get_sales_board():
             months_payload = []
             for month_index in range(1, 13):
                 month_realized = round(to_number(monthly_realized.get(month_index)), 2)
-                month_target = round(to_number(monthly_targets.get(month_index)), 2)
+                month_target = round(
+                    to_number(
+                        monthly_targets.get(
+                            month_index,
+                            general_goals.get(month_index, DEFAULT_MONTHLY_GOAL),
+                        )
+                    ),
+                    2,
+                )
                 month_attainment = (
                     round((month_realized / month_target) * 100, 2)
                     if month_target > 0
@@ -5424,12 +5413,9 @@ def get_sales_board():
                     "scope": "COMPANY" if selected_company_id > 0 else "ALL",
                 },
                 "totals": {
-                    "realized_ytd": round(total_realized_ytd, 2),
-                    "target_ytd": round(total_target_ytd, 2),
-                    "gap_ytd": round(max(total_target_ytd - total_realized_ytd, 0), 2),
                     "realized_month": round(total_realized_month, 2),
                     "target_month": round(total_target_month, 2),
-                    "active_vendors": active_vendors,
+                    "gap_month": round(max(total_target_month - total_realized_month, 0), 2),
                 },
                 "months": [
                     {
