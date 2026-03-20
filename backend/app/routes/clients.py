@@ -4425,6 +4425,14 @@ def get_operations_report():
     db = get_db()
     cursor = db.cursor(dictionary=True)
     ensure_operations_extra_columns(cursor, db)
+    ensure_operation_status_history_table(cursor, db)
+
+    status_date_expr = """
+        CASE
+            WHEN o.status = 'APROVADO' THEN COALESCE(o.data_pagamento, osh.final_status_at, o.criado_em)
+            ELSE COALESCE(osh.final_status_at, o.criado_em)
+        END
+    """
 
     conditions = [
         "o.status IN ('APROVADO', 'REPROVADO')"
@@ -4443,11 +4451,11 @@ def get_operations_report():
     apply_role_product_scope(role, conditions, params, "o.produto")
 
     if date_from:
-        conditions.append("DATE(o.criado_em) >= %s")
+        conditions.append(f"DATE({status_date_expr}) >= %s")
         params.append(date_from)
 
     if date_to:
-        conditions.append("DATE(o.criado_em) <= %s")
+        conditions.append(f"DATE({status_date_expr}) <= %s")
         params.append(date_to)
 
     if search:
@@ -4480,12 +4488,21 @@ def get_operations_report():
             o.parcela_liberada,
             o.prazo,
             o.status,
-            o.criado_em
+            o.criado_em,
+            {status_date_expr} AS status_changed_at
         FROM operacoes o
         JOIN clientes c ON c.id = o.cliente_id
         LEFT JOIN usuarios u ON u.id = c.vendedor_id
+        LEFT JOIN (
+            SELECT
+                operation_id,
+                MAX(created_at) AS final_status_at
+            FROM operation_status_history
+            WHERE next_status IN ('APROVADO', 'REPROVADO')
+            GROUP BY operation_id
+        ) osh ON osh.operation_id = o.id
         WHERE {where_clause}
-        ORDER BY o.criado_em DESC
+        ORDER BY status_changed_at DESC, o.id DESC
         """,
         tuple(params)
     )

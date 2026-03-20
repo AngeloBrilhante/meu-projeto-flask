@@ -136,7 +136,7 @@ export default function OperationsReport() {
       "Valor Liberado",
       "Prazo",
       "Status",
-      "Criado Em",
+      dateColumnLabel,
     ];
 
     const rows = operations.map((op) => [
@@ -149,7 +149,7 @@ export default function OperationsReport() {
       op.valor_liberado,
       op.prazo,
       op.status,
-      formatDate(op.criado_em),
+      formatDate(op.status_changed_at || op.criado_em),
     ]);
 
     const csvContent = [headers, ...rows]
@@ -190,6 +190,12 @@ export default function OperationsReport() {
     if (filters.status === "APROVADO") return "Total pago";
     if (filters.status === "REPROVADO") return "Total recusado";
     return "Total";
+  }, [filters.status]);
+
+  const dateColumnLabel = useMemo(() => {
+    if (filters.status === "APROVADO") return "Pago em";
+    if (filters.status === "REPROVADO") return "Reprovado em";
+    return "Data de fechamento";
   }, [filters.status]);
 
   return (
@@ -293,7 +299,7 @@ export default function OperationsReport() {
               <th>Valor liberado</th>
               <th>Prazo</th>
               <th>Status</th>
-              <th>Criado em</th>
+              <th>{dateColumnLabel}</th>
             </tr>
           </thead>
           <tbody>
@@ -329,7 +335,7 @@ export default function OperationsReport() {
                       {STATUS_LABELS[op.status] || op.status}
                     </span>
                   </td>
-                  <td>{formatDate(op.criado_em)}</td>
+                  <td>{formatDate(op.status_changed_at || op.criado_em)}</td>
                 </tr>
               ))}
           </tbody>
