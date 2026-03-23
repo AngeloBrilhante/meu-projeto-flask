@@ -139,10 +139,14 @@ function getPipelineReferenceAt(operation) {
 
 function usesProposalLabels(product) {
   const normalized = String(product || "").trim().toUpperCase();
+  return normalized === "REFINANCIAMENTO";
+}
+
+function usesSaldoLabels(product) {
+  const normalized = String(product || "").trim().toUpperCase();
   return (
     normalized === "PORTABILIDADE" ||
-    normalized === "PORTABILIDADE_REFIN" ||
-    normalized === "REFINANCIAMENTO"
+    normalized === "PORTABILIDADE_REFIN"
   );
 }
 
@@ -154,6 +158,10 @@ function toDraft(operation) {
       operation.valor_liberado === null || operation.valor_liberado === undefined
         ? ""
         : String(operation.valor_liberado),
+    troco:
+      operation.troco === null || operation.troco === undefined
+        ? ""
+        : String(operation.troco),
     parcela_liberada:
       operation.parcela_liberada === null || operation.parcela_liberada === undefined
         ? ""
@@ -492,10 +500,12 @@ export default function Pipeline() {
     };
     const numeroProposta = String(draft.numero_proposta || "").trim();
     const valorLiberadoInput = String(draft.valor_liberado || "").trim();
+    const trocoInput = String(draft.troco || "").trim();
     const parcelaLiberadaInput = String(draft.parcela_liberada || "").trim();
 
     if (numeroProposta) payload.numero_proposta = numeroProposta;
     if (valorLiberadoInput) payload.valor_liberado = valorLiberadoInput;
+    payload.troco = trocoInput;
     if (parcelaLiberadaInput) payload.parcela_liberada = parcelaLiberadaInput;
 
     if (clearPendencia) {
@@ -514,11 +524,21 @@ export default function Pipeline() {
     }
 
     if (nextStatus === "AGUARDANDO_FORMALIZACAO") {
+      const useSaldoField = usesSaldoLabels(operation.produto);
+      const primaryValueLabel = useSaldoField ? "saldo" : "valor liberado";
       const valorLiberado = Number(String(payload.valor_liberado || "").replace(",", "."));
+      const troco = String(payload.troco || "").trim()
+        ? Number(String(payload.troco || "").replace(",", "."))
+        : null;
       const parcelaLiberada = Number(String(payload.parcela_liberada || "").replace(",", "."));
 
       if (!Number.isFinite(valorLiberado) || valorLiberado <= 0) {
-        alert("Informe um valor liberado valido.");
+        alert(`Informe um ${primaryValueLabel} valido.`);
+        return;
+      }
+
+      if (troco !== null && (!Number.isFinite(troco) || troco < 0)) {
+        alert("Informe um troco valido.");
         return;
       }
 
@@ -528,6 +548,7 @@ export default function Pipeline() {
       }
 
       payload.valor_liberado = valorLiberado;
+      payload.troco = troco;
       payload.parcela_liberada = parcelaLiberada;
     }
 
@@ -1174,9 +1195,15 @@ function handleAprovar(operation) {
                     ? draft.status_andamento
                     : operation.status_andamento
                 );
-                const useProposalLabels = usesProposalLabels(operation.produto);
-                const valorLabel = useProposalLabels ? "Valor da proposta" : "Valor liberado";
-                const parcelaLabel = useProposalLabels ? "Parcela" : "Parcela liberada";
+                const useSaldoField = usesSaldoLabels(operation.produto);
+                const useProposalField = usesProposalLabels(operation.produto);
+                const valorLabel = useSaldoField
+                  ? "Saldo"
+                  : useProposalField
+                    ? "Valor da proposta"
+                    : "Valor liberado";
+                const parcelaLabel =
+                  useSaldoField || useProposalField ? "Parcela" : "Parcela liberada";
 
                 return (
                   <tr
@@ -1225,6 +1252,12 @@ function handleAprovar(operation) {
                             <span>{valorLabel}</span>
                             <strong>{formatCurrency(draft.valor_liberado)}</strong>
                           </div>
+                          {useSaldoField && (
+                            <div className="formalizacaoSummaryItem">
+                              <span>Troco</span>
+                              <strong>{formatCurrency(draft.troco)}</strong>
+                            </div>
+                          )}
                           <div className="formalizacaoSummaryItem">
                             <span>{parcelaLabel}</span>
                             <strong>{formatCurrency(draft.parcela_liberada)}</strong>
@@ -1292,6 +1325,23 @@ function handleAprovar(operation) {
                                 )
                               }
                             />
+                            {useSaldoField && (
+                              <input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                className="proposalInput"
+                                placeholder="Troco (opcional)"
+                                value={draft.troco}
+                                onChange={(event) =>
+                                  handleDraftChange(
+                                    operation.id,
+                                    "troco",
+                                    event.target.value
+                                  )
+                                }
+                              />
+                            )}
                             <input
                               type="number"
                               min="0"

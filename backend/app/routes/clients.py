@@ -607,6 +607,7 @@ PENDING_OPERATION_FIELDS = {
 
 PIPELINE_OPERATION_FIELDS = PENDING_OPERATION_FIELDS | {
     "valor_liberado",
+    "troco",
     "parcela_liberada",
     "promotora",
     "status_andamento",
@@ -1132,6 +1133,7 @@ def ensure_operations_extra_columns(cursor, db):
               'motivo_reprovacao',
               'digitador_id',
               'numero_proposta',
+              'troco',
               'promotora',
               'status_andamento'
           )
@@ -1233,6 +1235,10 @@ def ensure_operations_extra_columns(cursor, db):
 
     if "numero_proposta" not in existing:
         cursor.execute("ALTER TABLE operacoes ADD COLUMN numero_proposta VARCHAR(120) NULL")
+        changed = True
+
+    if "troco" not in existing:
+        cursor.execute("ALTER TABLE operacoes ADD COLUMN troco DECIMAL(14,2) NULL")
         changed = True
 
     if "promotora" not in existing:
@@ -3936,12 +3942,19 @@ def update_operation(operation_id):
                             "error": "Informe o numero_proposta para devolver ao vendedor"
                         }), 400
 
+                    product_name = normalize_product_name(operation.get("produto"))
+                    value_label = (
+                        "saldo"
+                        if product_name in {"PORTABILIDADE", "PORTABILIDADE_REFIN"}
+                        else "valor_liberado"
+                    )
+
                     try:
                         valor_liberado = float(str(data.get("valor_liberado") or "").replace(",", "."))
                     except (TypeError, ValueError):
                         cursor.close()
                         db.close()
-                        return jsonify({"error": "valor_liberado invalido"}), 400
+                        return jsonify({"error": f"{value_label} invalido"}), 400
 
                     try:
                         parcela_liberada = float(str(data.get("parcela_liberada") or "").replace(",", "."))
@@ -3953,7 +3966,7 @@ def update_operation(operation_id):
                     if valor_liberado <= 0:
                         cursor.close()
                         db.close()
-                        return jsonify({"error": "valor_liberado deve ser maior que zero"}), 400
+                        return jsonify({"error": f"{value_label} deve ser maior que zero"}), 400
 
                     if parcela_liberada <= 0:
                         cursor.close()
@@ -4030,6 +4043,23 @@ def update_operation(operation_id):
                     db.close()
                     return jsonify({"error": "Promotora invalida"}), 400
                 data["promotora"] = promotora or None
+
+            if "troco" in data:
+                raw_troco = str(data.get("troco") or "").strip()
+                if not raw_troco:
+                    data["troco"] = None
+                else:
+                    try:
+                        troco = float(raw_troco.replace(",", "."))
+                    except (TypeError, ValueError):
+                        cursor.close()
+                        db.close()
+                        return jsonify({"error": "troco invalido"}), 400
+                    if troco < 0:
+                        cursor.close()
+                        db.close()
+                        return jsonify({"error": "troco deve ser maior ou igual a zero"}), 400
+                    data["troco"] = round(troco, 2)
 
             if "status_andamento" in data:
                 status_andamento = normalize_operation_progress_status(
@@ -4337,6 +4367,7 @@ def get_pipeline():
             o.valor_solicitado,
             o.parcela_solicitada,
             o.valor_liberado,
+            o.troco,
             o.parcela_liberada,
             o.promotora,
             o.numero_proposta,
