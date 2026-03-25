@@ -29,7 +29,7 @@ const PRODUCT_OPTIONS = [
   { value: "PORTABILIDADE", label: "Portabilidade" },
   { value: "REFINANCIAMENTO", label: "Refinanciamento" },
   { value: "PORTABILIDADE_REFIN", label: "Port + Refin" },
-  { value: "CARTAO", label: "CartÃ£o" },
+  { value: "CARTAO", label: "Cartao" },
 ];
 
 const STATUS_LABELS = {
@@ -172,7 +172,7 @@ export default function ClientOperations() {
       const data = await listClientOperations(id);
       setOperations(Array.isArray(data) ? data : []);
     } catch (error) {
-      console.error("Erro ao carregar operaÃ§Ãµes:", error);
+      console.error("Erro ao carregar operacoes:", error);
       setOperations([]);
     }
   }
@@ -260,7 +260,7 @@ export default function ClientOperations() {
     }
 
     if (!formSchema) {
-      alert("NÃ£o existe ficha configurada para este produto.");
+      alert("Nao existe ficha configurada para este produto.");
       return;
     }
 
@@ -274,17 +274,17 @@ export default function ClientOperations() {
 
       if (editingOperationId) {
         await updateOperation(editingOperationId, payload);
-        alert("OperaÃ§Ã£o editada com sucesso");
+        alert("Operacao editada com sucesso");
       } else {
         await createOperation(id, payload);
-        alert("OperaÃ§Ã£o criada com sucesso");
+        alert("Operacao criada com sucesso");
       }
 
       resetForm("");
       await loadOperations();
     } catch (error) {
-      console.error("Erro ao salvar operaÃ§Ã£o:", error);
-      alert(error.message || "NÃ£o foi possÃ­vel salvar a operaÃ§Ã£o");
+      console.error("Erro ao salvar operacao:", error);
+      alert(error.message || "Nao foi possivel salvar a operacao");
     } finally {
       setLoading(false);
     }
@@ -295,9 +295,9 @@ export default function ClientOperations() {
       await sendOperationToPipeline(operationId);
       await loadOperations();
       window.dispatchEvent(new Event("pipeline:changed"));
-      alert("OperaÃ§Ã£o enviada para esteira");
+      alert("Operacao enviada para esteira");
     } catch (error) {
-      alert(error.message || "NÃ£o foi possÃ­vel enviar para esteira");
+      alert(error.message || "Nao foi possivel enviar para esteira");
     }
   }
 
@@ -372,11 +372,11 @@ export default function ClientOperations() {
 
   return (
     <div className="clientSection clientOperationsSection">
-      <h2>OperaÃ§Ãµes</h2>
+      <h2>Operacoes</h2>
 
       {canManageOperations && (
         <form onSubmit={handleSubmit} className="operationsFormCard">
-        <h3>{editingOperationId ? "Editar operaÃ§Ã£o" : "Nova operaÃ§Ã£o"}</h3>
+        <h3>{editingOperationId ? "Editar operacao" : "Nova operacao"}</h3>
 
         <label className="operationsField operationProductField">
           <span>Produto</span>
@@ -397,13 +397,13 @@ export default function ClientOperations() {
 
         {!form.produto && (
           <p className="operationFichaHint">
-            Selecione o produto para abrir a ficha especÃ­fica.
+            Selecione o produto para abrir a ficha especifica.
           </p>
         )}
 
         {form.produto && !formSchema && (
           <p className="operationFichaHint">
-            NÃ£o existe ficha configurada para este produto.
+            Nao existe ficha configurada para este produto.
           </p>
         )}
 
@@ -534,7 +534,7 @@ export default function ClientOperations() {
             className="clientPrimaryButton"
             disabled={loading || !formSchema}
           >
-            {loading ? "Salvando..." : editingOperationId ? "Salvar ediÃ§Ã£o" : "Criar operaÃ§Ã£o"}
+            {loading ? "Salvando..." : editingOperationId ? "Salvar edicao" : "Criar operacao"}
           </button>
 
           {editingOperationId && (
@@ -543,17 +543,17 @@ export default function ClientOperations() {
               className="clientGhostButton"
               onClick={() => resetForm("")}
             >
-              Cancelar ediÃ§Ã£o
+              Cancelar edicao
             </button>
           )}
         </div>
         </form>
       )}
 
-      <h3>OperaÃ§Ãµes cadastradas</h3>
+      <h3>Operacoes cadastradas</h3>
 
       {sortedOperations.length === 0 ? (
-        <p className="clientSectionText">Nenhuma operaÃ§Ã£o cadastrada.</p>
+        <p className="clientSectionText">Nenhuma operacao cadastrada.</p>
       ) : (
         <div className="operationsTableWrap">
           <table className="operationsTable">
@@ -571,8 +571,8 @@ export default function ClientOperations() {
                 <th>Digitador</th>
                 <th>N. proposta</th>
                 <th>Link formalizacao</th>
-                <th>PendÃªncia banco</th>
-                <th>AÃ§Ã£o</th>
+                <th>Pendencia banco</th>
+                <th>Acao</th>
               </tr>
             </thead>
             <tbody>

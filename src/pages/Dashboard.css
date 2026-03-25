@@ -484,7 +484,13 @@
   flex: 1;
   min-height: 0;
   overflow: auto;
-  padding: 26px;
+  padding: clamp(16px, 1.8vw, 26px);
+}
+
+.pageContent > * {
+  width: 100%;
+  max-width: 1480px;
+  margin: 0 auto;
 }
 
 .dashboardPage {
@@ -965,6 +971,22 @@
 @media (max-width: 1200px) {
   .dashboardPanels {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 1440px) {
+  .appSidebar {
+    width: 236px;
+    padding: 22px 16px;
+  }
+
+  .topBar {
+    padding: 16px 18px;
+    gap: 16px;
+  }
+
+  .searchFieldWrap {
+    width: min(500px, 100%);
   }
 }
 

@@ -150,7 +150,7 @@ export default function DashboardLayout() {
         const beneficio = String(client?.numero_beneficio || "").trim();
         const meta = [cpf ? `CPF ${cpf}` : "", beneficio ? `Beneficio ${beneficio}` : ""]
           .filter(Boolean)
-          .join(" · ");
+          .join(" | ");
 
         options.push(
           {
