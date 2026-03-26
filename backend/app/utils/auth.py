@@ -4,6 +4,7 @@ from app.utils.company import current_user_company_id, ensure_company_scope_colu
 
 ROLE_ADMIN = "ADMIN"
 ROLE_GLOBAL = "GLOBAL"
+ROLE_DIGITADOR_NOVO_CARTAO = "DIGITADOR_NOVO_CARTAO"
 
 
 def normalize_role(role):
@@ -24,6 +25,10 @@ def is_admin():
 
 def is_global():
     return current_user_role() == ROLE_GLOBAL
+
+
+def has_full_company_client_scope(role):
+    return normalize_role(role) == ROLE_DIGITADOR_NOVO_CARTAO
 
 
 def can_access_client(client_id):
@@ -54,7 +59,7 @@ def can_access_client(client_id):
 
     role = current_user_role()
 
-    if is_admin():
+    if is_admin() or has_full_company_client_scope(role):
         cursor.execute(
             "SELECT 1 FROM clientes WHERE id=%s AND empresa_id=%s",
             (client_id, company_id)

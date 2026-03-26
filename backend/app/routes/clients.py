@@ -824,6 +824,14 @@ def is_admin_like_role(role):
     return normalize_role(role) in {ROLE_ADMIN, ROLE_GLOBAL}
 
 
+def has_full_company_operation_scope(role):
+    return normalize_role(role) == ROLE_DIGITADOR_NOVO_CARTAO
+
+
+def uses_role_product_scope(role):
+    return is_digitador_role(role) and not has_full_company_operation_scope(role)
+
+
 def apply_company_scope(role, conditions, params, column_name):
     if normalize_role(role) == ROLE_GLOBAL:
         return
@@ -903,6 +911,9 @@ def role_can_access_operation(role, user_id, operation):
     if normalized_role == ROLE_ADMIN:
         return True
 
+    if has_full_company_operation_scope(normalized_role):
+        return True
+
     if normalized_role == ROLE_VENDOR:
         return operation.get("vendedor_id") == user_id
 
@@ -918,7 +929,7 @@ def can_access_client_documents(client_id):
         return True
 
     role = normalize_role(current_user_role())
-    if not is_digitador_role(role):
+    if not uses_role_product_scope(role):
         return False
 
     conditions = []
@@ -951,6 +962,9 @@ def can_access_client_documents(client_id):
 
 
 def apply_role_product_scope(role, conditions, params, column_name):
+    if not uses_role_product_scope(role):
+        return
+
     products = allowed_products_for_role(role)
     if not products:
         return
@@ -2334,6 +2348,21 @@ def list_clients():
             WHERE c.empresa_id=%s
             ORDER BY c.criado_em DESC
         """, (company_id,))
+    elif has_full_company_operation_scope(role):
+        cursor.execute("""
+            SELECT
+                c.*,
+                (
+                    SELECT x.status
+                    FROM operacoes x
+                    WHERE x.cliente_id = c.id
+                    ORDER BY x.criado_em DESC
+                    LIMIT 1
+                ) AS last_operation_status
+            FROM clientes c
+            WHERE c.empresa_id=%s
+            ORDER BY c.criado_em DESC
+        """, (company_id,))
     elif is_digitador_role(role):
         product_conditions = []
         product_params = []
@@ -2462,6 +2491,24 @@ def search_global():
                 LIMIT %s
                 """,
                 tuple([*params, user_id, limit]),
+            )
+        elif has_full_company_operation_scope(role):
+            cursor.execute(
+                f"""
+                SELECT
+                    c.id,
+                    c.nome,
+                    c.cpf,
+                    c.numero_beneficio,
+                    c.vendedor_id,
+                    COALESCE(v.nome, '-') AS vendedor_nome
+                FROM clientes c
+                LEFT JOIN usuarios v ON v.id = c.vendedor_id
+                WHERE {' AND '.join(base_where)}
+                ORDER BY c.nome ASC
+                LIMIT %s
+                """,
+                tuple([*params, limit]),
             )
         elif is_digitador_role(role):
             product_conditions = []
@@ -3828,7 +3875,7 @@ def update_operation(operation_id):
             db.close()
             return jsonify({"error": "Acesso nao autorizado para este produto"}), 403
 
-        if is_digitador_role(role) and "produto" in data:
+        if uses_role_product_scope(role) and "produto" in data:
             next_product = normalize_product_name(data.get("produto"))
             if (
                 next_product
@@ -4345,7 +4392,7 @@ def get_pipeline():
     if role == ROLE_VENDOR:
         conditions.append("c.vendedor_id = %s")
         params.append(user_id)
-    elif is_digitador_role(role):
+    elif is_digitador_role(role) and not has_full_company_operation_scope(role):
         ready_placeholders = ", ".join(
             ["%s"] * len(PIPELINE_READY_VISIBLE_STATUSES_WITH_LEGACY)
         )
@@ -4695,7 +4742,7 @@ def get_dashboard_summary():
             "REPROVADO",
         )
         sent_status_placeholders = ", ".join(["%s"] * len(sent_statuses))
-        allowed_role_products = allowed_products_for_role(role)
+        allowed_role_products = () if has_full_company_operation_scope(role) else allowed_products_for_role(role)
         role_product_clause = ""
         role_product_params = []
 
@@ -5088,7 +5135,7 @@ def get_dashboard_summary():
         progress = round((approved_value / goal_target) * 100, 2) if goal_target else 0
         scope = "INDIVIDUAL"
 
-        if is_admin_like_role(role) and not selected_vendor_id:
+        if (is_admin_like_role(role) or has_full_company_operation_scope(role)) and not selected_vendor_id:
             scope = "GERAL"
         elif is_digitador_role(role) and not selected_vendor_id:
             scope = "PRODUTO"
