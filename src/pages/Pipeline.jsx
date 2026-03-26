@@ -69,6 +69,8 @@ const PROMOTORA_OPTIONS = [
   { value: "FINANBANK", label: "FINANBANK" },
   { value: "PROSPECTA", label: "PROSPECTA" },
   { value: "IDEIA", label: "IDEIA" },
+  { value: "NEXTER", label: "NEXTER" },
+  { value: "PONTO AMIGO", label: "PONTO AMIGO" },
   { value: "PORT", label: "PORT" },
 ];
 

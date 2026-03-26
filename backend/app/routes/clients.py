@@ -744,6 +744,8 @@ PROMOTORA_OPTIONS = {
     "FINANBANK",
     "PROSPECTA",
     "IDEIA",
+    "NEXTER",
+    "PONTO AMIGO",
     "PORT",
 }
 
