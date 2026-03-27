@@ -16,6 +16,7 @@ from app.utils.company import current_user_company_id, ensure_company_scope_colu
 from app.utils.auth import (
     current_user_id,
     current_user_role,
+    current_user_digitador_full_scope,
     is_admin,
     can_access_client
 )
@@ -825,7 +826,7 @@ def is_admin_like_role(role):
 
 
 def has_full_company_operation_scope(role):
-    return normalize_role(role) == ROLE_DIGITADOR_NOVO_CARTAO
+    return normalize_role(role).startswith("DIGITADOR") and current_user_digitador_full_scope()
 
 
 def uses_role_product_scope(role):

@@ -4,7 +4,6 @@ from app.utils.company import current_user_company_id, ensure_company_scope_colu
 
 ROLE_ADMIN = "ADMIN"
 ROLE_GLOBAL = "GLOBAL"
-ROLE_DIGITADOR_NOVO_CARTAO = "DIGITADOR_NOVO_CARTAO"
 
 
 def normalize_role(role):
@@ -27,8 +26,42 @@ def is_global():
     return current_user_role() == ROLE_GLOBAL
 
 
-def has_full_company_client_scope(role):
-    return normalize_role(role) == ROLE_DIGITADOR_NOVO_CARTAO
+def current_user_digitador_full_scope():
+    role = current_user_role()
+    if not role.startswith("DIGITADOR"):
+        return False
+
+    jwt_data = get_jwt() or {}
+    try:
+        user_id = current_user_id()
+    except (TypeError, ValueError, RuntimeError):
+        return bool(jwt_data.get("digitador_full_scope"))
+
+    db = get_db()
+    cursor = db.cursor(dictionary=True)
+    try:
+        cursor.execute(
+            """
+            SELECT COALESCE(digitador_full_scope, 0) AS digitador_full_scope
+            FROM usuarios
+            WHERE id = %s
+            LIMIT 1
+            """,
+            (user_id,),
+        )
+        row = cursor.fetchone() or {}
+        return bool(row.get("digitador_full_scope"))
+    except Exception:
+        if "digitador_full_scope" in jwt_data:
+            return bool(jwt_data.get("digitador_full_scope"))
+        return role == "DIGITADOR_NOVO_CARTAO"
+    finally:
+        cursor.close()
+        db.close()
+
+
+def has_full_company_client_scope():
+    return current_user_role().startswith("DIGITADOR") and current_user_digitador_full_scope()
 
 
 def can_access_client(client_id):
@@ -59,7 +92,7 @@ def can_access_client(client_id):
 
     role = current_user_role()
 
-    if is_admin() or has_full_company_client_scope(role):
+    if is_admin() or has_full_company_client_scope():
         cursor.execute(
             "SELECT 1 FROM clientes WHERE id=%s AND empresa_id=%s",
             (client_id, company_id)

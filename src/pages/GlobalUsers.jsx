@@ -6,6 +6,7 @@ import {
   deleteUser,
   listCompanies,
   listUsers,
+  updateUserDigitadorScope,
 } from "../services/api";
 import "./GlobalUsers.css";
 
@@ -38,6 +39,10 @@ function roleLabel(role) {
   );
 }
 
+function isDigitadorRole(role) {
+  return String(role || "").toUpperCase().startsWith("DIGITADOR");
+}
+
 export default function GlobalUsers() {
   const navigate = useNavigate();
   const storedUser = useMemo(() => getStoredUser(), []);
@@ -50,6 +55,7 @@ export default function GlobalUsers() {
     senha: "",
     role: "ADMIN",
     empresa_id: "",
+    digitador_full_scope: false,
   });
   const [confirmSenha, setConfirmSenha] = useState("");
   const [companies, setCompanies] = useState([]);
@@ -71,6 +77,7 @@ export default function GlobalUsers() {
   const [companyError, setCompanyError] = useState("");
   const [companySuccess, setCompanySuccess] = useState("");
   const [listError, setListError] = useState("");
+  const [scopeLoadingId, setScopeLoadingId] = useState(null);
 
   useEffect(() => {
     if (!isGlobal) {
@@ -115,6 +122,14 @@ export default function GlobalUsers() {
     setForm((prev) => ({
       ...prev,
       [field]: value,
+    }));
+  }
+
+  function handleRoleChange(value) {
+    setForm((prev) => ({
+      ...prev,
+      role: value,
+      digitador_full_scope: isDigitadorRole(value) ? prev.digitador_full_scope : false,
     }));
   }
 
@@ -166,6 +181,7 @@ export default function GlobalUsers() {
         senha,
         role: roleValue,
         empresa_id: Number(empresaId),
+        digitador_full_scope: Boolean(form.digitador_full_scope),
       });
       const created = result?.user || {};
       setCreateSuccess(
@@ -177,6 +193,7 @@ export default function GlobalUsers() {
         senha: "",
         role: "ADMIN",
         empresa_id: empresaId,
+        digitador_full_scope: false,
       });
       setConfirmSenha("");
       await loadCompaniesAndUsers(filters);
@@ -246,6 +263,31 @@ export default function GlobalUsers() {
       await loadCompaniesAndUsers(filters);
     } catch (requestError) {
       setListError(requestError.message || "Nao foi possivel excluir o usuario.");
+    }
+  }
+
+  async function handleToggleDigitadorScope(targetUser) {
+    const targetId = Number(targetUser?.id);
+    if (!Number.isFinite(targetId) || targetId <= 0) return;
+    if (!isDigitadorRole(targetUser?.role)) return;
+
+    const nextValue = !Boolean(targetUser?.digitador_full_scope);
+
+    try {
+      setListError("");
+      setScopeLoadingId(targetId);
+      const result = await updateUserDigitadorScope(targetId, nextValue);
+      const updated = result?.user || {};
+      setCreateSuccess(
+        `Permissao atualizada: ${updated.nome || targetUser?.nome || "Digitador"} agora ${
+          updated.digitador_full_scope ? "ve todas as operacoes da empresa" : "segue no escopo padrao do produto"
+        }.`
+      );
+      await loadCompaniesAndUsers(filters);
+    } catch (requestError) {
+      setListError(requestError.message || "Nao foi possivel atualizar a permissao do digitador.");
+    } finally {
+      setScopeLoadingId(null);
     }
   }
 
@@ -320,7 +362,7 @@ export default function GlobalUsers() {
             Perfil
             <select
               value={form.role}
-              onChange={(event) => handleChange("role", event.target.value)}
+              onChange={(event) => handleRoleChange(event.target.value)}
               required
             >
               {ROLE_OPTIONS.map((option) => (
@@ -346,6 +388,21 @@ export default function GlobalUsers() {
               ))}
             </select>
           </label>
+
+          {isDigitadorRole(form.role) && (
+            <label>
+              Visao do digitador
+              <select
+                value={form.digitador_full_scope ? "all" : "product"}
+                onChange={(event) =>
+                  handleChange("digitador_full_scope", event.target.value === "all")
+                }
+              >
+                <option value="product">Somente produtos do perfil</option>
+                <option value="all">Todas as operacoes da empresa</option>
+              </select>
+            </label>
+          )}
 
           <label>
             Senha
@@ -450,6 +507,7 @@ export default function GlobalUsers() {
                 <th>Email</th>
                 <th>Empresa</th>
                 <th>Perfil</th>
+                <th>Visao</th>
                 <th>2FA</th>
                 <th>Acao</th>
               </tr>
@@ -457,7 +515,7 @@ export default function GlobalUsers() {
             <tbody>
               {usersLoading ? (
                 <tr>
-                  <td colSpan="6" className="globalUsersEmpty">
+                  <td colSpan="7" className="globalUsersEmpty">
                     Carregando usuarios...
                   </td>
                 </tr>
@@ -470,24 +528,56 @@ export default function GlobalUsers() {
                       <td>{item.email || "-"}</td>
                       <td>{item.empresa?.nome || "-"}</td>
                       <td>{roleLabel(item.role)}</td>
+                      <td>
+                        {isDigitadorRole(item.role) ? (
+                          <span
+                            className={`globalUsersScopeBadge ${
+                              item.digitador_full_scope ? "full" : "product"
+                            }`}
+                          >
+                            {item.digitador_full_scope
+                              ? "Todas operacoes"
+                              : "Escopo do produto"}
+                          </span>
+                        ) : (
+                          "-"
+                        )}
+                      </td>
                       <td>{item.twofa_enabled ? "Ativo" : "Inativo"}</td>
                       <td>
-                        <button
-                          type="button"
-                          className="danger"
-                          onClick={() => handleDeleteUser(item)}
-                          disabled={isSelf}
-                          title={isSelf ? "Voce nao pode excluir sua propria conta" : "Excluir usuario"}
-                        >
-                          Excluir
-                        </button>
+                        <div className="globalUsersActionGroup">
+                          {isDigitadorRole(item.role) && (
+                            <button
+                              type="button"
+                              className="secondary"
+                              onClick={() => handleToggleDigitadorScope(item)}
+                              disabled={scopeLoadingId === item.id}
+                              title="Alterar o que esse digitador pode ver"
+                            >
+                              {scopeLoadingId === item.id
+                                ? "Salvando..."
+                                : item.digitador_full_scope
+                                ? "Limitar"
+                                : "Liberar tudo"}
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            className="danger"
+                            onClick={() => handleDeleteUser(item)}
+                            disabled={isSelf}
+                            title={isSelf ? "Voce nao pode excluir sua propria conta" : "Excluir usuario"}
+                          >
+                            Excluir
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
                 })
               ) : (
                 <tr>
-                  <td colSpan="6" className="globalUsersEmpty">
+                  <td colSpan="7" className="globalUsersEmpty">
                     Nenhum usuario encontrado com os filtros atuais.
                   </td>
                 </tr>

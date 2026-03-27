@@ -176,6 +176,35 @@
   background: color-mix(in srgb, var(--danger) 86%, #7a0914);
 }
 
+.globalUsersActionGroup {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.globalUsersScopeBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border-color);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.globalUsersScopeBadge.product {
+  background: var(--surface-strong);
+  color: var(--text-secondary);
+}
+
+.globalUsersScopeBadge.full {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  color: var(--accent);
+}
+
 .globalUsersFilterActions button:disabled,
 .globalUsersTable button:disabled {
   cursor: not-allowed;

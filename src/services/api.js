@@ -621,6 +621,24 @@ export async function listUsers(filters = {}) {
   return data;
 }
 
+export async function updateUserDigitadorScope(userId, digitadorFullScope) {
+  const response = await fetch(`${API_URL}/users/${userId}/digitador-scope`, {
+    method: "PUT",
+    headers: getAuthHeaders(true),
+    body: JSON.stringify({
+      digitador_full_scope: Boolean(digitadorFullScope),
+    }),
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.error || "Erro ao atualizar permissao do digitador");
+  }
+
+  return data;
+}
+
 export async function listCompanies() {
   const response = await fetch(`${API_URL}/companies`, {
     headers: getAuthHeaders(),

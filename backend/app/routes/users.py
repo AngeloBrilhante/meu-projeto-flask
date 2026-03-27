@@ -49,13 +49,15 @@ users_bp = Blueprint("users", __name__)
 
 ROLE_ADMIN = "ADMIN"
 ROLE_GLOBAL = "GLOBAL"
+ROLE_DIGITADOR_PORT_REFIN = "DIGITADOR_PORT_REFIN"
+ROLE_DIGITADOR_NOVO_CARTAO = "DIGITADOR_NOVO_CARTAO"
 
 ALLOWED_USER_ROLES = (
     ROLE_ADMIN,
     ROLE_GLOBAL,
     "VENDEDOR",
-    "DIGITADOR_PORT_REFIN",
-    "DIGITADOR_NOVO_CARTAO",
+    ROLE_DIGITADOR_PORT_REFIN,
+    ROLE_DIGITADOR_NOVO_CARTAO,
 )
 
 EMAIL_REGEX = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
@@ -93,12 +95,27 @@ def actor_is_global():
     return current_actor_role() == ROLE_GLOBAL
 
 
+def is_digitador_role(role):
+    return normalize_role(role) in {
+        ROLE_DIGITADOR_PORT_REFIN,
+        ROLE_DIGITADOR_NOVO_CARTAO,
+    }
+
+
 def normalize_email(email):
     return str(email or "").strip().lower()
 
 
 def valid_email(email):
     return bool(EMAIL_REGEX.match(email or ""))
+
+
+def parse_bool_flag(value):
+    if isinstance(value, bool):
+        return value
+
+    text = str(value or "").strip().lower()
+    return text in {"1", "true", "yes", "sim", "on"}
 
 
 def allowed_avatar(filename):
@@ -189,6 +206,24 @@ def ensure_user_profile_columns(cursor, db):
         cursor.execute("ALTER TABLE usuarios ADD COLUMN foto_mime VARCHAR(100) NULL")
         changed = True
 
+    added_digitador_full_scope = False
+    if "digitador_full_scope" not in columns:
+        cursor.execute(
+            "ALTER TABLE usuarios ADD COLUMN digitador_full_scope TINYINT(1) NOT NULL DEFAULT 0"
+        )
+        changed = True
+        added_digitador_full_scope = True
+
+    if added_digitador_full_scope:
+        cursor.execute(
+            """
+            UPDATE usuarios
+            SET digitador_full_scope = 1
+            WHERE UPPER(role) = %s
+            """,
+            (ROLE_DIGITADOR_NOVO_CARTAO,),
+        )
+
     if changed:
         db.commit()
 
@@ -210,6 +245,7 @@ def serialize_user(row):
         "bio": row.get("bio") or "",
         "foto_url": build_avatar_url(user_id, row.get("foto_arquivo")),
         "twofa_enabled": bool(row.get("twofa_enabled")),
+        "digitador_full_scope": bool(row.get("digitador_full_scope")),
         "empresa_id": company_id or None,
         "empresa": {
             "id": company_id or None,
@@ -229,6 +265,7 @@ def fetch_user_by_email(cursor, email):
     has_bio = column_exists(cursor, "usuarios", "bio")
     has_foto_arquivo = column_exists(cursor, "usuarios", "foto_arquivo")
     has_twofa_enabled = column_exists(cursor, "usuarios", "twofa_enabled")
+    has_digitador_full_scope = column_exists(cursor, "usuarios", "digitador_full_scope")
 
     cursor.execute(
         f"""
@@ -242,6 +279,7 @@ def fetch_user_by_email(cursor, email):
             {("COALESCE(u.bio, '')" if has_bio else "''")} AS bio,
             {("u.foto_arquivo" if has_foto_arquivo else "NULL")} AS foto_arquivo,
             {("COALESCE(u.twofa_enabled, 0)" if has_twofa_enabled else "0")} AS twofa_enabled,
+            {("COALESCE(u.digitador_full_scope, 0)" if has_digitador_full_scope else "0")} AS digitador_full_scope,
             {("u.empresa_id" if has_user_company else "NULL")} AS empresa_id,
             {("e.nome" if has_user_company and has_empresas else "NULL")} AS empresa_nome,
             {("e.slug" if has_user_company and has_empresas else "NULL")} AS empresa_slug,
@@ -266,6 +304,7 @@ def fetch_user_row(cursor, user_id):
     has_foto_arquivo = column_exists(cursor, "usuarios", "foto_arquivo")
     has_twofa_enabled = column_exists(cursor, "usuarios", "twofa_enabled")
     has_twofa_secret = column_exists(cursor, "usuarios", "twofa_secret")
+    has_digitador_full_scope = column_exists(cursor, "usuarios", "digitador_full_scope")
 
     cursor.execute(
         f"""
@@ -280,6 +319,7 @@ def fetch_user_row(cursor, user_id):
             u.senha_hash,
             {("u.twofa_secret" if has_twofa_secret else "NULL")} AS twofa_secret,
             {("COALESCE(u.twofa_enabled, 0)" if has_twofa_enabled else "0")} AS twofa_enabled,
+            {("COALESCE(u.digitador_full_scope, 0)" if has_digitador_full_scope else "0")} AS digitador_full_scope,
             {("u.empresa_id" if has_user_company else "NULL")} AS empresa_id,
             {("e.nome" if has_user_company and has_empresas else "NULL")} AS empresa_nome,
             {("e.slug" if has_user_company and has_empresas else "NULL")} AS empresa_slug,
@@ -308,6 +348,7 @@ def fetch_basic_user_row(cursor, user_id):
             '' AS bio,
             NULL AS foto_arquivo,
             0 AS twofa_enabled,
+            0 AS digitador_full_scope,
             NULL AS empresa_id,
             NULL AS empresa_nome,
             NULL AS empresa_slug,
@@ -393,6 +434,7 @@ def list_users():
                 COALESCE(u.bio, '') AS bio,
                 u.foto_arquivo,
                 COALESCE(u.twofa_enabled, 0) AS twofa_enabled,
+                COALESCE(u.digitador_full_scope, 0) AS digitador_full_scope,
                 u.empresa_id,
                 e.nome AS empresa_nome,
                 e.slug AS empresa_slug,
@@ -425,6 +467,7 @@ def create_user():
     senha = data.get("senha") or ""
     role = normalize_role(data.get("role"))
     raw_empresa_id = data.get("empresa_id")
+    raw_digitador_full_scope = data.get("digitador_full_scope")
 
     if not nome or not email or not senha or not role:
         return jsonify({"error": "Dados obrigatorios faltando"}), 400
@@ -471,12 +514,21 @@ def create_user():
         if not company:
             return jsonify({"error": "Empresa nao encontrada"}), 404
 
+        digitador_full_scope = 1 if is_digitador_role(role) and parse_bool_flag(raw_digitador_full_scope) else 0
+
         cursor.execute(
             """
-            INSERT INTO usuarios (nome, email, senha_hash, role, empresa_id)
-            VALUES (%s, %s, %s, %s, %s)
+            INSERT INTO usuarios (
+                nome,
+                email,
+                senha_hash,
+                role,
+                empresa_id,
+                digitador_full_scope
+            )
+            VALUES (%s, %s, %s, %s, %s, %s)
             """,
-            (nome, email, senha_hash, role, empresa_id),
+            (nome, email, senha_hash, role, empresa_id, digitador_full_scope),
         )
         db.commit()
 
@@ -498,6 +550,50 @@ def create_user():
         if "Duplicate entry" in message and "email" in message:
             return jsonify({"error": "Email ja cadastrado"}), 409
         return jsonify({"error": "Nao foi possivel criar o usuario"}), 400
+    finally:
+        cursor.close()
+        db.close()
+
+
+@users_bp.route("/users/<int:user_id>/digitador-scope", methods=["PUT"])
+@jwt_required()
+def update_user_digitador_scope(user_id):
+    if not actor_is_global():
+        return jsonify({"error": "Somente GLOBAL pode alterar essa permissao"}), 403
+
+    data = request.get_json(silent=True) or {}
+    digitador_full_scope = parse_bool_flag(data.get("digitador_full_scope"))
+
+    db = get_db()
+    cursor = db.cursor(dictionary=True)
+
+    try:
+        ensure_user_profile_columns(cursor, db)
+        row = fetch_user_row(cursor, user_id)
+        if not row:
+            return jsonify({"error": "Usuario nao encontrado"}), 404
+
+        role = normalize_role(row.get("role"))
+        if not is_digitador_role(role):
+            return jsonify({"error": "Essa permissao so pode ser alterada para digitadores"}), 400
+
+        cursor.execute(
+            """
+            UPDATE usuarios
+            SET digitador_full_scope = %s
+            WHERE id = %s
+            """,
+            (1 if digitador_full_scope else 0, user_id),
+        )
+        db.commit()
+
+        updated = fetch_user_row(cursor, user_id)
+        return jsonify(
+            {
+                "message": "Permissao do digitador atualizada com sucesso",
+                "user": serialize_user(updated),
+            }
+        ), 200
     finally:
         cursor.close()
         db.close()
@@ -535,6 +631,7 @@ def login():
             "nome": user.get("nome"),
             "email": user.get("email"),
             "role": normalize_role(user.get("role")),
+            "digitador_full_scope": bool(user.get("digitador_full_scope")),
             "empresa_id": user.get("empresa_id"),
             "empresa_nome": user.get("empresa_nome"),
             "empresa_slug": user.get("empresa_slug"),
