@@ -596,6 +596,103 @@ export default function Pipeline() {
     }
   }
 
+  async function handleSaveFormalizacaoData(operation) {
+    const draft = drafts[operation.id] || {};
+    const payload = {
+      promotora: String(draft.promotora || "").trim().toUpperCase(),
+      troco: String(draft.troco || "").trim(),
+    };
+
+    const numeroProposta = String(draft.numero_proposta || "").trim();
+    const linkFormalizacao = String(draft.link_formalizacao || "").trim();
+    const valorInput = String(draft.valor_liberado || "").trim();
+    const parcelaInput = String(draft.parcela_liberada || "").trim();
+    const useSaldoField = usesSaldoLabels(operation.produto);
+    const primaryValueLabel = useSaldoField ? "saldo" : "valor liberado";
+
+    if (numeroProposta) {
+      payload.numero_proposta = numeroProposta;
+    }
+
+    if (linkFormalizacao) {
+      payload.link_formalizacao = linkFormalizacao;
+    }
+
+    if (valorInput) {
+      const parsedValue = Number(valorInput.replace(",", "."));
+      if (!Number.isFinite(parsedValue) || parsedValue <= 0) {
+        alert(`Informe um ${primaryValueLabel} valido.`);
+        return;
+      }
+      payload.valor_liberado = parsedValue;
+    }
+
+    if (parcelaInput) {
+      const parsedInstallment = Number(parcelaInput.replace(",", "."));
+      if (!Number.isFinite(parsedInstallment) || parsedInstallment <= 0) {
+        alert("Informe uma parcela valida.");
+        return;
+      }
+      payload.parcela_liberada = parsedInstallment;
+    }
+
+    if (payload.troco) {
+      const parsedTroco = Number(payload.troco.replace(",", "."));
+      if (!Number.isFinite(parsedTroco) || parsedTroco < 0) {
+        alert("Informe um troco valido.");
+        return;
+      }
+      payload.troco = parsedTroco;
+    }
+
+    const hasDataToSave = Boolean(
+      numeroProposta ||
+        linkFormalizacao ||
+        valorInput ||
+        parcelaInput ||
+        payload.promotora ||
+        payload.troco
+    );
+
+    if (!hasDataToSave) {
+      alert("Preencha ao menos um dado para salvar.");
+      return;
+    }
+
+    try {
+      setSavingOperationId(operation.id);
+      const response = await updateOperation(operation.id, payload);
+      const updatedOperation = response?.operation;
+
+      if (updatedOperation) {
+        setDrafts((prev) => ({
+          ...prev,
+          [operation.id]: toDraft(updatedOperation),
+        }));
+      }
+
+      if (openHistory[operation.id]) {
+        await loadOperationHistory(operation.id, { force: true });
+      }
+
+      setOpenEditors((prev) => ({
+        ...prev,
+        [operation.id]: {
+          ...prev[operation.id],
+          formalizacao: false,
+        },
+      }));
+
+      await fetchPipeline();
+      window.dispatchEvent(new Event("pipeline:changed"));
+    } catch (error) {
+      console.error("Erro ao salvar dados da operacao:", error);
+      alert(error.message || "Nao foi possivel salvar os dados da operacao");
+    } finally {
+      setSavingOperationId(null);
+    }
+  }
+
   async function handleAndamentoChange(operation, nextAndamento) {
     const normalizedAndamento = normalizeAndamentoStatus(nextAndamento);
     setOpenAndamentoMenu((prev) => ({
@@ -1298,98 +1395,118 @@ function handleAprovar(operation) {
                         )}
 
                         {!isVendor && formalizacaoAberta && (
-                          <div className="proposalStackField">
-                            <input
-                              type="text"
-                              className="proposalInput"
-                              placeholder="Numero da proposta"
-                              value={draft.numero_proposta}
-                              onChange={(event) =>
-                                handleDraftChange(
-                                  operation.id,
-                                  "numero_proposta",
-                                  event.target.value
-                                )
-                              }
-                            />
-                            <input
-                              type="number"
-                              min="0"
-                              step="0.01"
-                              className="proposalInput"
-                              placeholder={valorLabel}
-                              value={draft.valor_liberado}
-                              onChange={(event) =>
-                                handleDraftChange(
-                                  operation.id,
-                                  "valor_liberado",
-                                  event.target.value
-                                )
-                              }
-                            />
-                            {useSaldoField && (
+                          <>
+                            <div className="proposalStackField">
+                              <input
+                                type="text"
+                                className="proposalInput"
+                                placeholder="Numero da proposta"
+                                value={draft.numero_proposta}
+                                onChange={(event) =>
+                                  handleDraftChange(
+                                    operation.id,
+                                    "numero_proposta",
+                                    event.target.value
+                                  )
+                                }
+                              />
                               <input
                                 type="number"
                                 min="0"
                                 step="0.01"
                                 className="proposalInput"
-                                placeholder="Troco (opcional)"
-                                value={draft.troco}
+                                placeholder={valorLabel}
+                                value={draft.valor_liberado}
                                 onChange={(event) =>
                                   handleDraftChange(
                                     operation.id,
-                                    "troco",
+                                    "valor_liberado",
                                     event.target.value
                                   )
                                 }
                               />
-                            )}
-                            <input
-                              type="number"
-                              min="0"
-                              step="0.01"
-                              className="proposalInput"
-                              placeholder={parcelaLabel}
-                              value={draft.parcela_liberada}
-                              onChange={(event) =>
-                                handleDraftChange(
-                                  operation.id,
-                                  "parcela_liberada",
-                                  event.target.value
-                                )
-                              }
-                            />
-                            <select
-                              className="proposalInput"
-                              value={draft.promotora || ""}
-                              onChange={(event) =>
-                                handleDraftChange(
-                                  operation.id,
-                                  "promotora",
-                                  event.target.value
-                                )
-                              }
-                            >
-                              {PROMOTORA_OPTIONS.map((option) => (
-                                <option key={option.value} value={option.value}>
-                                  {option.label}
-                                </option>
-                              ))}
-                            </select>
-                            <input
-                              type="url"
-                              className="proposalInput proposalLinkInput"
-                              placeholder="https://..."
-                              value={draft.link_formalizacao}
-                              onChange={(event) =>
-                                handleDraftChange(
-                                  operation.id,
-                                  "link_formalizacao",
-                                  event.target.value
-                                )
-                              }
-                            />
-                          </div>
+                              {useSaldoField && (
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  className="proposalInput"
+                                  placeholder="Troco (opcional)"
+                                  value={draft.troco}
+                                  onChange={(event) =>
+                                    handleDraftChange(
+                                      operation.id,
+                                      "troco",
+                                      event.target.value
+                                    )
+                                  }
+                                />
+                              )}
+                              <input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                className="proposalInput"
+                                placeholder={parcelaLabel}
+                                value={draft.parcela_liberada}
+                                onChange={(event) =>
+                                  handleDraftChange(
+                                    operation.id,
+                                    "parcela_liberada",
+                                    event.target.value
+                                  )
+                                }
+                              />
+                              <select
+                                className="proposalInput"
+                                value={draft.promotora || ""}
+                                onChange={(event) =>
+                                  handleDraftChange(
+                                    operation.id,
+                                    "promotora",
+                                    event.target.value
+                                  )
+                                }
+                              >
+                                {PROMOTORA_OPTIONS.map((option) => (
+                                  <option key={option.value} value={option.value}>
+                                    {option.label}
+                                  </option>
+                                ))}
+                              </select>
+                              <input
+                                type="url"
+                                className="proposalInput proposalLinkInput"
+                                placeholder="https://..."
+                                value={draft.link_formalizacao}
+                                onChange={(event) =>
+                                  handleDraftChange(
+                                    operation.id,
+                                    "link_formalizacao",
+                                    event.target.value
+                                  )
+                                }
+                              />
+                            </div>
+                            <div className="pipelinePanelActions">
+                              <button
+                                type="button"
+                                className="saveBtn"
+                                disabled={isSaving}
+                                onClick={() => handleSaveFormalizacaoData(operation)}
+                              >
+                                Salvar dados
+                              </button>
+                              <button
+                                type="button"
+                                className="ghostPipelineBtn"
+                                disabled={isSaving}
+                                onClick={() => toggleFormalizacaoEditor(operation.id)}
+                              >
+                                Fechar
+                              </button>
+                            </div>
+                          </>
                         )}
                       </div>
                     </td>
