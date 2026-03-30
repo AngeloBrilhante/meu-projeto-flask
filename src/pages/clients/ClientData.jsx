@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useOutletContext } from "react-router-dom";
 import { updateClient } from "../../services/api";
 import {
@@ -66,6 +66,8 @@ function buildForm(client) {
     rua: client?.rua || "",
     numero: client?.numero || "",
     bairro: client?.bairro || "",
+    cidade: client?.cidade || "",
+    estado: client?.estado || "",
   };
 }
 
@@ -86,7 +88,11 @@ export default function ClientData() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [cepLoading, setCepLoading] = useState(false);
+  const [cepError, setCepError] = useState("");
   const [form, setForm] = useState(() => buildForm(client));
+  const lastCepLookupRef = useRef("");
+  const cepRequestRef = useRef(0);
   const role = useMemo(() => getStoredRole(), []);
   const canEditClient =
     role === "GLOBAL" || role === "ADMIN" || role === "VENDEDOR";
@@ -133,20 +139,112 @@ export default function ClientData() {
     ["Rua", client.rua],
     ["Numero", client.numero],
     ["Bairro", client.bairro],
+    ["Cidade", client.cidade],
+    ["Estado", client.estado],
   ];
+
+  function onlyDigits(value) {
+    return String(value || "").replace(/\D/g, "");
+  }
+
+  function formatCep(value) {
+    const digits = onlyDigits(value).slice(0, 8);
+    if (digits.length <= 5) {
+      return digits;
+    }
+
+    return `${digits.slice(0, 5)}-${digits.slice(5)}`;
+  }
+
+  async function lookupAddressByCep(cepDigits) {
+    if (cepDigits.length !== 8 || cepDigits === lastCepLookupRef.current) {
+      return;
+    }
+
+    const requestId = ++cepRequestRef.current;
+    setCepLoading(true);
+    setCepError("");
+
+    try {
+      const response = await fetch(`https://viacep.com.br/ws/${cepDigits}/json/`);
+      const data = await response.json();
+
+      if (requestId !== cepRequestRef.current) {
+        return;
+      }
+
+      if (!response.ok || data.erro) {
+        setCepError("CEP nao encontrado.");
+        return;
+      }
+
+      setForm((prev) => ({
+        ...prev,
+        rua: data.logradouro || prev.rua,
+        bairro: data.bairro || prev.bairro,
+        cidade: data.localidade || prev.cidade,
+        estado: data.uf || prev.estado,
+      }));
+      lastCepLookupRef.current = cepDigits;
+    } catch {
+      if (requestId !== cepRequestRef.current) {
+        return;
+      }
+      setCepError("Nao foi possivel buscar o endereco.");
+    } finally {
+      if (requestId === cepRequestRef.current) {
+        setCepLoading(false);
+      }
+    }
+  }
 
   function handleChange(event) {
     const { name, type, value, checked } = event.target;
-    const nextValue =
-      type === "checkbox"
-        ? checked
-        : name === "data_nascimento" || name === "rg_data_emissao"
-        ? formatDateInputValue(value)
-        : value;
+
+    if (type === "checkbox") {
+      setForm((prev) => ({
+        ...prev,
+        [name]: checked,
+      }));
+      return;
+    }
+
+    if (name === "data_nascimento" || name === "rg_data_emissao") {
+      setForm((prev) => ({
+        ...prev,
+        [name]: formatDateInputValue(value),
+      }));
+      return;
+    }
+
+    if (name === "cep") {
+      const nextCep = formatCep(value);
+      const cepDigits = onlyDigits(nextCep);
+
+      setForm((prev) => ({ ...prev, cep: nextCep }));
+      setCepError("");
+
+      if (cepDigits.length === 8) {
+        lookupAddressByCep(cepDigits);
+      } else {
+        setCepLoading(false);
+        lastCepLookupRef.current = "";
+      }
+
+      return;
+    }
+
+    if (name === "estado" || name === "uf_beneficio" || name === "rg_uf") {
+      setForm((prev) => ({
+        ...prev,
+        [name]: String(value || "").toUpperCase(),
+      }));
+      return;
+    }
 
     setForm((prev) => ({
       ...prev,
-      [name]: nextValue,
+      [name]: value,
     }));
   }
 
@@ -184,6 +282,8 @@ export default function ClientData() {
     setIsEditing(false);
     setError("");
     setSuccess("");
+    setCepError("");
+    setCepLoading(false);
     setForm(buildForm(client));
   }
 
@@ -376,6 +476,12 @@ export default function ClientData() {
             <label className="clientEditField">
               <span>CEP</span>
               <input name="cep" value={form.cep} onChange={handleChange} inputMode="numeric" />
+              {cepLoading && (
+                <small className="clientFieldHint">Buscando endereco...</small>
+              )}
+              {!cepLoading && cepError && (
+                <small className="clientFieldError">{cepError}</small>
+              )}
             </label>
 
             <label className="clientEditField">
@@ -391,6 +497,22 @@ export default function ClientData() {
             <label className="clientEditField">
               <span>Bairro</span>
               <input name="bairro" value={form.bairro} onChange={handleChange} />
+            </label>
+
+            <label className="clientEditField">
+              <span>Cidade</span>
+              <input name="cidade" value={form.cidade} onChange={handleChange} />
+            </label>
+
+            <label className="clientEditField">
+              <span>Estado</span>
+              <input
+                name="estado"
+                value={form.estado}
+                onChange={handleChange}
+                maxLength={2}
+                placeholder="UF"
+              />
             </label>
 
             <label className="clientEditCheckbox">

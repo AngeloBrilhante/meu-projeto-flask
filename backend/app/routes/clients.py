@@ -1078,7 +1078,7 @@ def ensure_clients_extra_columns(cursor, db):
         FROM INFORMATION_SCHEMA.COLUMNS
         WHERE TABLE_SCHEMA = DATABASE()
           AND TABLE_NAME = 'clientes'
-          AND COLUMN_NAME IN ('email', 'analfabeto', 'beneficios_json')
+          AND COLUMN_NAME IN ('email', 'analfabeto', 'beneficios_json', 'cidade', 'estado')
         """
     )
 
@@ -1087,6 +1087,8 @@ def ensure_clients_extra_columns(cursor, db):
     email_column = existing.get("email")
     analfabeto_column = existing.get("analfabeto")
     beneficios_json_column = existing.get("beneficios_json")
+    cidade_column = existing.get("cidade")
+    estado_column = existing.get("estado")
 
     if not email_column:
         cursor.execute(
@@ -1116,6 +1118,18 @@ def ensure_clients_extra_columns(cursor, db):
     if not beneficios_json_column:
         cursor.execute(
             "ALTER TABLE clientes ADD COLUMN beneficios_json LONGTEXT NULL AFTER numero_beneficio"
+        )
+        changed = True
+
+    if not cidade_column:
+        cursor.execute(
+            "ALTER TABLE clientes ADD COLUMN cidade VARCHAR(120) NULL AFTER bairro"
+        )
+        changed = True
+
+    if not estado_column:
+        cursor.execute(
+            "ALTER TABLE clientes ADD COLUMN estado VARCHAR(2) NULL AFTER cidade"
         )
         changed = True
 
@@ -2012,6 +2026,11 @@ def create_client():
     rua = normalize_text(data.get("rua"))
     numero = normalize_text(data.get("numero"))
     bairro = normalize_text(data.get("bairro"))
+    cidade = normalize_text(data.get("cidade"))
+    estado = str(data.get("estado") or "").strip().upper()
+
+    if estado and len(estado) != 2:
+        return jsonify({"error": "estado invalido. Use 2 letras"}), 400
 
     if len(telefone) < 10:
         return jsonify({"error": "telefone invalido. Informe DDD e numero"}), 400
@@ -2104,6 +2123,15 @@ def create_client():
                 "error": "Estrutura da tabela clientes invalida para endereco",
             }), 500
 
+        extra_address_columns = []
+        extra_address_values = []
+        if "cidade" in column_meta:
+            extra_address_columns.append("cidade")
+            extra_address_values.append(cidade)
+        if "estado" in column_meta:
+            extra_address_columns.append("estado")
+            extra_address_values.append(estado or None)
+
         string_values = {
             "nome": nome,
             "cpf": cpf,
@@ -2119,6 +2147,7 @@ def create_client():
             "email": email,
             "cep": cep,
             **dict(zip(address_columns, address_values)),
+            **dict(zip(extra_address_columns, extra_address_values)),
         }
 
         for column_name, value in string_values.items():
@@ -2128,7 +2157,7 @@ def create_client():
                     "error": f"{column_name} excede o limite de {int(max_length)} caracteres",
                 }), 400
 
-        insert_columns = base_columns + address_columns
+        insert_columns = [*base_columns, *address_columns, *extra_address_columns]
         insert_values = [
             vendedor_id,
             nome,
@@ -2149,6 +2178,7 @@ def create_client():
             analfabeto,
             cep,
             *address_values,
+            *extra_address_values,
         ]
 
         if "beneficios_json" in column_meta:
@@ -3036,6 +3066,11 @@ def update_client(client_id):
     rua = normalize_text(data.get("rua"))
     numero = normalize_text(data.get("numero"))
     bairro = normalize_text(data.get("bairro"))
+    cidade = normalize_text(data.get("cidade"))
+    estado = str(data.get("estado") or "").strip().upper()
+
+    if estado and len(estado) != 2:
+        return jsonify({"error": "estado invalido. Use 2 letras"}), 400
 
     if len(telefone) < 10:
         return jsonify({"error": "telefone invalido. Informe DDD e numero"}), 400
@@ -3115,6 +3150,15 @@ def update_client(client_id):
                 }
             ), 500
 
+        extra_address_columns = []
+        extra_address_values = []
+        if "cidade" in column_meta:
+            extra_address_columns.append("cidade")
+            extra_address_values.append(cidade)
+        if "estado" in column_meta:
+            extra_address_columns.append("estado")
+            extra_address_values.append(estado or None)
+
         string_values = {
             "nome": nome,
             "cpf": cpf,
@@ -3130,6 +3174,7 @@ def update_client(client_id):
             "email": email,
             "cep": cep,
             **dict(zip(address_columns, address_values)),
+            **dict(zip(extra_address_columns, extra_address_values)),
         }
 
         for column_name, value in string_values.items():
@@ -3141,7 +3186,7 @@ def update_client(client_id):
                     }
                 ), 400
 
-        update_columns = base_columns + address_columns
+        update_columns = [*base_columns, *address_columns, *extra_address_columns]
         update_values = {
             "nome": nome,
             "cpf": cpf,
@@ -3161,6 +3206,7 @@ def update_client(client_id):
             "analfabeto": analfabeto,
             "cep": cep,
             **dict(zip(address_columns, address_values)),
+            **dict(zip(extra_address_columns, extra_address_values)),
         }
         if "beneficios_json" in column_meta:
             update_columns.append("beneficios_json")

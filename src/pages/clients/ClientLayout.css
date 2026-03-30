@@ -200,6 +200,20 @@
   border-color: var(--accent);
 }
 
+.clientFieldHint,
+.clientFieldError {
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.clientFieldHint {
+  color: var(--text-secondary);
+}
+
+.clientFieldError {
+  color: #b93c3c;
+}
+
 .clientBenefitsField {
   gap: 8px;
 }

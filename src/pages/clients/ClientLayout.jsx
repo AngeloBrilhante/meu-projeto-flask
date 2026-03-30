@@ -74,6 +74,12 @@ export default function ClientLayout() {
             <span>Especie</span>
             <strong>{client.especie || "-"}</strong>
           </article>
+          <article>
+            <span>Cidade / Estado</span>
+            <strong>
+              {[client.cidade, client.estado].filter(Boolean).join(" / ") || "-"}
+            </strong>
+          </article>
           <article className="full">
             <span>Endereco</span>
             <strong>

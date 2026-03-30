@@ -28,6 +28,8 @@ const INITIAL_FORM = {
   rua: "",
   numero: "",
   bairro: "",
+  cidade: "",
+  estado: "",
 };
 
 export default function CreateClient() {
@@ -85,6 +87,8 @@ export default function CreateClient() {
         ...prev,
         rua: data.logradouro || prev.rua,
         bairro: data.bairro || prev.bairro,
+        cidade: data.localidade || prev.cidade,
+        estado: data.uf || prev.estado,
       }));
       lastCepLookupRef.current = cepDigits;
     } catch {
@@ -129,6 +133,11 @@ export default function CreateClient() {
         lastCepLookupRef.current = "";
       }
 
+      return;
+    }
+
+    if (name === "estado") {
+      setForm((prev) => ({ ...prev, estado: String(value || "").toUpperCase() }));
       return;
     }
 
@@ -425,6 +434,26 @@ export default function CreateClient() {
                 name="bairro"
                 value={form.bairro}
                 onChange={handleChange}
+              />
+            </label>
+
+            <label className="createField">
+              <span>Cidade</span>
+              <input
+                name="cidade"
+                value={form.cidade}
+                onChange={handleChange}
+              />
+            </label>
+
+            <label className="createField">
+              <span>Estado</span>
+              <input
+                name="estado"
+                maxLength={2}
+                value={form.estado}
+                onChange={handleChange}
+                placeholder="UF"
               />
             </label>
           </div>
