@@ -795,12 +795,12 @@ export default function Pipeline() {
 function handleAprovar(operation) {
   const cliente = String(operation.nome || "").trim() || "cliente";
   const confirmed = window.confirm(
-      `Confirma marcar como paga a operacao #${operation.id} de ${cliente}?`
+      `Confirma marcar como paga a operacao #${operation.id} de ${cliente}?\n\nSe for um clique por engano, depois voce pode voltar o status pela planilha.`
   );
 
-    if (!confirmed) return;
-    updateFlow(operation, "APROVADO");
-  }
+  if (!confirmed) return;
+  updateFlow(operation, "APROVADO");
+}
 
   function handleResolverPendencia(operation) {
     updateFlow(operation, "ANALISE_BANCO", { clearPendencia: true });

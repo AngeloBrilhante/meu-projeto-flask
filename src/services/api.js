@@ -308,6 +308,24 @@ export async function updateOperation(operationId, data) {
   return payload;
 }
 
+export async function revertFinalOperationStatus(operationId) {
+  const response = await fetch(
+    `${API_URL}/operations/${operationId}/revert-final-status`,
+    {
+      method: "POST",
+      headers: getAuthHeaders(),
+    }
+  );
+
+  const payload = await response.json();
+
+  if (!response.ok) {
+    throw new Error(payload.error || "Erro ao desfazer status final");
+  }
+
+  return payload;
+}
+
 
 /* =======================
    CRIAR OPERAÇÃO

@@ -1398,6 +1398,26 @@ def register_operation_status_history(
     )
 
 
+def resolve_previous_status_before_final(cursor, operation_id, current_status):
+    normalized_current = normalize_operation_status(current_status)
+    if normalized_current not in FINAL_OPERATION_STATUSES:
+        return ""
+
+    cursor.execute(
+        """
+        SELECT previous_status
+        FROM operation_status_history
+        WHERE operation_id = %s
+          AND next_status = %s
+        ORDER BY created_at DESC, id DESC
+        LIMIT 1
+        """,
+        (operation_id, normalized_current),
+    )
+    row = cursor.fetchone() or {}
+    return normalize_operation_status(row.get("previous_status"))
+
+
 def get_user_display_name(cursor, user_id):
     user_id = to_int(user_id)
     if user_id <= 0:
@@ -4232,6 +4252,122 @@ def update_operation(operation_id):
         "message": "Operacao atualizada",
         "operation": updated_operation,
     }), 200
+
+
+@clients_bp.route("/operations/<int:operation_id>/revert-final-status", methods=["POST"])
+@jwt_required()
+def revert_final_operation_status(operation_id):
+    role = normalize_role(current_user_role())
+    user_id = current_user_id()
+
+    if not (is_admin_like_role(role) or is_digitador_role(role)):
+        return jsonify({"error": "Usuario sem permissao"}), 403
+
+    db = get_db()
+    cursor = db.cursor(dictionary=True)
+
+    try:
+        ensure_operations_extra_columns(cursor, db)
+        ensure_operation_status_history_table(cursor, db)
+        ensure_operation_notifications_table(cursor, db)
+
+        cursor.execute(
+            """
+            SELECT
+                o.id,
+                o.empresa_id,
+                o.status,
+                o.status_andamento,
+                o.digitador_id,
+                o.produto,
+                c.vendedor_id
+            FROM operacoes o
+            JOIN clientes c ON c.id = o.cliente_id
+            WHERE o.id = %s
+            LIMIT 1
+            """,
+            (operation_id,),
+        )
+        operation = cursor.fetchone()
+
+        if not operation:
+            return jsonify({"error": "Operacao nao encontrada"}), 404
+
+        if role != ROLE_GLOBAL and not role_can_access_operation(role, user_id, operation):
+            return jsonify({"error": "Acesso nao autorizado"}), 403
+
+        current_status = normalize_operation_status(operation.get("status"))
+        if current_status not in FINAL_OPERATION_STATUSES:
+            return jsonify({"error": "A operacao nao esta finalizada"}), 400
+
+        restored_status = resolve_previous_status_before_final(
+            cursor,
+            operation_id,
+            current_status,
+        )
+        if not restored_status:
+            return jsonify({
+                "error": "Nao foi possivel identificar o status anterior da operacao",
+            }), 400
+
+        update_fields = ["status = %s"]
+        update_params = [restored_status]
+
+        if current_status == "APROVADO":
+            update_fields.append("data_pagamento = NULL")
+
+        if current_status == "REPROVADO":
+            update_fields.append("motivo_reprovacao = NULL")
+
+        if restored_status != "ANALISE_BANCO":
+            update_fields.append("status_andamento = NULL")
+
+        update_params.append(operation_id)
+        cursor.execute(
+            f"""
+            UPDATE operacoes
+            SET {", ".join(update_fields)}
+            WHERE id = %s
+            """,
+            tuple(update_params),
+        )
+
+        register_operation_status_history(
+            cursor,
+            operation_id,
+            current_status,
+            restored_status,
+            changed_by=user_id,
+            changed_by_role=role,
+            note="Status final desfeito",
+        )
+        notify_vendor_status_change(
+            cursor,
+            operation_id,
+            current_status,
+            restored_status,
+            changed_by=user_id,
+        )
+
+        db.commit()
+
+        cursor.execute("SELECT * FROM operacoes WHERE id = %s", (operation_id,))
+        updated_operation = hydrate_operation_payload(cursor.fetchone())
+        if updated_operation:
+            updated_operation["status"] = normalize_operation_status(
+                updated_operation.get("status")
+            )
+
+        return jsonify({
+            "message": "Status final desfeito com sucesso",
+            "operation": updated_operation,
+        }), 200
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        cursor.close()
+        db.close()
 
 
 

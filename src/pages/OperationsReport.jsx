@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { getOperationsReport } from "../services/api";
+import {
+  getOperationsReport,
+  revertFinalOperationStatus,
+} from "../services/api";
 import {
   DATE_INPUT_PLACEHOLDER,
   formatDateInputValue,
@@ -57,10 +60,13 @@ export default function OperationsReport() {
   const [operations, setOperations] = useState([]);
   const [vendors, setVendors] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [revertingOperationId, setRevertingOperationId] = useState(null);
   const [error, setError] = useState("");
   const role = useMemo(() => getStoredRole(), []);
   const isAdmin = role === "ADMIN" || role === "GLOBAL";
   const isVendor = role === "VENDEDOR";
+  const canUndoFinalStatus =
+    role === "ADMIN" || role === "GLOBAL" || role.startsWith("DIGITADOR");
   const routeSearchTerm = useMemo(
     () => String(searchParams.get("search") || "").trim(),
     [searchParams]
@@ -160,6 +166,26 @@ export default function OperationsReport() {
       .slice(0, 10)}.csv`;
     link.click();
     URL.revokeObjectURL(url);
+  }
+
+  async function handleRevertFinalStatus(operation) {
+    const statusLabel = STATUS_LABELS[operation.status] || operation.status;
+    const confirmed = window.confirm(
+      `Confirma voltar o status da operacao #${operation.id}?\n\nEla sairá de ${statusLabel} e voltará para o status anterior.`
+    );
+
+    if (!confirmed) return;
+
+    try {
+      setRevertingOperationId(operation.id);
+      await revertFinalOperationStatus(operation.id);
+      await loadReport(filters);
+      window.dispatchEvent(new Event("pipeline:changed"));
+    } catch (err) {
+      alert(err.message || "Nao foi possivel voltar o status da operacao");
+    } finally {
+      setRevertingOperationId(null);
+    }
   }
 
   const stats = useMemo(() => {
@@ -292,18 +318,19 @@ export default function OperationsReport() {
               <th>Prazo</th>
               <th>Status</th>
               <th>{dateColumnLabel}</th>
+              {canUndoFinalStatus && <th>Acao</th>}
             </tr>
           </thead>
           <tbody>
             {loading && (
               <tr>
-                <td colSpan={10}>Carregando...</td>
+                <td colSpan={canUndoFinalStatus ? 11 : 10}>Carregando...</td>
               </tr>
             )}
 
             {!loading && operations.length === 0 && (
               <tr>
-                <td colSpan={10}>Nenhuma operacao encontrada.</td>
+                <td colSpan={canUndoFinalStatus ? 11 : 10}>Nenhuma operacao encontrada.</td>
               </tr>
             )}
 
@@ -328,6 +355,18 @@ export default function OperationsReport() {
                     </span>
                   </td>
                   <td>{formatDateTimeDisplayValue(op.status_changed_at || op.criado_em)}</td>
+                  {canUndoFinalStatus && (
+                    <td>
+                      <button
+                        type="button"
+                        className="reportActionButton"
+                        disabled={revertingOperationId === op.id}
+                        onClick={() => handleRevertFinalStatus(op)}
+                      >
+                        {revertingOperationId === op.id ? "Voltando..." : "Voltar status"}
+                      </button>
+                    </td>
+                  )}
                 </tr>
               ))}
           </tbody>
