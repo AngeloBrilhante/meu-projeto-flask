@@ -47,6 +47,7 @@ const PENDENCIA_TYPE_OPTIONS = [
   { value: "DOCUMENTACAO", label: "Documentacao" },
   { value: "ASSINATURA", label: "Assinatura" },
   { value: "CARTA_PERICIA", label: "Carta pericia" },
+  { value: "CHAMADA_DE_VIDEO", label: "Chamada de video" },
   { value: "MARGEM", label: "Margem" },
   { value: "BENEFICIO_BLOQUEADO", label: "Beneficio bloqueado" },
   { value: "DIVERGENCIA_CADASTRAL", label: "Divergencia cadastral" },
