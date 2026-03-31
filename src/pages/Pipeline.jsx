@@ -357,6 +357,7 @@ export default function Pipeline() {
     sort_order: SORT_ORDER_OPTIONS.NEWEST_FIRST,
   });
   const openEditorsRef = useRef({});
+  const pendingScrollRestoreRef = useRef(null);
 
   useEffect(() => {
     openEditorsRef.current = openEditors;
@@ -427,15 +428,42 @@ export default function Pipeline() {
       if (saved?.path !== currentPath || !Number.isFinite(saved?.scrollY)) {
         return;
       }
-
-      requestAnimationFrame(() => {
-        window.scrollTo({ top: Number(saved.scrollY) || 0, behavior: "auto" });
-      });
-      sessionStorage.removeItem(PIPELINE_SCROLL_STORAGE_KEY);
+      pendingScrollRestoreRef.current = Number(saved.scrollY) || 0;
     } catch {
+      pendingScrollRestoreRef.current = null;
       sessionStorage.removeItem(PIPELINE_SCROLL_STORAGE_KEY);
     }
   }, [location.pathname, location.search]);
+
+  useEffect(() => {
+    const targetScroll = pendingScrollRestoreRef.current;
+    if (!Number.isFinite(targetScroll) || loading) {
+      return undefined;
+    }
+
+    const restoreScroll = () => {
+      window.scrollTo({
+        top: targetScroll,
+        behavior: "auto",
+      });
+    };
+
+    const animationFrameId = requestAnimationFrame(() => {
+      restoreScroll();
+    });
+    const shortRetryId = window.setTimeout(restoreScroll, 120);
+    const finalRetryId = window.setTimeout(() => {
+      restoreScroll();
+      pendingScrollRestoreRef.current = null;
+      sessionStorage.removeItem(PIPELINE_SCROLL_STORAGE_KEY);
+    }, 320);
+
+    return () => {
+      cancelAnimationFrame(animationFrameId);
+      window.clearTimeout(shortRetryId);
+      window.clearTimeout(finalRetryId);
+    };
+  }, [loading, operations.length, location.pathname, location.search]);
 
   useEffect(() => {
     if (isVendor && routePipelineView === PIPELINE_VIEW_OPTIONS.READY) {
