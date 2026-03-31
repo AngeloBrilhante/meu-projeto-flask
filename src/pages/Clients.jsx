@@ -191,13 +191,19 @@ export default function Clients() {
                 <th>Nome</th>
                 <th>CPF</th>
                 <th>Beneficios</th>
-                <th>Esteira</th>
+                <th>Ultima operacao</th>
                 {isGlobal && <th>Acoes</th>}
               </tr>
             </thead>
             <tbody>
               {filteredClients.map((client) => {
                 const status = normalizeStatus(client.last_operation_status || "SEM_OPERACAO");
+                const operationCount = Number(client.operation_count) || 0;
+                const operationCountLabel =
+                  operationCount === 1 ? "1 operacao" : `${operationCount} operacoes`;
+                const latestOperationLabel = client.last_operation_id
+                  ? `Ultima #${client.last_operation_id}`
+                  : "Sem operacao";
 
                 return (
                   <tr
@@ -212,9 +218,16 @@ export default function Clients() {
                         : client.numero_beneficio || "-"}
                     </td>
                     <td>
-                      <span className={`clientsStatusBadge ${status}`}>
-                        {statusLabel(status)}
-                      </span>
+                      <div className="clientsOperationSummary">
+                        <span className={`clientsStatusBadge ${status}`}>
+                          {statusLabel(status)}
+                        </span>
+                        <small>
+                          {operationCount > 0
+                            ? `${operationCountLabel} • ${latestOperationLabel}`
+                            : "Sem operacao cadastrada"}
+                        </small>
+                      </div>
                     </td>
                     {isGlobal && (
                       <td>

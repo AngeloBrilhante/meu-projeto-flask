@@ -2369,47 +2369,50 @@ def list_clients():
     ensure_clients_extra_columns(cursor, db)
     role = normalize_role(current_user_role())
     company_id = current_user_company_id()
-
-    if role == ROLE_GLOBAL:
-        cursor.execute("""
-            SELECT 
-                c.*,
+    client_operation_summary_select = """
                 (
                     SELECT o.status
                     FROM operacoes o
                     WHERE o.cliente_id = c.id
                     ORDER BY o.criado_em DESC
                     LIMIT 1
-                ) AS last_operation_status
+                ) AS last_operation_status,
+                (
+                    SELECT o.id
+                    FROM operacoes o
+                    WHERE o.cliente_id = c.id
+                    ORDER BY o.criado_em DESC
+                    LIMIT 1
+                ) AS last_operation_id,
+                (
+                    SELECT COUNT(*)
+                    FROM operacoes o
+                    WHERE o.cliente_id = c.id
+                ) AS operation_count
+    """
+
+    if role == ROLE_GLOBAL:
+        cursor.execute(f"""
+            SELECT 
+                c.*,
+                {client_operation_summary_select}
             FROM clientes c
             ORDER BY c.criado_em DESC
         """)
     elif role == ROLE_ADMIN:
-        cursor.execute("""
+        cursor.execute(f"""
             SELECT 
                 c.*,
-                (
-                    SELECT o.status
-                    FROM operacoes o
-                    WHERE o.cliente_id = c.id
-                    ORDER BY o.criado_em DESC
-                    LIMIT 1
-                ) AS last_operation_status
+                {client_operation_summary_select}
             FROM clientes c
             WHERE c.empresa_id=%s
             ORDER BY c.criado_em DESC
         """, (company_id,))
     elif has_full_company_operation_scope(role):
-        cursor.execute("""
+        cursor.execute(f"""
             SELECT
                 c.*,
-                (
-                    SELECT x.status
-                    FROM operacoes x
-                    WHERE x.cliente_id = c.id
-                    ORDER BY x.criado_em DESC
-                    LIMIT 1
-                ) AS last_operation_status
+                {client_operation_summary_select}
             FROM clientes c
             WHERE c.empresa_id=%s
             ORDER BY c.criado_em DESC
@@ -2426,13 +2429,7 @@ def list_clients():
             f"""
             SELECT DISTINCT
                 c.*,
-                (
-                    SELECT x.status
-                    FROM operacoes x
-                    WHERE x.cliente_id = c.id
-                    ORDER BY x.criado_em DESC
-                    LIMIT 1
-                ) AS last_operation_status
+                {client_operation_summary_select}
             FROM clientes c
             JOIN operacoes o ON o.cliente_id = c.id
             WHERE c.empresa_id=%s
@@ -2443,16 +2440,10 @@ def list_clients():
             (company_id, company_id, *product_params),
         )
     else:
-        cursor.execute("""
+        cursor.execute(f"""
             SELECT 
                 c.*,
-                (
-                    SELECT o.status
-                    FROM operacoes o
-                    WHERE o.cliente_id = c.id
-                    ORDER BY o.criado_em DESC
-                    LIMIT 1
-                ) AS last_operation_status
+                {client_operation_summary_select}
             FROM clientes c
             WHERE c.vendedor_id=%s
               AND c.empresa_id=%s

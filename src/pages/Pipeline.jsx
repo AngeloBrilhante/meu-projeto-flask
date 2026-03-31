@@ -112,6 +112,7 @@ const SORT_ORDER_OPTIONS = {
 const FIVE_HOURS_MS = 5 * 60 * 60 * 1000;
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 const READY_PIPELINE_STATUSES = new Set(["PRONTA_DIGITAR", "EM_DIGITACAO"]);
+const PIPELINE_SCROLL_STORAGE_KEY = "pipeline:return-scroll";
 
 function normalizeStatus(status) {
   const normalized = String(status || "").trim().toUpperCase();
@@ -230,12 +231,49 @@ function formatDateTime(value) {
 }
 
 function formatCurrency(value) {
-  const number = Number(value);
+  const number =
+    typeof value === "string" ? parseFlexibleDecimalInput(value) : Number(value);
   if (!Number.isFinite(number)) return "-";
   return number.toLocaleString("pt-BR", {
     style: "currency",
     currency: "BRL",
   });
+}
+
+function parseFlexibleDecimalInput(value) {
+  const text = String(value ?? "").trim().replace(/\s+/g, "");
+  if (!text) return Number.NaN;
+
+  const commaIndex = text.lastIndexOf(",");
+  const dotIndex = text.lastIndexOf(".");
+  const separatorIndex = Math.max(commaIndex, dotIndex);
+  const separator = separatorIndex >= 0 ? text[separatorIndex] : "";
+
+  if (!separator) {
+    const digitsOnly = text.replace(/[^\d-]/g, "");
+    return digitsOnly ? Number(digitsOnly) : Number.NaN;
+  }
+
+  const beforeSeparator = text.slice(0, separatorIndex);
+  const afterSeparator = text.slice(separatorIndex + 1);
+  const separatorOccurrences = (text.match(/[.,]/g) || []).length;
+  const onlyOneSeparator = separatorOccurrences === 1;
+  const isThousandsSeparator =
+    onlyOneSeparator &&
+    afterSeparator.length === 3 &&
+    /^\d+$/.test(beforeSeparator.replace(/^-/, "")) &&
+    /^\d+$/.test(afterSeparator);
+
+  if (isThousandsSeparator) {
+    const digitsOnly = text.replace(/[.,]/g, "");
+    return digitsOnly ? Number(digitsOnly) : Number.NaN;
+  }
+
+  const normalizedInteger = beforeSeparator.replace(/[.,]/g, "");
+  const normalizedDecimal = afterSeparator.replace(/[.,]/g, "");
+  const normalized = `${normalizedInteger || "0"}.${normalizedDecimal}`;
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : Number.NaN;
 }
 
 function formatHistoryTransition(item) {
@@ -378,6 +416,26 @@ export default function Pipeline() {
   useEffect(() => {
     setPipelineView(routePipelineView);
   }, [routePipelineView]);
+
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(PIPELINE_SCROLL_STORAGE_KEY);
+      if (!raw) return;
+
+      const saved = JSON.parse(raw);
+      const currentPath = `${location.pathname}${location.search}`;
+      if (saved?.path !== currentPath || !Number.isFinite(saved?.scrollY)) {
+        return;
+      }
+
+      requestAnimationFrame(() => {
+        window.scrollTo({ top: Number(saved.scrollY) || 0, behavior: "auto" });
+      });
+      sessionStorage.removeItem(PIPELINE_SCROLL_STORAGE_KEY);
+    } catch {
+      sessionStorage.removeItem(PIPELINE_SCROLL_STORAGE_KEY);
+    }
+  }, [location.pathname, location.search]);
 
   useEffect(() => {
     if (isVendor && routePipelineView === PIPELINE_VIEW_OPTIONS.READY) {
@@ -529,11 +587,11 @@ export default function Pipeline() {
     if (nextStatus === "AGUARDANDO_FORMALIZACAO") {
       const useSaldoField = usesSaldoLabels(operation.produto);
       const primaryValueLabel = useSaldoField ? "saldo" : "valor liberado";
-      const valorLiberado = Number(String(payload.valor_liberado || "").replace(",", "."));
+      const valorLiberado = parseFlexibleDecimalInput(payload.valor_liberado);
       const troco = String(payload.troco || "").trim()
-        ? Number(String(payload.troco || "").replace(",", "."))
+        ? parseFlexibleDecimalInput(payload.troco)
         : null;
-      const parcelaLiberada = Number(String(payload.parcela_liberada || "").replace(",", "."));
+      const parcelaLiberada = parseFlexibleDecimalInput(payload.parcela_liberada);
 
       if (!Number.isFinite(valorLiberado) || valorLiberado <= 0) {
         alert(`Informe um ${primaryValueLabel} valido.`);
@@ -620,7 +678,7 @@ export default function Pipeline() {
     }
 
     if (valorInput) {
-      const parsedValue = Number(valorInput.replace(",", "."));
+      const parsedValue = parseFlexibleDecimalInput(valorInput);
       if (!Number.isFinite(parsedValue) || parsedValue <= 0) {
         alert(`Informe um ${primaryValueLabel} valido.`);
         return;
@@ -629,7 +687,7 @@ export default function Pipeline() {
     }
 
     if (parcelaInput) {
-      const parsedInstallment = Number(parcelaInput.replace(",", "."));
+      const parsedInstallment = parseFlexibleDecimalInput(parcelaInput);
       if (!Number.isFinite(parsedInstallment) || parsedInstallment <= 0) {
         alert("Informe uma parcela valida.");
         return;
@@ -638,7 +696,7 @@ export default function Pipeline() {
     }
 
     if (payload.troco) {
-      const parsedTroco = Number(payload.troco.replace(",", "."));
+      const parsedTroco = parseFlexibleDecimalInput(payload.troco);
       if (!Number.isFinite(parsedTroco) || parsedTroco < 0) {
         alert("Informe um troco valido.");
         return;
@@ -1075,6 +1133,13 @@ function handleAprovar(operation) {
     );
 
     if (interactive) return;
+    sessionStorage.setItem(
+      PIPELINE_SCROLL_STORAGE_KEY,
+      JSON.stringify({
+        path: `${location.pathname}${location.search}`,
+        scrollY: window.scrollY,
+      })
+    );
     navigate(`/operations/${operation.id}/ficha`);
   }
 
@@ -1412,9 +1477,8 @@ function handleAprovar(operation) {
                                 }
                               />
                               <input
-                                type="number"
-                                min="0"
-                                step="0.01"
+                                type="text"
+                                inputMode="decimal"
                                 className="proposalInput"
                                 placeholder={valorLabel}
                                 value={draft.valor_liberado}
@@ -1428,9 +1492,8 @@ function handleAprovar(operation) {
                               />
                               {useSaldoField && (
                                 <input
-                                  type="number"
-                                  min="0"
-                                  step="0.01"
+                                  type="text"
+                                  inputMode="decimal"
                                   className="proposalInput"
                                   placeholder="Troco (opcional)"
                                   value={draft.troco}
@@ -1444,9 +1507,8 @@ function handleAprovar(operation) {
                                 />
                               )}
                               <input
-                                type="number"
-                                min="0"
-                                step="0.01"
+                                type="text"
+                                inputMode="decimal"
                                 className="proposalInput"
                                 placeholder={parcelaLabel}
                                 value={draft.parcela_liberada}

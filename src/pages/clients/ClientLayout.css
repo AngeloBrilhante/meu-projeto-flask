@@ -506,7 +506,7 @@
 .operationsTable {
   width: 100%;
   border-collapse: collapse;
-  min-width: 1140px;
+  min-width: 1540px;
 }
 
 .operationsTable th {
@@ -527,6 +527,20 @@
   vertical-align: top;
 }
 
+.operationsTable td:nth-child(1),
+.operationsTable td:nth-child(4),
+.operationsTable td:nth-child(5),
+.operationsTable td:nth-child(6),
+.operationsTable td:nth-child(7),
+.operationsTable td:nth-child(8),
+.operationsTable td:nth-child(9),
+.operationsTable td:nth-child(10),
+.operationsTable td:nth-child(11),
+.operationsTable td:nth-child(12),
+.operationsTable td:nth-child(14) {
+  white-space: nowrap;
+}
+
 .operationsTable tbody tr:hover {
   background: var(--surface-strong);
 }
@@ -541,6 +555,7 @@
   font-size: 11px;
   font-weight: 700;
   border: 0;
+  white-space: nowrap;
 }
 
 .statusDetailButton {
@@ -562,6 +577,7 @@
   font-weight: 700;
   line-height: 1.2;
   padding: 4px 10px;
+  white-space: nowrap;
 }
 
 .operationStatusBadge.PRONTA_DIGITAR {
@@ -670,6 +686,13 @@
 .operationTableActions .clientPrimaryButton,
 .operationTableActions .clientLinkButton,
 .operationTableActions .clientDangerButton {
+  white-space: nowrap;
+}
+
+.operationsTable .clientGhostButton,
+.operationsTable .clientPrimaryButton,
+.operationsTable .clientLinkButton,
+.operationsTable .clientDangerButton {
   white-space: nowrap;
 }
 
