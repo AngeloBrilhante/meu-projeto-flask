@@ -114,6 +114,11 @@ const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 const READY_PIPELINE_STATUSES = new Set(["PRONTA_DIGITAR", "EM_DIGITACAO"]);
 const PIPELINE_SCROLL_STORAGE_KEY = "pipeline:return-scroll";
 
+function getPageScrollContainer() {
+  if (typeof document === "undefined") return null;
+  return document.querySelector(".pageContent");
+}
+
 function normalizeStatus(status) {
   const normalized = String(status || "").trim().toUpperCase();
   return LEGACY_STATUS_MAP[normalized] || normalized;
@@ -428,7 +433,10 @@ export default function Pipeline() {
       if (saved?.path !== currentPath || !Number.isFinite(saved?.scrollY)) {
         return;
       }
-      pendingScrollRestoreRef.current = Number(saved.scrollY) || 0;
+      pendingScrollRestoreRef.current = {
+        windowScrollY: Number(saved.scrollY) || 0,
+        containerScrollTop: Number(saved.containerScrollTop) || 0,
+      };
     } catch {
       pendingScrollRestoreRef.current = null;
       sessionStorage.removeItem(PIPELINE_SCROLL_STORAGE_KEY);
@@ -437,13 +445,20 @@ export default function Pipeline() {
 
   useEffect(() => {
     const targetScroll = pendingScrollRestoreRef.current;
-    if (!Number.isFinite(targetScroll) || loading) {
+    if (!targetScroll || loading) {
       return undefined;
     }
 
     const restoreScroll = () => {
+      const container = getPageScrollContainer();
+      if (container) {
+        container.scrollTo({
+          top: targetScroll.containerScrollTop,
+          behavior: "auto",
+        });
+      }
       window.scrollTo({
-        top: targetScroll,
+        top: targetScroll.windowScrollY,
         behavior: "auto",
       });
     };
@@ -1161,11 +1176,13 @@ function handleAprovar(operation) {
     );
 
     if (interactive) return;
+    const scrollContainer = getPageScrollContainer();
     sessionStorage.setItem(
       PIPELINE_SCROLL_STORAGE_KEY,
       JSON.stringify({
         path: `${location.pathname}${location.search}`,
         scrollY: window.scrollY,
+        containerScrollTop: scrollContainer?.scrollTop || 0,
       })
     );
     navigate(`/operations/${operation.id}/ficha`);
