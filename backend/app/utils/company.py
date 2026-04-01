@@ -1,6 +1,7 @@
 import re
 import unicodedata
 
+from flask import g
 from flask_jwt_extended import get_jwt, get_jwt_identity
 
 from app.database import get_db
@@ -348,6 +349,10 @@ def fetch_company_row(cursor, company_id):
 
 
 def current_user_company_id():
+    cached_company_id = getattr(g, "_current_user_company_id", None)
+    if cached_company_id is not None:
+        return cached_company_id
+
     jwt_data = get_jwt() or {}
     raw_company_id = jwt_data.get("empresa_id")
     try:
@@ -356,17 +361,18 @@ def current_user_company_id():
         company_id = 0
 
     if company_id > 0:
+        g._current_user_company_id = company_id
         return company_id
 
     try:
         user_id = int(get_jwt_identity())
     except (TypeError, ValueError, RuntimeError):
+        g._current_user_company_id = 0
         return 0
 
     db = get_db()
     cursor = db.cursor(dictionary=True)
     try:
-        ensure_company_scope_columns(cursor, db)
         cursor.execute(
             """
             SELECT empresa_id
@@ -377,10 +383,15 @@ def current_user_company_id():
             (user_id,),
         )
         row = cursor.fetchone() or {}
-        return int(row.get("empresa_id") or 0)
+        company_id = int(row.get("empresa_id") or 0)
+    except Exception:
+        company_id = 0
     finally:
         cursor.close()
         db.close()
+
+    g._current_user_company_id = company_id
+    return company_id
 
 
 def list_companies(cursor, only_active=False):
