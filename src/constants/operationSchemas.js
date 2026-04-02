@@ -22,6 +22,7 @@ const BANK_LABELS = [
   "AMIGOZ",
   "FINANBANK",
   "FINTECH",
+  "SENFF",
 ];
 
 const BANK_OPTIONS = BANK_LABELS.map((bank) => ({ value: bank, label: bank }));
