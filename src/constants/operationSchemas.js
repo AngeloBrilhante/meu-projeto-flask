@@ -2,8 +2,8 @@ import { formatDateInputValue } from "../utils/date";
 
 const ACCOUNT_TYPE_OPTIONS = [
   { value: "CORRENTE", label: "Corrente" },
-  { value: "POUPANCA", label: "PoupanÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â§a" },
-  { value: "SALARIO", label: "SalÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡rio" },
+  { value: "POUPANCA", label: "Poupanca" },
+  { value: "SALARIO", label: "Salario" },
 ];
 
 const BANK_LABELS = [
@@ -68,34 +68,33 @@ export const OPERATION_SCHEMAS = {
         ],
       },
       {
-        title: "Dados do beneficiÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡rio",
+        title: "Dados do beneficiario",
         fields: [
           { name: "cliente_nome", label: "Nome", required: true },
-          { name: "especie", label: "EspÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©cie", required: true },
-          { name: "uf_beneficio", label: "UF do benefÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â­cio", required: true },
-          { name: "numero_beneficio", label: "NÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Âºmero do benefÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â­cio", required: true },
+          { name: "especie", label: "Especie", required: true },
+          { name: "uf_beneficio", label: "UF do beneficio", required: true },
+          { name: "numero_beneficio", label: "Numero do beneficio", required: true },
           { name: "data_nascimento", label: "Data de nascimento", type: "date", required: true },
           { name: "cpf", label: "CPF", required: true },
           { name: "rg", label: "RG", required: true },
-          { name: "data_emissao", label: "Data emissÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â£o", type: "date" },
-          { name: "nome_mae", label: "Nome da mÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â£e", required: true },
+          { name: "data_emissao", label: "Data emissao", type: "date" },
+          { name: "nome_mae", label: "Nome da mae", required: true },
           { name: "telefone", label: "Telefone", required: true },
-          { name: "email", label: "E-mail (opcional)", type: "email" },
           { name: "email", label: "E-mail (opcional)", type: "email" },
           { name: "analfabeto", label: "Analfabeto", readOnly: true, hideWhenEmpty: true },
           { name: "cep", label: "CEP", required: true },
-          { name: "endereco", label: "EndereÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â§o", required: true },
+          { name: "endereco", label: "Endereco", required: true },
           { name: "bairro", label: "Bairro", required: true },
         ],
       },
       {
-        title: "Dados bancÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡rios",
+        title: "Dados bancarios",
         fields: [
           { name: "conta", label: "Banco do cliente", required: true },
-          { name: "agencia", label: "AgÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Âªncia", required: true },
+          { name: "agencia", label: "Agencia", required: true },
           {
             name: "banco",
-            label: "NÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Âº da conta do cliente",
+            label: "No da conta do cliente",
             required: true,
             inputMode: "numeric",
             placeholder: "Ex: 12345-6",
@@ -118,7 +117,7 @@ export const OPERATION_SCHEMAS = {
           { name: "parcelas_restantes", label: "Parcelas restantes", type: "number", min: 0, required: true },
           {
             name: "saldo_quitacao",
-            label: "Saldo de quitaÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â§ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â£o",
+            label: "Saldo de quitacao",
             type: "text",
             inputMode: "decimal",
             decimalFlexible: true,
@@ -165,26 +164,26 @@ export const OPERATION_SCHEMAS = {
         ],
       },
       {
-        title: "Dados do beneficiÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡rio",
+        title: "Dados do beneficiario",
         fields: [
-          { name: "especie", label: "EspÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©cie", required: true },
-          { name: "uf_beneficio", label: "UF do benefÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â­cio", required: true },
+          { name: "especie", label: "Especie", required: true },
+          { name: "uf_beneficio", label: "UF do beneficio", required: true },
           { name: "cliente_nome", label: "Nome", required: true },
           { name: "cpf", label: "CPF", required: true },
           { name: "data_nascimento", label: "Data de nascimento", type: "date", required: true },
-          { name: "numero_beneficio", label: "NÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Âºmero do benefÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â­cio", required: true },
+          { name: "numero_beneficio", label: "Numero do beneficio", required: true },
           { name: "telefone", label: "Telefone", required: true },
           { name: "email", label: "E-mail (opcional)", type: "email" },
-          { name: "nome_mae", label: "Nome da mÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â£e", required: true },
+          { name: "nome_mae", label: "Nome da mae", required: true },
           { name: "analfabeto", label: "Analfabeto", readOnly: true, hideWhenEmpty: true },
-          { name: "rg", label: "NÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Âºmero do RG", required: true },
+          { name: "rg", label: "RG", required: true },
           { name: "naturalidade", label: "Naturalidade", required: true },
           { name: "rg_uf", label: "UF", required: true },
-          { name: "rg_orgao_exp", label: "ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œrgÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â£o exp", required: true },
-          { name: "data_emissao_rg", label: "Data emissÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â£o RG", type: "date", required: true },
+          { name: "rg_orgao_exp", label: "Orgao exp", required: true },
+          { name: "data_emissao_rg", label: "Data emissao RG", type: "date", required: true },
           {
             name: "salario",
-            label: "SalÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡rio",
+            label: "Salario",
             type: "text",
             inputMode: "decimal",
             decimalFlexible: true,
@@ -194,13 +193,13 @@ export const OPERATION_SCHEMAS = {
         ],
       },
       {
-        title: "Dados bancÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡rios",
+        title: "Dados bancarios",
         fields: [
           { name: "conta", label: "Banco do cliente", required: true },
-          { name: "agencia", label: "AgÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Âªncia", required: true },
+          { name: "agencia", label: "Agencia", required: true },
           {
             name: "banco",
-            label: "NÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Âº da conta do cliente",
+            label: "No da conta do cliente",
             required: true,
             inputMode: "numeric",
             placeholder: "Ex: 12345-6",
@@ -214,7 +213,7 @@ export const OPERATION_SCHEMAS = {
         ],
       },
       {
-        title: "EndereÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â§o",
+        title: "Endereco",
         fields: [
           { name: "cep", label: "CEP", required: true },
           { name: "rua", label: "Rua", required: true },
@@ -225,7 +224,7 @@ export const OPERATION_SCHEMAS = {
     ],
   },
   CARTAO: {
-    title: "Ficha para CartÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â£o",
+    title: "Ficha para Cartao",
     groups: [
       {
         title: "Dados gerais",
@@ -251,26 +250,26 @@ export const OPERATION_SCHEMAS = {
         ],
       },
       {
-        title: "Dados do beneficiÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡rio",
+        title: "Dados do beneficiario",
         fields: [
-          { name: "especie", label: "EspÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©cie", required: true },
-          { name: "uf_beneficio", label: "UF do benefÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â­cio", required: true },
+          { name: "especie", label: "Especie", required: true },
+          { name: "uf_beneficio", label: "UF do beneficio", required: true },
           { name: "cliente_nome", label: "Nome", required: true },
           { name: "cpf", label: "CPF", required: true },
           { name: "data_nascimento", label: "Data de nascimento", type: "date", required: true },
-          { name: "numero_beneficio", label: "NÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Âºmero do benefÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â­cio", required: true },
+          { name: "numero_beneficio", label: "Numero do beneficio", required: true },
           { name: "telefone", label: "Telefone", required: true },
           { name: "email", label: "E-mail (opcional)", type: "email" },
-          { name: "nome_mae", label: "Nome da mÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â£e", required: true },
+          { name: "nome_mae", label: "Nome da mae", required: true },
           { name: "analfabeto", label: "Analfabeto", readOnly: true, hideWhenEmpty: true },
-          { name: "rg", label: "NÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Âºmero do RG", required: true },
+          { name: "rg", label: "RG", required: true },
           { name: "naturalidade", label: "Naturalidade", required: true },
           { name: "rg_uf", label: "UF", required: true },
-          { name: "rg_orgao_exp", label: "ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œrgÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â£o exp", required: true },
-          { name: "data_emissao_rg", label: "Data emissÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â£o RG", type: "date", required: true },
+          { name: "rg_orgao_exp", label: "Orgao exp", required: true },
+          { name: "data_emissao_rg", label: "Data emissao RG", type: "date", required: true },
           {
             name: "salario",
-            label: "SalÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡rio",
+            label: "Salario",
             type: "text",
             inputMode: "decimal",
             decimalFlexible: true,
@@ -280,13 +279,13 @@ export const OPERATION_SCHEMAS = {
         ],
       },
       {
-        title: "Dados bancÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡rios",
+        title: "Dados bancarios",
         fields: [
           { name: "conta", label: "Banco do cliente", required: true },
-          { name: "agencia", label: "AgÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Âªncia", required: true },
+          { name: "agencia", label: "Agencia", required: true },
           {
             name: "banco",
-            label: "NÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Âº da conta do cliente",
+            label: "No da conta do cliente",
             required: true,
             inputMode: "numeric",
             placeholder: "Ex: 12345-6",
@@ -300,7 +299,7 @@ export const OPERATION_SCHEMAS = {
         ],
       },
       {
-        title: "EndereÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â§o",
+        title: "Endereco",
         fields: [
           { name: "cep", label: "CEP", required: true },
           { name: "rua", label: "Rua", required: true },
