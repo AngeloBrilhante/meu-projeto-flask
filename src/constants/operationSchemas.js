@@ -20,6 +20,7 @@ const BANK_LABELS = [
   "BANRISUL",
   "NOSSA FINTECH",
   "AMIGOZ",
+  "ICRED",
   "FINANBANK",
   "FINTECH",
   "SENFF",
