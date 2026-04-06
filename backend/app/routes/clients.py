@@ -88,6 +88,7 @@ DIGITADOR_PRODUCT_PERMISSIONS = {
     ROLE_DIGITADOR_NOVO_CARTAO: {
         "NOVO",
         "CARTAO",
+        "SAQUE_COMPLEMENTAR",
     },
 }
 

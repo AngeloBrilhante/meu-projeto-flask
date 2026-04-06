@@ -313,13 +313,54 @@ export const OPERATION_SCHEMAS = {
 
 OPERATION_SCHEMAS.PORTABILIDADE_REFIN = OPERATION_SCHEMAS.PORTABILIDADE;
 OPERATION_SCHEMAS.REFINANCIAMENTO = OPERATION_SCHEMAS.PORTABILIDADE;
+OPERATION_SCHEMAS.SAQUE_COMPLEMENTAR = {
+  ...OPERATION_SCHEMAS.CARTAO,
+  title: "Ficha para Saque complementar",
+};
+
+function repairMojibakeText(value) {
+  const text = String(value ?? "");
+  if (!/[ÃÂâ]/.test(text)) return text;
+
+  try {
+    return decodeURIComponent(escape(text));
+  } catch {
+    try {
+      const bytes = Uint8Array.from(text, (char) => char.charCodeAt(0));
+      return new TextDecoder("utf-8").decode(bytes);
+    } catch {
+      return text;
+    }
+  }
+}
+
+function sanitizeSchema(schema) {
+  if (!schema) return null;
+
+  return {
+    ...schema,
+    title: repairMojibakeText(schema.title),
+    groups: Array.isArray(schema.groups)
+      ? schema.groups.map((group) => ({
+          ...group,
+          title: repairMojibakeText(group.title),
+          fields: Array.isArray(group.fields)
+            ? group.fields.map((field) => ({
+                ...field,
+                label: repairMojibakeText(field.label),
+              }))
+            : [],
+        }))
+      : [],
+  };
+}
 
 function toUpperProduct(product) {
   return String(product || "").trim().toUpperCase();
 }
 
 export function getOperationSchema(product) {
-  return OPERATION_SCHEMAS[toUpperProduct(product)] || null;
+  return sanitizeSchema(OPERATION_SCHEMAS[toUpperProduct(product)] || null);
 }
 
 export function parseOperationFicha(payload, product = "") {
@@ -340,7 +381,11 @@ export function parseOperationFicha(payload, product = "") {
 
 function normalizeLegacyOperationFields(product, payload) {
   const upperProduct = toUpperProduct(product);
-  if (upperProduct !== "NOVO" && upperProduct !== "CARTAO") {
+  if (
+    upperProduct !== "NOVO" &&
+    upperProduct !== "CARTAO" &&
+    upperProduct !== "SAQUE_COMPLEMENTAR"
+  ) {
     return payload;
   }
 
@@ -358,7 +403,7 @@ function normalizeLegacyOperationFields(product, payload) {
   }
 
   if (
-    upperProduct === "CARTAO" &&
+    (upperProduct === "CARTAO" || upperProduct === "SAQUE_COMPLEMENTAR") &&
     String(normalized.titulo_produto || "").trim().toUpperCase() === "CARTAO RCC AMIGOZ"
   ) {
     normalized.titulo_produto = "CARTAO RCC";
@@ -400,13 +445,19 @@ function formatDateForDisplay(value) {
 export function buildOperationFichaDefaults(product, client, user, seed = {}) {
   const upperProduct = toUpperProduct(product);
   const normalizedSeedBank = normalizeBankValue(seed.banco_digitacao);
+  const defaultProductTitle =
+    upperProduct === "CARTAO"
+      ? "CARTAO RCC"
+      : upperProduct === "SAQUE_COMPLEMENTAR"
+      ? "SAQUE COMPLEMENTAR"
+      : "";
 
   return {
     vendedor_nome: client?.vendedor_nome || user?.nome || "",
     banco_nome: normalizedSeedBank,
     banco_para_digitar: normalizedSeedBank,
     banco: "",
-    titulo_produto: upperProduct === "CARTAO" ? "CARTAO RCC" : "",
+    titulo_produto: defaultProductTitle,
     cliente_nome: client?.nome || "",
     especie: client?.especie || "",
     uf_beneficio: client?.uf_beneficio || "",

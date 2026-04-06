@@ -30,6 +30,7 @@ const PRODUCT_OPTIONS = [
   { value: "REFINANCIAMENTO", label: "Refinanciamento" },
   { value: "PORTABILIDADE_REFIN", label: "Port + Refin" },
   { value: "CARTAO", label: "Cartao" },
+  { value: "SAQUE_COMPLEMENTAR", label: "Saque complementar" },
 ];
 
 const STATUS_LABELS = {

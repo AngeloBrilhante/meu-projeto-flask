@@ -108,6 +108,7 @@ def can_access_client(client_id):
             allowed_products = (
                 "NOVO",
                 "CARTAO",
+                "SAQUE_COMPLEMENTAR",
             )
         else:
             allowed_products = ()
