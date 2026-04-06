@@ -2665,8 +2665,10 @@ def get_operation_dossier(operation_id):
             c.data_nascimento AS cliente_data_nascimento,
             c.rg_data_emissao AS cliente_rg_data_emissao,
             c.analfabeto AS cliente_analfabeto,
+            c.email AS cliente_email,
             c.vendedor_id,
             COALESCE(u.nome, '-') AS vendedor_nome,
+            u.email AS vendedor_email,
             COALESCE(d.nome, '-') AS digitador_nome
         FROM operacoes o
         JOIN clientes c ON c.id = o.cliente_id
@@ -2691,6 +2693,13 @@ def get_operation_dossier(operation_id):
     operation = hydrate_operation_payload(operation)
     ficha = operation.get("ficha_portabilidade")
     if isinstance(ficha, dict):
+        client_email = str(operation.get("cliente_email") or "").strip().lower()
+        vendor_email = str(operation.get("vendedor_email") or "").strip().lower()
+        current_email = str(ficha.get("email") or "").strip().lower()
+
+        if client_email and (not current_email or current_email == vendor_email):
+            ficha["email"] = client_email
+
         client_birth_date = normalize_date_field(operation.get("cliente_data_nascimento"))
         if client_birth_date:
             ficha["data_nascimento"] = client_birth_date
