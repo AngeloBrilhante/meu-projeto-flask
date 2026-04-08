@@ -24,9 +24,10 @@ const BANK_LABELS = [
   "FINANBANK",
   "FINTECH",
   "SENFF",
+  "HAPPY",
 ];
 
-const BANK_OPTIONS = BANK_LABELS.map((bank) => ({ value: bank, label: bank }));
+export const BANK_OPTIONS = BANK_LABELS.map((bank) => ({ value: bank, label: bank }));
 
 const BANK_CANONICAL_BY_KEY = BANK_LABELS.reduce((acc, label) => {
   acc.set(String(label).trim().toUpperCase(), label);
