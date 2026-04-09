@@ -1070,12 +1070,17 @@ function handleAprovar(operation) {
           const cpfDigits = onlyDigits(cpfText);
           const benefitText = String(operation.numero_beneficio || "");
           const benefitDigits = onlyDigits(benefitText);
+          const proposalText = String(operation.numero_proposta || "");
+          const proposalDigits = onlyDigits(proposalText);
           const matchByText =
             clientName.includes(query) ||
             cpfText.toLowerCase().includes(query) ||
-            benefitText.toLowerCase().includes(query);
+            benefitText.toLowerCase().includes(query) ||
+            proposalText.toLowerCase().includes(query);
           const matchByDigits = queryDigits
-            ? cpfDigits.includes(queryDigits) || benefitDigits.includes(queryDigits)
+            ? cpfDigits.includes(queryDigits) ||
+              benefitDigits.includes(queryDigits) ||
+              proposalDigits.includes(queryDigits)
             : false;
 
           if (!matchByText && !matchByDigits) {
@@ -1250,7 +1255,7 @@ function handleAprovar(operation) {
             type="text"
             value={filters.search}
             onChange={(event) => handleFilterChange("search", event.target.value)}
-            placeholder="Nome, CPF ou numero de beneficio"
+            placeholder="Nome, CPF, numero de beneficio ou proposta"
           />
         </label>
 
