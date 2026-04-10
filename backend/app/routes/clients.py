@@ -4144,6 +4144,13 @@ def update_operation(operation_id):
             if "numero_proposta" in data and data.get("numero_proposta") is not None:
                 data["numero_proposta"] = str(data.get("numero_proposta") or "").strip()
 
+            if "banco_digitacao" in data:
+                banco_digitacao = str(data.get("banco_digitacao") or "").strip()
+                if banco_digitacao:
+                    data["banco_digitacao"] = banco_digitacao
+                else:
+                    data.pop("banco_digitacao", None)
+
             if "pendencia_tipo" in data and data.get("pendencia_tipo") is not None:
                 data["pendencia_tipo"] = str(data.get("pendencia_tipo") or "").strip().upper()
 

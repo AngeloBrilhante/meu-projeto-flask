@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { BANK_OPTIONS } from "../constants/operationSchemas";
 import {
   getOperationStatusHistory,
   getPipeline,
@@ -161,6 +162,7 @@ function usesSaldoLabels(product) {
 
 function toDraft(operation) {
   return {
+    banco_digitacao: operation.banco_digitacao || "",
     link_formalizacao: operation.link_formalizacao || "",
     numero_proposta: operation.numero_proposta || "",
     valor_liberado:
@@ -594,6 +596,7 @@ export default function Pipeline() {
     const { payloadOverrides = {}, clearPendencia = false } = options;
     const draft = drafts[operation.id] || {};
     const payload = {
+      banco_digitacao: String(draft.banco_digitacao || "").trim(),
       pendencia_tipo: String(draft.pendencia_tipo || "").trim(),
       pendencia_motivo: String(draft.pendencia_motivo || "").trim(),
       link_formalizacao: String(draft.link_formalizacao || "").trim(),
@@ -701,6 +704,7 @@ export default function Pipeline() {
   async function handleSaveFormalizacaoData(operation) {
     const draft = drafts[operation.id] || {};
     const payload = {
+      banco_digitacao: String(draft.banco_digitacao || "").trim(),
       promotora: String(draft.promotora || "").trim().toUpperCase(),
       troco: String(draft.troco || "").trim(),
     };
@@ -752,6 +756,7 @@ export default function Pipeline() {
         linkFormalizacao ||
         valorInput ||
         parcelaInput ||
+        payload.banco_digitacao ||
         payload.promotora ||
         payload.troco
     );
@@ -1513,6 +1518,37 @@ function handleAprovar(operation) {
                         {!isVendor && formalizacaoAberta && (
                           <>
                             <div className="proposalStackField">
+                              {(() => {
+                                const selectedBank = String(
+                                  draft.banco_digitacao || operation.banco_digitacao || ""
+                                ).trim();
+                                const hasCurrentBank = BANK_OPTIONS.some(
+                                  (option) => option.value === selectedBank
+                                );
+
+                                return (
+                                  <select
+                                    className="proposalInput"
+                                    value={selectedBank}
+                                    onChange={(event) =>
+                                      handleDraftChange(
+                                        operation.id,
+                                        "banco_digitacao",
+                                        event.target.value
+                                      )
+                                    }
+                                  >
+                                    {!hasCurrentBank && selectedBank && (
+                                      <option value={selectedBank}>{selectedBank}</option>
+                                    )}
+                                    {BANK_OPTIONS.map((option) => (
+                                      <option key={option.value} value={option.value}>
+                                        {option.label}
+                                      </option>
+                                    ))}
+                                  </select>
+                                );
+                              })()}
                               <input
                                 type="text"
                                 className="proposalInput"
