@@ -26,6 +26,7 @@ const EMPTY_FORM = {
 
 const PRODUCT_OPTIONS = [
   { value: "NOVO", label: "Novo" },
+  { value: "FGTS", label: "FGTS" },
   { value: "PORTABILIDADE", label: "Portabilidade" },
   { value: "REFINANCIAMENTO", label: "Refinanciamento" },
   { value: "PORTABILIDADE_REFIN", label: "Port + Refin" },

@@ -147,17 +147,28 @@ function getPipelineReferenceAt(operation) {
   return operation?.enviada_esteira_em || operation?.criado_em || "";
 }
 
+function normalizeProduct(product) {
+  return String(product || "").trim().toUpperCase();
+}
+
 function usesProposalLabels(product) {
-  const normalized = String(product || "").trim().toUpperCase();
-  return normalized === "REFINANCIAMENTO";
+  return normalizeProduct(product) === "REFINANCIAMENTO";
 }
 
 function usesSaldoLabels(product) {
-  const normalized = String(product || "").trim().toUpperCase();
-  return (
-    normalized === "PORTABILIDADE" ||
-    normalized === "PORTABILIDADE_REFIN"
+  return ["PORTABILIDADE", "PORTABILIDADE_REFIN", "FGTS"].includes(
+    normalizeProduct(product)
   );
+}
+
+function usesTrocoField(product) {
+  return ["PORTABILIDADE", "PORTABILIDADE_REFIN"].includes(
+    normalizeProduct(product)
+  );
+}
+
+function requiresInstallmentField(product) {
+  return normalizeProduct(product) !== "FGTS";
 }
 
 function toDraft(operation) {
@@ -632,12 +643,15 @@ export default function Pipeline() {
 
     if (nextStatus === "AGUARDANDO_FORMALIZACAO") {
       const useSaldoField = usesSaldoLabels(operation.produto);
+      const showInstallmentField = requiresInstallmentField(operation.produto);
       const primaryValueLabel = useSaldoField ? "saldo" : "valor liberado";
       const valorLiberado = parseFlexibleDecimalInput(payload.valor_liberado);
       const troco = String(payload.troco || "").trim()
         ? parseFlexibleDecimalInput(payload.troco)
         : null;
-      const parcelaLiberada = parseFlexibleDecimalInput(payload.parcela_liberada);
+      const parcelaLiberada = showInstallmentField
+        ? parseFlexibleDecimalInput(payload.parcela_liberada)
+        : null;
 
       if (!Number.isFinite(valorLiberado) || valorLiberado <= 0) {
         alert(`Informe um ${primaryValueLabel} valido.`);
@@ -649,14 +663,17 @@ export default function Pipeline() {
         return;
       }
 
-      if (!Number.isFinite(parcelaLiberada) || parcelaLiberada <= 0) {
-        alert("Informe uma parcela liberada valida.");
-        return;
-      }
-
       payload.valor_liberado = valorLiberado;
       payload.troco = troco;
-      payload.parcela_liberada = parcelaLiberada;
+      if (showInstallmentField) {
+        if (!Number.isFinite(parcelaLiberada) || parcelaLiberada <= 0) {
+          alert("Informe uma parcela liberada valida.");
+          return;
+        }
+        payload.parcela_liberada = parcelaLiberada;
+      } else {
+        delete payload.parcela_liberada;
+      }
     }
 
     if (nextStatus === "PENDENCIA" && !payload.pendencia_motivo) {
@@ -714,6 +731,7 @@ export default function Pipeline() {
     const valorInput = String(draft.valor_liberado || "").trim();
     const parcelaInput = String(draft.parcela_liberada || "").trim();
     const useSaldoField = usesSaldoLabels(operation.produto);
+    const showInstallmentField = requiresInstallmentField(operation.produto);
     const primaryValueLabel = useSaldoField ? "saldo" : "valor liberado";
 
     if (numeroProposta) {
@@ -733,7 +751,7 @@ export default function Pipeline() {
       payload.valor_liberado = parsedValue;
     }
 
-    if (parcelaInput) {
+    if (showInstallmentField && parcelaInput) {
       const parsedInstallment = parseFlexibleDecimalInput(parcelaInput);
       if (!Number.isFinite(parsedInstallment) || parsedInstallment <= 0) {
         alert("Informe uma parcela valida.");
@@ -755,7 +773,7 @@ export default function Pipeline() {
       numeroProposta ||
         linkFormalizacao ||
         valorInput ||
-        parcelaInput ||
+        (showInstallmentField && parcelaInput) ||
         payload.banco_digitacao ||
         payload.promotora ||
         payload.troco
@@ -1416,6 +1434,8 @@ function handleAprovar(operation) {
                     : operation.status_andamento
                 );
                 const useSaldoField = usesSaldoLabels(operation.produto);
+                const showTrocoField = usesTrocoField(operation.produto);
+                const showInstallmentField = requiresInstallmentField(operation.produto);
                 const useProposalField = usesProposalLabels(operation.produto);
                 const valorLabel = useSaldoField
                   ? "Saldo"
@@ -1472,16 +1492,18 @@ function handleAprovar(operation) {
                             <span>{valorLabel}</span>
                             <strong>{formatCurrency(draft.valor_liberado)}</strong>
                           </div>
-                          {useSaldoField && (
+                          {showTrocoField && (
                             <div className="formalizacaoSummaryItem">
                               <span>Troco</span>
                               <strong>{formatCurrency(draft.troco)}</strong>
                             </div>
                           )}
-                          <div className="formalizacaoSummaryItem">
-                            <span>{parcelaLabel}</span>
-                            <strong>{formatCurrency(draft.parcela_liberada)}</strong>
-                          </div>
+                          {showInstallmentField && (
+                            <div className="formalizacaoSummaryItem">
+                              <span>{parcelaLabel}</span>
+                              <strong>{formatCurrency(draft.parcela_liberada)}</strong>
+                            </div>
+                          )}
                           <div className="formalizacaoSummaryItem">
                             <span>Promotora</span>
                             <strong>{draft.promotora || "-"}</strong>
@@ -1576,7 +1598,7 @@ function handleAprovar(operation) {
                                   )
                                 }
                               />
-                              {useSaldoField && (
+                              {showTrocoField && (
                                 <input
                                   type="text"
                                   inputMode="decimal"
@@ -1592,20 +1614,22 @@ function handleAprovar(operation) {
                                   }
                                 />
                               )}
-                              <input
-                                type="text"
-                                inputMode="decimal"
-                                className="proposalInput"
-                                placeholder={parcelaLabel}
-                                value={draft.parcela_liberada}
-                                onChange={(event) =>
-                                  handleDraftChange(
-                                    operation.id,
-                                    "parcela_liberada",
-                                    event.target.value
-                                  )
-                                }
-                              />
+                              {showInstallmentField && (
+                                <input
+                                  type="text"
+                                  inputMode="decimal"
+                                  className="proposalInput"
+                                  placeholder={parcelaLabel}
+                                  value={draft.parcela_liberada}
+                                  onChange={(event) =>
+                                    handleDraftChange(
+                                      operation.id,
+                                      "parcela_liberada",
+                                      event.target.value
+                                    )
+                                  }
+                                />
+                              )}
                               <select
                                 className="proposalInput"
                                 value={draft.promotora || ""}

@@ -107,6 +107,7 @@ def can_access_client(client_id):
         elif role == "DIGITADOR_NOVO_CARTAO":
             allowed_products = (
                 "NOVO",
+                "FGTS",
                 "CARTAO",
                 "SAQUE_COMPLEMENTAR",
             )

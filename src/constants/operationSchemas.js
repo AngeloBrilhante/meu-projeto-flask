@@ -318,6 +318,19 @@ OPERATION_SCHEMAS.SAQUE_COMPLEMENTAR = {
   ...OPERATION_SCHEMAS.CARTAO,
   title: "Ficha para Saque complementar",
 };
+OPERATION_SCHEMAS.FGTS = {
+  ...OPERATION_SCHEMAS.NOVO,
+  title: "Ficha para FGTS",
+  groups: OPERATION_SCHEMAS.NOVO.groups.map((group) => ({
+    ...group,
+    fields: group.fields
+      .filter(
+        (field) =>
+          !["margem", "prazo", "numero_beneficio"].includes(field.name)
+      )
+      .map((field) => ({ ...field })),
+  })),
+};
 
 function repairMojibakeText(value) {
   const text = String(value ?? "");
@@ -384,6 +397,7 @@ function normalizeLegacyOperationFields(product, payload) {
   const upperProduct = toUpperProduct(product);
   if (
     upperProduct !== "NOVO" &&
+    upperProduct !== "FGTS" &&
     upperProduct !== "CARTAO" &&
     upperProduct !== "SAQUE_COMPLEMENTAR"
   ) {

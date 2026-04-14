@@ -87,6 +87,7 @@ DIGITADOR_PRODUCT_PERMISSIONS = {
     },
     ROLE_DIGITADOR_NOVO_CARTAO: {
         "NOVO",
+        "FGTS",
         "CARTAO",
         "SAQUE_COMPLEMENTAR",
     },
@@ -4062,9 +4063,10 @@ def update_operation(operation_id):
                     product_name = normalize_product_name(operation.get("produto"))
                     value_label = (
                         "saldo"
-                        if product_name in {"PORTABILIDADE", "PORTABILIDADE_REFIN"}
+                        if product_name in {"PORTABILIDADE", "PORTABILIDADE_REFIN", "FGTS"}
                         else "valor_liberado"
                     )
+                    requires_installment = product_name != "FGTS"
 
                     try:
                         valor_liberado = float(str(data.get("valor_liberado") or "").replace(",", "."))
@@ -4073,27 +4075,31 @@ def update_operation(operation_id):
                         db.close()
                         return jsonify({"error": f"{value_label} invalido"}), 400
 
-                    try:
-                        parcela_liberada = float(str(data.get("parcela_liberada") or "").replace(",", "."))
-                    except (TypeError, ValueError):
-                        cursor.close()
-                        db.close()
-                        return jsonify({"error": "parcela_liberada invalida"}), 400
-
                     if valor_liberado <= 0:
                         cursor.close()
                         db.close()
                         return jsonify({"error": f"{value_label} deve ser maior que zero"}), 400
 
-                    if parcela_liberada <= 0:
-                        cursor.close()
-                        db.close()
-                        return jsonify({"error": "parcela_liberada deve ser maior que zero"}), 400
+                    if requires_installment:
+                        try:
+                            parcela_liberada = float(str(data.get("parcela_liberada") or "").replace(",", "."))
+                        except (TypeError, ValueError):
+                            cursor.close()
+                            db.close()
+                            return jsonify({"error": "parcela_liberada invalida"}), 400
+
+                        if parcela_liberada <= 0:
+                            cursor.close()
+                            db.close()
+                            return jsonify({"error": "parcela_liberada deve ser maior que zero"}), 400
 
                     data["link_formalizacao"] = link
                     data["numero_proposta"] = proposal_number
                     data["valor_liberado"] = round(valor_liberado, 2)
-                    data["parcela_liberada"] = round(parcela_liberada, 2)
+                    if requires_installment:
+                        data["parcela_liberada"] = round(parcela_liberada, 2)
+                    else:
+                        data.pop("parcela_liberada", None)
                     data["devolvida_em"] = now_str
 
                 if (
