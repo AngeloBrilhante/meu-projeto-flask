@@ -25,6 +25,7 @@ const BANK_LABELS = [
   "FINTECH",
   "SENFF",
   "HAPPY",
+  "AGIBANK",
 ];
 
 export const BANK_OPTIONS = BANK_LABELS.map((bank) => ({ value: bank, label: bank }));
