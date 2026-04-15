@@ -340,13 +340,7 @@ export async function createOperation(clientId, operationData) {
     }
   );
 
-  const payload = await response.json();
-
-  if (!response.ok) {
-    throw new Error(payload.error || "Erro ao criar operacao");
-  }
-
-  return payload;
+  return parseApiJson(response, "Erro ao criar operacao");
 }
 
 /* =======================

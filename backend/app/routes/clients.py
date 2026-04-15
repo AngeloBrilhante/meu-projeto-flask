@@ -1151,6 +1151,7 @@ def ensure_operations_extra_columns(cursor, db):
         WHERE TABLE_SCHEMA = DATABASE()
           AND TABLE_NAME = 'operacoes'
           AND COLUMN_NAME IN (
+              'produto',
               'status',
               'data_pagamento',
               'enviada_esteira_em',
@@ -1175,6 +1176,17 @@ def ensure_operations_extra_columns(cursor, db):
 
     existing = {row["COLUMN_NAME"]: row for row in cursor.fetchall()}
     changed = False
+
+    produto_column = existing.get("produto")
+    if produto_column:
+        produto_type = str(produto_column.get("DATA_TYPE") or "").lower()
+        produto_len = produto_column.get("CHARACTER_MAXIMUM_LENGTH") or 0
+
+        if produto_type != "varchar" or produto_len < 50:
+            cursor.execute(
+                "ALTER TABLE operacoes MODIFY COLUMN produto VARCHAR(50) NOT NULL"
+            )
+            changed = True
 
     status_column = existing.get("status")
     if status_column:
