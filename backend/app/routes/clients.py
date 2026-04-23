@@ -1917,6 +1917,36 @@ def fetch_client_record(cursor, client_id):
     return serialize_client_record(cursor.fetchone())
 
 
+def fetch_client_record_by_cpf(cursor, cpf):
+    cursor.execute(
+        """
+        SELECT
+            c.*,
+            COALESCE(u.nome, '-') AS vendedor_nome
+        FROM clientes c
+        LEFT JOIN usuarios u ON u.id = c.vendedor_id
+        WHERE c.cpf = %s
+        LIMIT 1
+        """,
+        (cpf,),
+    )
+    return serialize_client_record(cursor.fetchone())
+
+
+def serialize_client_conflict_record(client):
+    if not client:
+        return None
+
+    return {
+        "id": to_int(client.get("id")) or None,
+        "nome": str(client.get("nome") or "").strip(),
+        "cpf": str(client.get("cpf") or "").strip(),
+        "empresa_id": to_int(client.get("empresa_id")) or None,
+        "vendedor_id": to_int(client.get("vendedor_id")) or None,
+        "vendedor_nome": str(client.get("vendedor_nome") or "").strip() or "Usuario nao identificado",
+    }
+
+
 def resolve_dashboard_goal(cursor, year, month, vendedor_id, company_id):
     if vendedor_id:
         cursor.execute(
@@ -1962,6 +1992,7 @@ def create_client():
 
     role = (current_user_role() or "").upper()
     user_id = current_user_id()
+    replace_existing_owner = normalize_optional_boolean(data.get("substituir_vendedor"))
 
     if role not in {ROLE_ADMIN, ROLE_GLOBAL, ROLE_VENDOR}:
         return jsonify({"error": "Permissao negada"}), 403
@@ -2093,6 +2124,28 @@ def create_client():
         seller_company_id = to_int(seller_row.get("empresa_id"))
         if role != ROLE_GLOBAL and seller_company_id != actor_company_id:
             return jsonify({"error": "vendedor_id deve pertencer a mesma empresa do usuario logado"}), 403
+
+        existing_client = fetch_client_record_by_cpf(cursor, cpf)
+        if existing_client:
+            existing_company_id = to_int(existing_client.get("empresa_id"))
+            same_company = (
+                existing_company_id <= 0
+                or seller_company_id <= 0
+                or existing_company_id == seller_company_id
+            )
+            if not same_company:
+                return jsonify({
+                    "error": "CPF ja cadastrado em outra empresa",
+                    "code": "CPF_ALREADY_EXISTS_OTHER_COMPANY",
+                }), 409
+
+            if not replace_existing_owner:
+                return jsonify({
+                    "error": "CPF ja cadastrado",
+                    "code": "CPF_ALREADY_EXISTS",
+                    "existing_client": serialize_client_conflict_record(existing_client),
+                    "can_take_over": True,
+                }), 409
 
         cursor.execute(
             """
@@ -2226,6 +2279,27 @@ def create_client():
         columns_sql = ",\n                ".join(insert_columns)
         placeholders_sql = ", ".join(["%s"] * len(insert_columns))
 
+        if existing_client:
+            previous_seller_id = to_int(existing_client.get("vendedor_id"))
+            update_sql = ", ".join([f"{column_name} = %s" for column_name in insert_columns])
+            cursor.execute(
+                f"""
+                UPDATE clientes
+                SET {update_sql}
+                WHERE id = %s
+                """,
+                tuple([*insert_values, existing_client["id"]]),
+            )
+            db.commit()
+            client_id = to_int(existing_client.get("id"))
+
+            return jsonify({
+                "message": "Cliente existente atualizado com sucesso",
+                "client_id": client_id,
+                "updated_existing": True,
+                "reassigned_seller": previous_seller_id != vendedor_id,
+            }), 200
+
         cursor.execute(
             f"""
             INSERT INTO clientes (
@@ -2249,7 +2323,31 @@ def create_client():
         message = str(exc)
 
         if "Duplicate entry" in message and "cpf" in message.lower():
-            return jsonify({"error": "CPF ja cadastrado"}), 409
+            duplicate_client = fetch_client_record_by_cpf(cursor, cpf)
+            if duplicate_client:
+                duplicate_company_id = to_int(duplicate_client.get("empresa_id"))
+                same_company = (
+                    duplicate_company_id <= 0
+                    or seller_company_id <= 0
+                    or duplicate_company_id == seller_company_id
+                )
+                if not same_company:
+                    return jsonify({
+                        "error": "CPF ja cadastrado em outra empresa",
+                        "code": "CPF_ALREADY_EXISTS_OTHER_COMPANY",
+                    }), 409
+
+                return jsonify({
+                    "error": "CPF ja cadastrado",
+                    "code": "CPF_ALREADY_EXISTS",
+                    "existing_client": serialize_client_conflict_record(duplicate_client),
+                    "can_take_over": True,
+                }), 409
+
+            return jsonify({
+                "error": "CPF ja cadastrado",
+                "code": "CPF_ALREADY_EXISTS",
+            }), 409
 
         if "Incorrect date value" in message:
             return jsonify({"error": "Data invalida"}), 400

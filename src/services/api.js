@@ -79,7 +79,16 @@ export async function createClient(clientData) {
       const error = await response.json();
       const details = Array.isArray(error.fields) ? error.fields : [];
       const suffix = details.length ? `: ${details.join(", ")}` : "";
-      throw new Error((error.error || "Erro ao criar cliente") + suffix + ` (HTTP ${response.status})`);
+      const apiError = new Error(
+        (error.error || "Erro ao criar cliente") + suffix + ` (HTTP ${response.status})`
+      );
+      apiError.status = response.status;
+      apiError.code = error.code || "";
+      apiError.fields = details;
+      apiError.data = error;
+      apiError.existingClient = error.existing_client || null;
+      apiError.canTakeOver = error.can_take_over === true;
+      throw apiError;
     }
 
     const rawText = await response.text();
