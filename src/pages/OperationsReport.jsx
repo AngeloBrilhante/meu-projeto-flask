@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import {
   getOperationsReport,
   revertFinalOperationStatus,
+  updateOperation,
 } from "../services/api";
 import {
   DATE_INPUT_PLACEHOLDER,
@@ -49,6 +50,42 @@ function formatCurrency(value) {
   });
 }
 
+function parseFlexibleDecimalInput(value) {
+  const text = String(value ?? "").trim().replace(/\s+/g, "");
+  if (!text) return Number.NaN;
+
+  const commaIndex = text.lastIndexOf(",");
+  const dotIndex = text.lastIndexOf(".");
+  const separatorIndex = Math.max(commaIndex, dotIndex);
+  const separator = separatorIndex >= 0 ? text[separatorIndex] : "";
+
+  if (!separator) {
+    const digitsOnly = text.replace(/[^\d-]/g, "");
+    return digitsOnly ? Number(digitsOnly) : Number.NaN;
+  }
+
+  const beforeSeparator = text.slice(0, separatorIndex);
+  const afterSeparator = text.slice(separatorIndex + 1);
+  const separatorOccurrences = (text.match(/[.,]/g) || []).length;
+  const onlyOneSeparator = separatorOccurrences === 1;
+  const isThousandsSeparator =
+    onlyOneSeparator &&
+    afterSeparator.length === 3 &&
+    /^\d+$/.test(beforeSeparator.replace(/^-/, "")) &&
+    /^\d+$/.test(afterSeparator);
+
+  if (isThousandsSeparator) {
+    const digitsOnly = text.replace(/[.,]/g, "");
+    return digitsOnly ? Number(digitsOnly) : Number.NaN;
+  }
+
+  const normalizedInteger = beforeSeparator.replace(/[.,]/g, "");
+  const normalizedDecimal = afterSeparator.replace(/[.,]/g, "");
+  const normalized = `${normalizedInteger || "0"}.${normalizedDecimal}`;
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : Number.NaN;
+}
+
 function toCsvValue(value) {
   const text = String(value ?? "");
   return `"${text.replace(/"/g, '""')}"`;
@@ -61,6 +98,9 @@ export default function OperationsReport() {
   const [vendors, setVendors] = useState([]);
   const [loading, setLoading] = useState(false);
   const [revertingOperationId, setRevertingOperationId] = useState(null);
+  const [editingOperationId, setEditingOperationId] = useState(null);
+  const [editingValue, setEditingValue] = useState("");
+  const [savingValueOperationId, setSavingValueOperationId] = useState(null);
   const [error, setError] = useState("");
   const role = useMemo(() => getStoredRole(), []);
   const isAdmin = role === "ADMIN" || role === "GLOBAL";
@@ -185,6 +225,42 @@ export default function OperationsReport() {
       alert(err.message || "Nao foi possivel voltar o status da operacao");
     } finally {
       setRevertingOperationId(null);
+    }
+  }
+
+  function openValueEditor(operation) {
+    setEditingOperationId(operation.id);
+    setEditingValue(
+      operation.valor_liberado === null || operation.valor_liberado === undefined
+        ? ""
+        : String(operation.valor_liberado)
+    );
+  }
+
+  function closeValueEditor() {
+    setEditingOperationId(null);
+    setEditingValue("");
+  }
+
+  async function handleSaveValue(operation) {
+    const parsedValue = parseFlexibleDecimalInput(editingValue);
+
+    if (!Number.isFinite(parsedValue) || parsedValue <= 0) {
+      alert("Informe um valor liberado valido.");
+      return;
+    }
+
+    try {
+      setSavingValueOperationId(operation.id);
+      await updateOperation(operation.id, {
+        valor_liberado: parsedValue,
+      });
+      closeValueEditor();
+      await loadReport(filters);
+    } catch (err) {
+      alert(err.message || "Nao foi possivel atualizar o valor liberado");
+    } finally {
+      setSavingValueOperationId(null);
     }
   }
 
@@ -343,7 +419,63 @@ export default function OperationsReport() {
                   <td>{op.vendedor_nome}</td>
                   <td>{op.produto}</td>
                   <td>{op.banco_digitacao}</td>
-                  <td>{formatCurrency(op.valor_liberado)}</td>
+                  <td className="reportValueCell">
+                    {isAdmin ? (
+                      editingOperationId === op.id ? (
+                        <div className="reportInlineEditor">
+                          <input
+                            type="text"
+                            inputMode="decimal"
+                            className="reportInlineInput"
+                            value={editingValue}
+                            disabled={savingValueOperationId === op.id}
+                            autoFocus
+                            onChange={(event) => setEditingValue(event.target.value)}
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter") {
+                                event.preventDefault();
+                                handleSaveValue(op);
+                              }
+
+                              if (event.key === "Escape") {
+                                event.preventDefault();
+                                closeValueEditor();
+                              }
+                            }}
+                          />
+                          <div className="reportInlineActions">
+                            <button
+                              type="button"
+                              className="reportInlineSaveButton"
+                              disabled={savingValueOperationId === op.id}
+                              onClick={() => handleSaveValue(op)}
+                            >
+                              {savingValueOperationId === op.id ? "Salvando..." : "Salvar"}
+                            </button>
+                            <button
+                              type="button"
+                              className="reportInlineCancelButton"
+                              disabled={savingValueOperationId === op.id}
+                              onClick={closeValueEditor}
+                            >
+                              Cancelar
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          className="reportInlineValueButton"
+                          disabled={Boolean(revertingOperationId || savingValueOperationId)}
+                          onClick={() => openValueEditor(op)}
+                        >
+                          {formatCurrency(op.valor_liberado)}
+                        </button>
+                      )
+                    ) : (
+                      formatCurrency(op.valor_liberado)
+                    )}
+                  </td>
                   <td>{op.prazo}x</td>
                   <td>
                     <span

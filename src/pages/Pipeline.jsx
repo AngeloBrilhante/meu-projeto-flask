@@ -342,7 +342,6 @@ export default function Pipeline() {
   const [searchParams] = useSearchParams();
   const user = useMemo(() => getStoredUser(), []);
   const role = String(user?.role || "").toUpperCase();
-  const isAdmin = role === "ADMIN" || role === "GLOBAL";
   const isVendor = role === "VENDEDOR";
   const canAccessReadyPipeline = role === "ADMIN" || role === "GLOBAL" || role.startsWith("DIGITADOR");
   const [operations, setOperations] = useState([]);
@@ -397,10 +396,7 @@ export default function Pipeline() {
           const serverDraft = toDraft(operation);
           const editors = openEditorsRef.current[operation.id] || {};
           const keepLocalDraft = Boolean(
-            editors.pendencia ||
-              editors.reprovacao ||
-              editors.formalizacao ||
-              editors.valorInline
+            editors.pendencia || editors.reprovacao || editors.formalizacao
           );
 
           next[operation.id] = keepLocalDraft
@@ -565,7 +561,6 @@ export default function Pipeline() {
         ...prev[operationId],
         pendencia: false,
         reprovacao: false,
-        valorInline: false,
         [editorKey]: !prev[operationId]?.[editorKey],
       },
     }));
@@ -578,7 +573,6 @@ export default function Pipeline() {
         ...prev[operationId],
         pendencia: false,
         reprovacao: false,
-        valorInline: false,
         [editorKey]: true,
       },
     }));
@@ -589,7 +583,6 @@ export default function Pipeline() {
       ...prev,
       [operationId]: {
         ...prev[operationId],
-        valorInline: false,
         formalizacao: !prev[operationId]?.formalizacao,
       },
     }));
@@ -597,54 +590,6 @@ export default function Pipeline() {
 
   function isFormalizacaoEditorOpen(operationId) {
     return Boolean(openEditors[operationId]?.formalizacao);
-  }
-
-  function openInlineValueEditor(operation) {
-    const serverDraft = toDraft(operation);
-
-    setDrafts((prev) => ({
-      ...prev,
-      [operation.id]: {
-        ...prev[operation.id],
-        valor_liberado: serverDraft.valor_liberado,
-      },
-    }));
-
-    setOpenEditors((prev) => ({
-      ...prev,
-      [operation.id]: {
-        ...prev[operation.id],
-        valorInline: true,
-      },
-    }));
-  }
-
-  function closeInlineValueEditor(operation, options = {}) {
-    const { resetDraft = true } = options;
-
-    if (resetDraft) {
-      const serverDraft = toDraft(operation);
-
-      setDrafts((prev) => ({
-        ...prev,
-        [operation.id]: {
-          ...prev[operation.id],
-          valor_liberado: serverDraft.valor_liberado,
-        },
-      }));
-    }
-
-    setOpenEditors((prev) => ({
-      ...prev,
-      [operation.id]: {
-        ...prev[operation.id],
-        valorInline: false,
-      },
-    }));
-  }
-
-  function isInlineValueEditorOpen(operationId) {
-    return Boolean(openEditors[operationId]?.valorInline);
   }
 
   function isEditorOpen(operationId, editorKey) {
@@ -868,54 +813,6 @@ export default function Pipeline() {
     } catch (error) {
       console.error("Erro ao salvar dados da operacao:", error);
       alert(error.message || "Nao foi possivel salvar os dados da operacao");
-    } finally {
-      setSavingOperationId(null);
-    }
-  }
-
-  async function handleSaveInlineValue(operation) {
-    const draft = drafts[operation.id] || {};
-    const useSaldoField = usesSaldoLabels(operation.produto);
-    const useProposalField = usesProposalLabels(operation.produto);
-    const primaryValueLabel = useSaldoField
-      ? "saldo"
-      : useProposalField
-        ? "valor da proposta"
-        : "valor liberado";
-    const parsedValue = parseFlexibleDecimalInput(draft.valor_liberado);
-
-    if (!Number.isFinite(parsedValue) || parsedValue <= 0) {
-      alert(`Informe um ${primaryValueLabel} valido.`);
-      return;
-    }
-
-    try {
-      setSavingOperationId(operation.id);
-      const response = await updateOperation(operation.id, {
-        valor_liberado: parsedValue,
-      });
-      const updatedOperation = response?.operation || null;
-
-      if (updatedOperation) {
-        setDrafts((prev) => ({
-          ...prev,
-          [operation.id]: {
-            ...prev[operation.id],
-            valor_liberado: toDraft(updatedOperation).valor_liberado,
-          },
-        }));
-      }
-
-      if (openHistory[operation.id]) {
-        await loadOperationHistory(operation.id, { force: true });
-      }
-
-      closeInlineValueEditor(updatedOperation || operation, { resetDraft: false });
-      await fetchPipeline();
-      window.dispatchEvent(new Event("pipeline:changed"));
-    } catch (error) {
-      console.error("Erro ao salvar valor da operacao:", error);
-      alert(error.message || "Nao foi possivel salvar o valor");
     } finally {
       setSavingOperationId(null);
     }
@@ -1527,7 +1424,6 @@ function handleAprovar(operation) {
                 const canManageFlow = !isVendor && !["APROVADO", "REPROVADO"].includes(
                   operation.normalizedStatus
                 );
-                const canInlineEditValue = isAdmin && !formalizacaoAberta;
                 const canResendToPipeline =
                   isVendor &&
                   (operation.normalizedStatus === "AGUARDANDO_FORMALIZACAO" ||
@@ -1541,7 +1437,6 @@ function handleAprovar(operation) {
                 const showTrocoField = usesTrocoField(operation.produto);
                 const showInstallmentField = requiresInstallmentField(operation.produto);
                 const useProposalField = usesProposalLabels(operation.produto);
-                const valorInlineAberto = isInlineValueEditorOpen(operation.id);
                 const valorLabel = useSaldoField
                   ? "Saldo"
                   : useProposalField
@@ -1595,79 +1490,7 @@ function handleAprovar(operation) {
                           </div>
                           <div className="formalizacaoSummaryItem">
                             <span>{valorLabel}</span>
-                            {canInlineEditValue ? (
-                              valorInlineAberto ? (
-                                <div
-                                  className="inlineValueEditor"
-                                  onClick={(event) => event.stopPropagation()}
-                                >
-                                  <input
-                                    type="text"
-                                    inputMode="decimal"
-                                    className="proposalInput inlineValueInput"
-                                    placeholder={valorLabel}
-                                    value={draft.valor_liberado}
-                                    disabled={isSaving}
-                                    autoFocus
-                                    onChange={(event) =>
-                                      handleDraftChange(
-                                        operation.id,
-                                        "valor_liberado",
-                                        event.target.value
-                                      )
-                                    }
-                                    onKeyDown={(event) => {
-                                      if (event.key === "Enter") {
-                                        event.preventDefault();
-                                        handleSaveInlineValue(operation);
-                                      }
-
-                                      if (event.key === "Escape") {
-                                        event.preventDefault();
-                                        closeInlineValueEditor(operation);
-                                      }
-                                    }}
-                                  />
-                                  <div className="inlineValueActions">
-                                    <button
-                                      type="button"
-                                      className="saveBtn inlineValueAction"
-                                      disabled={isSaving}
-                                      onClick={() => handleSaveInlineValue(operation)}
-                                    >
-                                      {isSaving ? "Salvando..." : "Salvar"}
-                                    </button>
-                                    <button
-                                      type="button"
-                                      className="ghostPipelineBtn inlineValueAction"
-                                      disabled={isSaving}
-                                      onClick={() => closeInlineValueEditor(operation)}
-                                    >
-                                      Cancelar
-                                    </button>
-                                  </div>
-                                </div>
-                              ) : (
-                                <button
-                                  type="button"
-                                  className="inlineValueDisplay"
-                                  disabled={isSaving}
-                                  onClick={(event) => {
-                                    event.stopPropagation();
-                                    openInlineValueEditor(operation);
-                                  }}
-                                >
-                                  <span className="inlineValueDisplayAmount">
-                                    {formatCurrency(draft.valor_liberado)}
-                                  </span>
-                                  <span className="inlineValueDisplayHint">
-                                    Clique para editar
-                                  </span>
-                                </button>
-                              )
-                            ) : (
-                              <strong>{formatCurrency(draft.valor_liberado)}</strong>
-                            )}
+                            <strong>{formatCurrency(draft.valor_liberado)}</strong>
                           </div>
                           {showTrocoField && (
                             <div className="formalizacaoSummaryItem">

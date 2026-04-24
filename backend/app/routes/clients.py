@@ -629,6 +629,10 @@ PIPELINE_OPERATION_FIELDS = PENDING_OPERATION_FIELDS | {
     "motivo_reprovacao",
 }
 
+FINAL_OPERATION_EDITABLE_FIELDS = {
+    "valor_liberado",
+}
+
 FINAL_OPERATION_STATUSES = {"APROVADO", "REPROVADO"}
 
 PIPELINE_ACTIVE_STATUSES = (
@@ -4066,13 +4070,26 @@ def update_operation(operation_id):
             data["produto"] = next_product
 
         if current_status in FINAL_OPERATION_STATUSES:
-            cursor.close()
-            db.close()
-            return jsonify({
-                "error": "Operacao finalizada. Nao e possivel editar."
-            }), 400
+            if not is_admin_like_role(role):
+                cursor.close()
+                db.close()
+                return jsonify({
+                    "error": "Operacao finalizada. Nao e possivel editar."
+                }), 400
 
-        if current_status == "PRONTA_DIGITAR" and not sent_to_pipeline:
+            disallowed_fields = {
+                field for field in data.keys()
+                if field not in FINAL_OPERATION_EDITABLE_FIELDS
+            }
+            if disallowed_fields:
+                cursor.close()
+                db.close()
+                return jsonify({
+                    "error": "Operacao finalizada so permite ajustar o valor liberado."
+                }), 400
+
+            allowed_fields = FINAL_OPERATION_EDITABLE_FIELDS
+        elif current_status == "PRONTA_DIGITAR" and not sent_to_pipeline:
             if "status" in data:
                 next_status = normalize_operation_status(data.get("status"))
                 if next_status != "PRONTA_DIGITAR":
@@ -4300,6 +4317,24 @@ def update_operation(operation_id):
                         db.close()
                         return jsonify({"error": "troco deve ser maior ou igual a zero"}), 400
                     data["troco"] = round(troco, 2)
+
+            if "valor_liberado" in data:
+                raw_valor_liberado = str(data.get("valor_liberado") or "").strip()
+                if not raw_valor_liberado:
+                    cursor.close()
+                    db.close()
+                    return jsonify({"error": "valor_liberado invalido"}), 400
+                try:
+                    valor_liberado = float(raw_valor_liberado.replace(",", "."))
+                except (TypeError, ValueError):
+                    cursor.close()
+                    db.close()
+                    return jsonify({"error": "valor_liberado invalido"}), 400
+                if valor_liberado <= 0:
+                    cursor.close()
+                    db.close()
+                    return jsonify({"error": "valor_liberado deve ser maior que zero"}), 400
+                data["valor_liberado"] = round(valor_liberado, 2)
 
             if "status_andamento" in data:
                 status_andamento = normalize_operation_progress_status(

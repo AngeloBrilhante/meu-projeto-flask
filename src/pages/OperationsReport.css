@@ -153,6 +153,89 @@
   color: var(--text-primary);
 }
 
+.reportValueCell {
+  min-width: 170px;
+}
+
+.reportInlineValueButton {
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  padding: 0;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  text-align: left;
+}
+
+.reportInlineValueButton:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+.reportInlineValueButton:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  text-decoration: none;
+}
+
+.reportInlineEditor {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.reportInlineInput {
+  width: 100%;
+  height: 34px;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  background: var(--surface-strong);
+  color: var(--text-primary);
+  padding: 0 10px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.reportInlineInput:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.reportInlineActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.reportInlineSaveButton,
+.reportInlineCancelButton {
+  height: 30px;
+  border-radius: 999px;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.reportInlineSaveButton {
+  border: none;
+  background: var(--accent);
+  color: #fff;
+}
+
+.reportInlineCancelButton {
+  border: 1px solid var(--border-color);
+  background: var(--surface-strong);
+  color: var(--text-primary);
+}
+
+.reportInlineSaveButton:disabled,
+.reportInlineCancelButton:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .reportTable tbody tr:hover {
   background: var(--surface-strong);
 }
