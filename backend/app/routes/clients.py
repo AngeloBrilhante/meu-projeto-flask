@@ -4126,7 +4126,13 @@ def update_operation(operation_id):
                     "AGUARDANDO_FORMALIZACAO": {"AGUARDANDO_FORMALIZACAO", "ANALISE_BANCO", "DEVOLVIDA_VENDEDOR", "REPROVADO"},
                     "ANALISE_BANCO": {"ANALISE_BANCO", "PENDENCIA", "DEVOLVIDA_VENDEDOR", "APROVADO", "REPROVADO"},
                     "PENDENCIA": {"PENDENCIA", "ANALISE_BANCO", "DEVOLVIDA_VENDEDOR"},
-                    "DEVOLVIDA_VENDEDOR": {"DEVOLVIDA_VENDEDOR", "ANALISE_BANCO"},
+                    "DEVOLVIDA_VENDEDOR": {
+                        "DEVOLVIDA_VENDEDOR",
+                        "ANALISE_BANCO",
+                        "PENDENCIA",
+                        "APROVADO",
+                        "REPROVADO",
+                    },
                 }
 
                 allowed_next = allowed_transitions.get(current_status, {current_status})
@@ -4259,6 +4265,8 @@ def update_operation(operation_id):
                         }), 400
                     data["pendencia_motivo"] = reason
                     data["devolvida_em"] = now_str
+                elif current_status == "DEVOLVIDA_VENDEDOR":
+                    data["devolvida_em"] = None
 
                 if next_status == "APROVADO" and "data_pagamento" not in data:
                     data["data_pagamento"] = now_str

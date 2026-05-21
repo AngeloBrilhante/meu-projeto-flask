@@ -1820,6 +1820,35 @@ function handleAprovar(operation) {
                           </>
                         )}
 
+                        {!isVendor && operation.normalizedStatus === "DEVOLVIDA_VENDEDOR" && (
+                          <>
+                            <button
+                              type="button"
+                              className="saveBtn"
+                              disabled={isSaving}
+                              onClick={() => updateFlow(operation, "ANALISE_BANCO")}
+                            >
+                              Retomar analise
+                            </button>
+                            <button
+                              type="button"
+                              className="approveBtn"
+                              disabled={isSaving}
+                              onClick={() => handleAprovar(operation)}
+                            >
+                              Marcar pago
+                            </button>
+                            <button
+                              type="button"
+                              className={`rejectBtn${reprovacaoAberta ? " active" : ""}`}
+                              disabled={isSaving}
+                              onClick={() => toggleEditor(operation.id, "reprovacao")}
+                            >
+                              Reprovar
+                            </button>
+                          </>
+                        )}
+
                         <button
                           type="button"
                           className="ghostPipelineBtn"
