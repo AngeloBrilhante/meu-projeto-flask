@@ -4126,7 +4126,7 @@ def update_operation(operation_id):
                     "AGUARDANDO_FORMALIZACAO": {"AGUARDANDO_FORMALIZACAO", "ANALISE_BANCO", "DEVOLVIDA_VENDEDOR", "REPROVADO"},
                     "ANALISE_BANCO": {"ANALISE_BANCO", "PENDENCIA", "DEVOLVIDA_VENDEDOR", "APROVADO", "REPROVADO"},
                     "PENDENCIA": {"PENDENCIA", "ANALISE_BANCO", "DEVOLVIDA_VENDEDOR"},
-                    "DEVOLVIDA_VENDEDOR": {"DEVOLVIDA_VENDEDOR", "ANALISE_BANCO", "REPROVADO"},
+                    "DEVOLVIDA_VENDEDOR": {"DEVOLVIDA_VENDEDOR", "ANALISE_BANCO"},
                 }
 
                 allowed_next = allowed_transitions.get(current_status, {current_status})
