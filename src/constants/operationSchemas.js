@@ -28,6 +28,7 @@ const BANK_LABELS = [
   "AGIBANK",
   "QUALICARD",
   "BANCO DO BRASIL",
+  "INBURSA",
 ];
 
 export const BANK_OPTIONS = BANK_LABELS.map((bank) => ({ value: bank, label: bank }));
