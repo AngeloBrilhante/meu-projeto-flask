@@ -4123,7 +4123,14 @@ def update_operation(operation_id):
                         "DEVOLVIDA_VENDEDOR",
                         "REPROVADO",
                     },
-                    "AGUARDANDO_FORMALIZACAO": {"AGUARDANDO_FORMALIZACAO", "ANALISE_BANCO", "DEVOLVIDA_VENDEDOR", "REPROVADO"},
+                    "AGUARDANDO_FORMALIZACAO": {
+                        "AGUARDANDO_FORMALIZACAO",
+                        "ANALISE_BANCO",
+                        "DEVOLVIDA_VENDEDOR",
+                        "PENDENCIA",
+                        "APROVADO",
+                        "REPROVADO",
+                    },
                     "ANALISE_BANCO": {"ANALISE_BANCO", "PENDENCIA", "DEVOLVIDA_VENDEDOR", "APROVADO", "REPROVADO"},
                     "PENDENCIA": {"PENDENCIA", "ANALISE_BANCO", "DEVOLVIDA_VENDEDOR"},
                     "DEVOLVIDA_VENDEDOR": {
@@ -4265,7 +4272,7 @@ def update_operation(operation_id):
                         }), 400
                     data["pendencia_motivo"] = reason
                     data["devolvida_em"] = now_str
-                elif current_status == "DEVOLVIDA_VENDEDOR":
+                elif current_status in {"DEVOLVIDA_VENDEDOR", "AGUARDANDO_FORMALIZACAO"}:
                     data["devolvida_em"] = None
 
                 if next_status == "APROVADO" and "data_pagamento" not in data:

@@ -1779,20 +1779,28 @@ function handleAprovar(operation) {
                         )}
 
 		                        {!isVendor && operation.normalizedStatus === "AGUARDANDO_FORMALIZACAO" && (
-	                          <>
-	                            <button
-	                              type="button"
-	                              className="saveBtn"
+		                          <>
+		                            <button
+		                              type="button"
+		                              className="saveBtn"
 	                              disabled={isSaving}
 	                              onClick={() => updateFlow(operation, "ANALISE_BANCO")}
-	                            >
-	                              Formalizada
-	                            </button>
-	                            <button
-	                              type="button"
-	                              className={`rejectBtn${reprovacaoAberta ? " active" : ""}`}
-	                              disabled={isSaving}
-	                              onClick={() => toggleEditor(operation.id, "reprovacao")}
+		                            >
+		                              Formalizada
+		                            </button>
+		                            <button
+		                              type="button"
+		                              className="approveBtn"
+		                              disabled={isSaving}
+		                              onClick={() => handleAprovar(operation)}
+		                            >
+		                              Marcar pago
+		                            </button>
+		                            <button
+		                              type="button"
+		                              className={`rejectBtn${reprovacaoAberta ? " active" : ""}`}
+		                              disabled={isSaving}
+		                              onClick={() => toggleEditor(operation.id, "reprovacao")}
 	                            >
 	                              Reprovar
 	                            </button>
