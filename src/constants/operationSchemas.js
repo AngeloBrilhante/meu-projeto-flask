@@ -28,6 +28,7 @@ const BANK_LABELS = [
   "AGIBANK",
   "QUALICARD",
   "BANCO DO BRASIL",
+  "CBA CAIXA",
   "INBURSA",
 ];
 
