@@ -15,7 +15,6 @@ import {
   createOperation,
   deleteOperation,
   listClientOperations,
-  listUsers,
   sendOperationToPipeline,
   updateOperation,
 } from "../../services/api";
@@ -160,15 +159,12 @@ export default function ClientOperations() {
   const [loading, setLoading] = useState(false);
   const [editingOperationId, setEditingOperationId] = useState(null);
   const [form, setForm] = useState(EMPTY_FORM);
-  const [vendorOptions, setVendorOptions] = useState([]);
-  const [selectedVendorId, setSelectedVendorId] = useState("");
   const [removingOperationId, setRemovingOperationId] = useState(null);
   const [statusDetailOperation, setStatusDetailOperation] = useState(null);
 
   const user = useMemo(() => getStoredUser(), []);
   const role = String(user?.role || "").toUpperCase();
   const isGlobal = role === "GLOBAL";
-  const isAdminLike = isGlobal || role === "ADMIN";
   const isDigitador = role.startsWith("DIGITADOR");
   const canManageOperations = !isDigitador;
   const formSchema = getOperationSchema(form.produto);
@@ -186,29 +182,6 @@ export default function ClientOperations() {
   useEffect(() => {
     if (id) loadOperations();
   }, [id]);
-
-  useEffect(() => {
-    async function loadVendors() {
-      if (!isAdminLike) {
-        setVendorOptions([]);
-        return;
-      }
-
-      try {
-        const response = await listUsers({
-          role: "VENDEDOR",
-          empresa_id: client?.empresa_id || user?.empresa_id || "",
-        });
-        const items = Array.isArray(response?.users) ? response.users : [];
-        setVendorOptions(items);
-      } catch (error) {
-        console.error("Erro ao carregar vendedores:", error);
-        setVendorOptions([]);
-      }
-    }
-
-    loadVendors();
-  }, [client?.empresa_id, isAdminLike, user?.empresa_id]);
 
   useEffect(() => {
     if (!client || editingOperationId || !form.produto) return;
@@ -242,7 +215,6 @@ export default function ClientOperations() {
         ? mergeOperationFicha(product, client, user, null, seed)
         : {},
     });
-    setSelectedVendorId("");
     setEditingOperationId(null);
   }
 
@@ -303,9 +275,6 @@ export default function ClientOperations() {
       );
 
       if (editingOperationId) {
-        if (isAdminLike && selectedVendorId) {
-          payload.vendedor_id = Number(selectedVendorId);
-        }
         await updateOperation(editingOperationId, payload);
         alert("Operacao editada com sucesso");
       } else {
@@ -339,9 +308,6 @@ export default function ClientOperations() {
     const seed = getOperationSeed(operation);
 
     setEditingOperationId(operation.id);
-    setSelectedVendorId(
-      operation.vendedor_id ? String(operation.vendedor_id) : ""
-    );
     setForm({
       produto: product,
       ficha_portabilidade: mergeOperationFicha(
@@ -413,34 +379,6 @@ export default function ClientOperations() {
       {canManageOperations && (
         <form onSubmit={handleSubmit} className="operationsFormCard">
         <h3>{editingOperationId ? "Editar operacao" : "Nova operacao"}</h3>
-
-        {editingOperationId && isAdminLike && (
-          <label className="operationsField operationProductField">
-            <span>Vendedor da proposta</span>
-            <select
-              value={selectedVendorId}
-              onChange={(event) => setSelectedVendorId(event.target.value)}
-              required
-            >
-              <option value="">Selecione um vendedor</option>
-              {selectedVendorId &&
-                !vendorOptions.some(
-                  (option) => String(option.id) === String(selectedVendorId)
-                ) && (
-                  <option value={selectedVendorId}>
-                    {sortedOperations.find(
-                      (item) => item.id === editingOperationId
-                    )?.vendedor_nome || "Vendedor atual"}
-                  </option>
-                )}
-              {vendorOptions.map((option) => (
-                <option key={option.id} value={option.id}>
-                  {option.nome}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
 
         <label className="operationsField operationProductField">
           <span>Produto</span>
@@ -624,7 +562,6 @@ export default function ClientOperations() {
             <thead>
               <tr>
                 <th>Produto</th>
-                <th>Vendedor</th>
                 <th>Banco</th>
                 <th>Promotora</th>
                 <th>Valor liberado</th>
@@ -656,7 +593,6 @@ export default function ClientOperations() {
                 return (
                   <tr key={operation.id}>
                     <td>{operation.produto}</td>
-                    <td>{operation.vendedor_nome || "-"}</td>
                     <td>{operation.banco_digitacao || "-"}</td>
                     <td>{operation.promotora || "-"}</td>
                     <td>{formatCurrency(operation.valor_liberado)}</td>

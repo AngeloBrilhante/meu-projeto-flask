@@ -61,7 +61,7 @@ export default function CreateClient() {
     return `${digits.slice(0, 5)}-${digits.slice(5)}`;
   }
 
-  function buildSubmitPayload() {
+  function buildSubmitPayload(options = {}) {
     const normalizedBeneficios = beneficios
       .map((item) => String(item || "").trim())
       .filter(Boolean);
@@ -70,7 +70,21 @@ export default function CreateClient() {
       ...form,
       numero_beneficio: normalizedBeneficios[0] || "",
       beneficios: normalizedBeneficios,
+      substituir_vendedor: options.overrideExistingSeller === true,
     };
+  }
+
+  function buildDuplicateCpfMessage(error) {
+    const existingClient = error?.existingClient || {};
+    const previousSeller = String(existingClient.vendedor_nome || "").trim() || "um usuario anterior";
+    const clientName = String(existingClient.nome || form.nome || "este cliente").trim();
+
+    return [
+      `Este CPF ja foi cadastrado anteriormente por ${previousSeller}.`,
+      `Cliente encontrado: ${clientName}.`,
+      "",
+      "Deseja substituir o vendedor responsavel e atualizar esse cadastro com os dados preenchidos agora?",
+    ].join("\n");
   }
 
   async function lookupAddressByCep(cepDigits) {
@@ -192,11 +206,38 @@ export default function CreateClient() {
 
     try {
       const result = await createClient(buildSubmitPayload());
-      const successMessage = "Cliente cadastrado com sucesso!";
+      const successMessage = result?.updated_existing
+        ? result?.reassigned_seller
+          ? "Cliente transferido e atualizado com sucesso!"
+          : "Cliente atualizado com sucesso!"
+        : "Cliente cadastrado com sucesso!";
 
       alert(successMessage);
       navigate("/clients");
     } catch (err) {
+      if (err?.status === 409 && err?.code === "CPF_ALREADY_EXISTS" && err?.existingClient) {
+        const confirmed = window.confirm(buildDuplicateCpfMessage(err));
+        if (!confirmed) {
+          return;
+        }
+
+        try {
+          const result = await createClient(
+            buildSubmitPayload({ overrideExistingSeller: true })
+          );
+          const successMessage = result?.reassigned_seller
+            ? "Cliente transferido e atualizado com sucesso!"
+            : "Cliente atualizado com sucesso!";
+
+          alert(successMessage);
+          navigate("/clients");
+          return;
+        } catch (retryError) {
+          alert(retryError.message);
+          return;
+        }
+      }
+
       alert(err.message);
     } finally {
       setSaving(false);
