@@ -631,6 +631,7 @@ PIPELINE_OPERATION_FIELDS = PENDING_OPERATION_FIELDS | {
 
 FINAL_OPERATION_EDITABLE_FIELDS = {
     "valor_liberado",
+    "vendedor_id",
 }
 
 FINAL_OPERATION_STATUSES = {"APROVADO", "REPROVADO"}
@@ -1090,6 +1091,7 @@ def ensure_clients_extra_columns(cursor, db):
 
     existing = {row["COLUMN_NAME"]: row for row in cursor.fetchall()}
     changed = False
+    vendor_column_added = False
     email_column = existing.get("email")
     analfabeto_column = existing.get("analfabeto")
     beneficios_json_column = existing.get("beneficios_json")
@@ -1139,6 +1141,42 @@ def ensure_clients_extra_columns(cursor, db):
         )
         changed = True
 
+    cursor.execute(
+        """
+        SELECT
+            INDEX_NAME,
+            NON_UNIQUE,
+            GROUP_CONCAT(COLUMN_NAME ORDER BY SEQ_IN_INDEX) AS columns_joined
+        FROM INFORMATION_SCHEMA.STATISTICS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'clientes'
+        GROUP BY INDEX_NAME, NON_UNIQUE
+        """
+    )
+    indexes = {
+        row["INDEX_NAME"]: {
+            "non_unique": int(row.get("NON_UNIQUE") or 0),
+            "columns": str(row.get("columns_joined") or ""),
+        }
+        for row in cursor.fetchall()
+    }
+
+    for legacy_unique_name in ("cpf", "uq_clientes_cpf"):
+        index_meta = indexes.get(legacy_unique_name)
+        if index_meta and index_meta["non_unique"] == 0 and index_meta["columns"] == "cpf":
+            cursor.execute(f"ALTER TABLE clientes DROP INDEX `{legacy_unique_name}`")
+            changed = True
+
+    scoped_unique = indexes.get("uq_clientes_empresa_vendedor_cpf")
+    if not scoped_unique or scoped_unique["non_unique"] != 0 or scoped_unique["columns"] != "empresa_id,vendedor_id,cpf":
+        cursor.execute(
+            """
+            ALTER TABLE clientes
+            ADD UNIQUE INDEX uq_clientes_empresa_vendedor_cpf (empresa_id, vendedor_id, cpf)
+            """
+        )
+        changed = True
+
     if changed:
         db.commit()
 
@@ -1169,6 +1207,7 @@ def ensure_operations_extra_columns(cursor, db):
               'pendencia_resposta_vendedor',
               'pendencia_respondida_em',
               'motivo_reprovacao',
+              'vendedor_id',
               'digitador_id',
               'numero_proposta',
               'troco',
@@ -1278,6 +1317,11 @@ def ensure_operations_extra_columns(cursor, db):
         )
         changed = True
 
+    if "vendedor_id" not in existing:
+        cursor.execute("ALTER TABLE operacoes ADD COLUMN vendedor_id INT NULL")
+        changed = True
+        vendor_column_added = True
+
     if "digitador_id" not in existing:
         cursor.execute("ALTER TABLE operacoes ADD COLUMN digitador_id INT NULL")
         changed = True
@@ -1297,6 +1341,17 @@ def ensure_operations_extra_columns(cursor, db):
     if "status_andamento" not in existing:
         cursor.execute("ALTER TABLE operacoes ADD COLUMN status_andamento VARCHAR(80) NULL")
         changed = True
+
+    if vendor_column_added:
+        cursor.execute(
+            """
+            UPDATE operacoes o
+            JOIN clientes c ON c.id = o.cliente_id
+            SET o.vendedor_id = c.vendedor_id
+            WHERE o.vendedor_id IS NULL
+              AND c.vendedor_id IS NOT NULL
+            """
+        )
 
     if changed:
         db.commit()
@@ -1597,7 +1652,7 @@ def notify_vendor_status_change(
     cursor.execute(
         """
         SELECT
-            c.vendedor_id,
+            COALESCE(o.vendedor_id, c.vendedor_id) AS vendedor_id,
             o.digitador_id,
             o.empresa_id,
             COALESCE(c.nome, 'Cliente') AS cliente_nome,
@@ -1668,7 +1723,7 @@ def notify_vendor_progress_change(
     cursor.execute(
         """
         SELECT
-            c.vendedor_id,
+            COALESCE(o.vendedor_id, c.vendedor_id) AS vendedor_id,
             o.empresa_id,
             COALESCE(c.nome, 'Cliente') AS cliente_nome,
             COALESCE(o.produto, 'OPERACAO') AS produto,
@@ -1921,18 +1976,35 @@ def fetch_client_record(cursor, client_id):
     return serialize_client_record(cursor.fetchone())
 
 
-def fetch_client_record_by_cpf(cursor, cpf):
+def fetch_client_record_by_cpf(cursor, cpf, company_id=None, vendedor_id=None, exclude_client_id=None):
+    conditions = ["c.cpf = %s"]
+    params = [cpf]
+
+    if company_id is not None:
+        conditions.append("c.empresa_id = %s")
+        params.append(company_id)
+
+    if vendedor_id is not None:
+        conditions.append("c.vendedor_id = %s")
+        params.append(vendedor_id)
+
+    if exclude_client_id is not None:
+        conditions.append("c.id <> %s")
+        params.append(exclude_client_id)
+
+    where_clause = " AND ".join(conditions)
+
     cursor.execute(
-        """
+        f"""
         SELECT
             c.*,
             COALESCE(u.nome, '-') AS vendedor_nome
         FROM clientes c
         LEFT JOIN usuarios u ON u.id = c.vendedor_id
-        WHERE c.cpf = %s
+        WHERE {where_clause}
         LIMIT 1
         """,
-        (cpf,),
+        tuple(params),
     )
     return serialize_client_record(cursor.fetchone())
 
@@ -1996,7 +2068,6 @@ def create_client():
 
     role = (current_user_role() or "").upper()
     user_id = current_user_id()
-    replace_existing_owner = normalize_optional_boolean(data.get("substituir_vendedor"))
 
     if role not in {ROLE_ADMIN, ROLE_GLOBAL, ROLE_VENDOR}:
         return jsonify({"error": "Permissao negada"}), 403
@@ -2129,27 +2200,18 @@ def create_client():
         if role != ROLE_GLOBAL and seller_company_id != actor_company_id:
             return jsonify({"error": "vendedor_id deve pertencer a mesma empresa do usuario logado"}), 403
 
-        existing_client = fetch_client_record_by_cpf(cursor, cpf)
+        existing_client = fetch_client_record_by_cpf(
+            cursor,
+            cpf,
+            company_id=seller_company_id,
+            vendedor_id=vendedor_id,
+        )
         if existing_client:
-            existing_company_id = to_int(existing_client.get("empresa_id"))
-            same_company = (
-                existing_company_id <= 0
-                or seller_company_id <= 0
-                or existing_company_id == seller_company_id
-            )
-            if not same_company:
-                return jsonify({
-                    "error": "CPF ja cadastrado em outra empresa",
-                    "code": "CPF_ALREADY_EXISTS_OTHER_COMPANY",
-                }), 409
-
-            if not replace_existing_owner:
-                return jsonify({
-                    "error": "CPF ja cadastrado",
-                    "code": "CPF_ALREADY_EXISTS",
-                    "existing_client": serialize_client_conflict_record(existing_client),
-                    "can_take_over": True,
-                }), 409
+            return jsonify({
+                "error": "CPF ja cadastrado para este vendedor",
+                "code": "CPF_ALREADY_EXISTS_FOR_SELLER",
+                "existing_client": serialize_client_conflict_record(existing_client),
+            }), 409
 
         cursor.execute(
             """
@@ -2283,27 +2345,6 @@ def create_client():
         columns_sql = ",\n                ".join(insert_columns)
         placeholders_sql = ", ".join(["%s"] * len(insert_columns))
 
-        if existing_client:
-            previous_seller_id = to_int(existing_client.get("vendedor_id"))
-            update_sql = ", ".join([f"{column_name} = %s" for column_name in insert_columns])
-            cursor.execute(
-                f"""
-                UPDATE clientes
-                SET {update_sql}
-                WHERE id = %s
-                """,
-                tuple([*insert_values, existing_client["id"]]),
-            )
-            db.commit()
-            client_id = to_int(existing_client.get("id"))
-
-            return jsonify({
-                "message": "Cliente existente atualizado com sucesso",
-                "client_id": client_id,
-                "updated_existing": True,
-                "reassigned_seller": previous_seller_id != vendedor_id,
-            }), 200
-
         cursor.execute(
             f"""
             INSERT INTO clientes (
@@ -2327,25 +2368,17 @@ def create_client():
         message = str(exc)
 
         if "Duplicate entry" in message and "cpf" in message.lower():
-            duplicate_client = fetch_client_record_by_cpf(cursor, cpf)
+            duplicate_client = fetch_client_record_by_cpf(
+                cursor,
+                cpf,
+                company_id=seller_company_id,
+                vendedor_id=vendedor_id,
+            )
             if duplicate_client:
-                duplicate_company_id = to_int(duplicate_client.get("empresa_id"))
-                same_company = (
-                    duplicate_company_id <= 0
-                    or seller_company_id <= 0
-                    or duplicate_company_id == seller_company_id
-                )
-                if not same_company:
-                    return jsonify({
-                        "error": "CPF ja cadastrado em outra empresa",
-                        "code": "CPF_ALREADY_EXISTS_OTHER_COMPANY",
-                    }), 409
-
                 return jsonify({
-                    "error": "CPF ja cadastrado",
-                    "code": "CPF_ALREADY_EXISTS",
+                    "error": "CPF ja cadastrado para este vendedor",
+                    "code": "CPF_ALREADY_EXISTS_FOR_SELLER",
                     "existing_client": serialize_client_conflict_record(duplicate_client),
-                    "can_take_over": True,
                 }), 409
 
             return jsonify({
@@ -2413,6 +2446,7 @@ def create_operation(client_id):
     cursor.execute(
         """
         SELECT empresa_id
+             , vendedor_id
         FROM clientes
         WHERE id = %s
         LIMIT 1
@@ -2421,6 +2455,7 @@ def create_operation(client_id):
     )
     client_row = cursor.fetchone() or {}
     company_id = to_int(client_row.get("empresa_id"))
+    vendor_id = to_int(client_row.get("vendedor_id"))
     if company_id <= 0:
         cursor.close()
         db.close()
@@ -2430,6 +2465,7 @@ def create_operation(client_id):
         INSERT INTO operacoes (
             empresa_id,
             cliente_id,
+            vendedor_id,
             produto,
             banco_digitacao,
             margem,
@@ -2443,6 +2479,7 @@ def create_operation(client_id):
     """, (
         company_id,
         client_id,
+        vendor_id or None,
         produto,
         banco_digitacao,
         data.get("margem"),
@@ -2731,12 +2768,12 @@ def list_operations(client_id):
         f"""
         SELECT
             o.*,
-            c.vendedor_id,
+            COALESCE(o.vendedor_id, c.vendedor_id) AS vendedor_id,
             COALESCE(v.nome, '-') AS vendedor_nome,
             COALESCE(d.nome, '-') AS digitador_nome
         FROM operacoes o
         JOIN clientes c ON c.id = o.cliente_id
-        LEFT JOIN usuarios v ON v.id = c.vendedor_id
+        LEFT JOIN usuarios v ON v.id = COALESCE(o.vendedor_id, c.vendedor_id)
         LEFT JOIN usuarios d ON d.id = o.digitador_id
         WHERE {where_clause}
         ORDER BY o.criado_em DESC
@@ -2782,13 +2819,13 @@ def get_operation_dossier(operation_id):
             c.rg_data_emissao AS cliente_rg_data_emissao,
             c.analfabeto AS cliente_analfabeto,
             c.email AS cliente_email,
-            c.vendedor_id,
+            COALESCE(o.vendedor_id, c.vendedor_id) AS vendedor_id,
             COALESCE(u.nome, '-') AS vendedor_nome,
             u.email AS vendedor_email,
             COALESCE(d.nome, '-') AS digitador_nome
         FROM operacoes o
         JOIN clientes c ON c.id = o.cliente_id
-        LEFT JOIN usuarios u ON u.id = c.vendedor_id
+        LEFT JOIN usuarios u ON u.id = COALESCE(o.vendedor_id, c.vendedor_id)
         LEFT JOIN usuarios d ON d.id = o.digitador_id
         WHERE o.id = %s
         LIMIT 1
@@ -2854,7 +2891,7 @@ def list_operation_comments(operation_id):
             o.id,
             o.empresa_id,
             o.produto,
-            c.vendedor_id
+            COALESCE(o.vendedor_id, c.vendedor_id) AS vendedor_id
         FROM operacoes o
         JOIN clientes c ON c.id = o.cliente_id
         WHERE o.id = %s
@@ -2929,7 +2966,7 @@ def create_operation_comment(operation_id):
             o.produto,
             o.digitador_id,
             COALESCE(c.nome, 'Cliente') AS cliente_nome,
-            c.vendedor_id
+            COALESCE(o.vendedor_id, c.vendedor_id) AS vendedor_id
         FROM operacoes o
         JOIN clientes c ON c.id = o.cliente_id
         WHERE o.id = %s
@@ -3016,7 +3053,7 @@ def get_operation_status_history(operation_id):
             o.status,
             o.produto,
             o.criado_em,
-            c.vendedor_id
+            COALESCE(o.vendedor_id, c.vendedor_id) AS vendedor_id
         FROM operacoes o
         JOIN clientes c ON c.id = o.cliente_id
         WHERE o.id = %s
@@ -3220,6 +3257,25 @@ def update_client(client_id):
         if not existing_client:
             return jsonify({"error": "Cliente nao encontrado"}), 404
 
+        existing_company_id = to_int(existing_client.get("empresa_id"))
+        existing_vendedor_id = to_int(existing_client.get("vendedor_id"))
+
+        duplicate_client = fetch_client_record_by_cpf(
+            cursor,
+            cpf,
+            company_id=existing_company_id,
+            vendedor_id=existing_vendedor_id,
+            exclude_client_id=client_id,
+        )
+        if duplicate_client:
+            return jsonify(
+                {
+                    "error": "CPF ja cadastrado para este vendedor",
+                    "code": "CPF_ALREADY_EXISTS_FOR_SELLER",
+                    "existing_client": serialize_client_conflict_record(duplicate_client),
+                }
+            ), 409
+
         cursor.execute(
             """
             SELECT
@@ -3373,7 +3429,7 @@ def update_client(client_id):
         message = str(exc)
 
         if "Duplicate entry" in message and "cpf" in message.lower():
-            return jsonify({"error": "CPF ja cadastrado"}), 409
+            return jsonify({"error": "CPF ja cadastrado para este vendedor"}), 409
 
         if "Incorrect date value" in message:
             return jsonify({"error": "Data invalida"}), 400
@@ -3974,7 +4030,7 @@ def update_operation(operation_id):
             o.pendencia_motivo,
             o.produto,
             o.digitador_id,
-            c.vendedor_id
+            COALESCE(o.vendedor_id, c.vendedor_id) AS vendedor_id
         FROM operacoes o
         JOIN clientes c ON c.id = o.cliente_id
         WHERE o.id=%s
@@ -4365,6 +4421,45 @@ def update_operation(operation_id):
                 data["status_andamento"] = status_andamento or None
                 next_progress_status_for_notification = status_andamento
 
+            if "vendedor_id" in data:
+                if not is_admin_like_role(role):
+                    cursor.close()
+                    db.close()
+                    return jsonify({"error": "Somente admin/global pode alterar o vendedor da proposta"}), 403
+
+                try:
+                    vendedor_id = int(data.get("vendedor_id"))
+                except (TypeError, ValueError):
+                    cursor.close()
+                    db.close()
+                    return jsonify({"error": "vendedor_id invalido"}), 400
+
+                if vendedor_id <= 0:
+                    cursor.close()
+                    db.close()
+                    return jsonify({"error": "vendedor_id invalido"}), 400
+
+                cursor.execute(
+                    """
+                    SELECT id
+                    FROM usuarios
+                    WHERE id = %s
+                      AND UPPER(role) = 'VENDEDOR'
+                      AND empresa_id = %s
+                    LIMIT 1
+                    """,
+                    (vendedor_id, to_int(operation.get("empresa_id"))),
+                )
+                vendedor = cursor.fetchone()
+                if not vendedor:
+                    cursor.close()
+                    db.close()
+                    return jsonify({"error": "Vendedor nao encontrado para esta empresa"}), 400
+
+                data["vendedor_id"] = vendedor_id
+                allowed_fields = set(allowed_fields)
+                allowed_fields.add("vendedor_id")
+
     else:
         cursor.close()
         db.close()
@@ -4454,7 +4549,7 @@ def revert_final_operation_status(operation_id):
                 o.status_andamento,
                 o.digitador_id,
                 o.produto,
-                c.vendedor_id
+                COALESCE(o.vendedor_id, c.vendedor_id) AS vendedor_id
             FROM operacoes o
             JOIN clientes c ON c.id = o.cliente_id
             WHERE o.id = %s
@@ -4578,7 +4673,7 @@ def send_operation_to_pipeline(operation_id):
                 o.digitador_id,
                 o.enviada_esteira_em,
                 COALESCE(c.nome, 'Cliente') AS cliente_nome,
-                c.vendedor_id
+                COALESCE(o.vendedor_id, c.vendedor_id) AS vendedor_id
             FROM operacoes o
             JOIN clientes c ON c.id = o.cliente_id
             WHERE o.id=%s
@@ -4747,7 +4842,7 @@ def get_pipeline():
     apply_role_product_scope(role, conditions, params, "o.produto")
 
     if role == ROLE_VENDOR:
-        conditions.append("c.vendedor_id = %s")
+        conditions.append("COALESCE(o.vendedor_id, c.vendedor_id) = %s")
         params.append(user_id)
     elif is_digitador_role(role) and not has_full_company_operation_scope(role):
         ready_placeholders = ", ".join(
@@ -4797,12 +4892,12 @@ def get_pipeline():
             c.nome,
             c.cpf,
             c.numero_beneficio,
-            c.vendedor_id,
+            COALESCE(o.vendedor_id, c.vendedor_id) AS vendedor_id,
             COALESCE(u.nome, '-') AS vendedor_nome,
             COALESCE(d.nome, '-') AS digitador_nome
         FROM operacoes o
         JOIN clientes c ON c.id = o.cliente_id
-        LEFT JOIN usuarios u ON u.id = c.vendedor_id
+        LEFT JOIN usuarios u ON u.id = COALESCE(o.vendedor_id, c.vendedor_id)
         LEFT JOIN usuarios d ON d.id = o.digitador_id
         WHERE {where_clause}
         ORDER BY o.criado_em DESC
@@ -4892,7 +4987,7 @@ def get_operations_report():
         params.append(status)
 
     if vendedor_id:
-        conditions.append("c.vendedor_id = %s")
+        conditions.append("COALESCE(o.vendedor_id, c.vendedor_id) = %s")
         params.append(vendedor_id)
 
     apply_role_product_scope(role, conditions, params, "o.produto")
@@ -4927,7 +5022,7 @@ def get_operations_report():
             o.cliente_id,
             c.nome AS cliente_nome,
             c.cpf,
-            c.vendedor_id,
+            COALESCE(o.vendedor_id, c.vendedor_id) AS vendedor_id,
             COALESCE(u.nome, '-') AS vendedor_nome,
             o.produto,
             o.banco_digitacao,
@@ -4939,7 +5034,7 @@ def get_operations_report():
             {status_date_expr} AS status_changed_at
         FROM operacoes o
         JOIN clientes c ON c.id = o.cliente_id
-        LEFT JOIN usuarios u ON u.id = c.vendedor_id
+        LEFT JOIN usuarios u ON u.id = COALESCE(o.vendedor_id, c.vendedor_id)
         LEFT JOIN (
             SELECT
                 operation_id,
@@ -4965,8 +5060,7 @@ def get_operations_report():
                     u.id,
                     u.nome
                 FROM usuarios u
-                JOIN clientes c ON c.vendedor_id = u.id
-                JOIN operacoes o ON o.cliente_id = c.id
+                JOIN operacoes o ON COALESCE(o.vendedor_id, 0) = u.id
                 WHERE o.status IN ('APROVADO', 'REPROVADO')
                 ORDER BY u.nome ASC
                 """
@@ -4978,8 +5072,7 @@ def get_operations_report():
                     u.id,
                     u.nome
                 FROM usuarios u
-                JOIN clientes c ON c.vendedor_id = u.id
-                JOIN operacoes o ON o.cliente_id = c.id
+                JOIN operacoes o ON COALESCE(o.vendedor_id, 0) = u.id
                 WHERE o.status IN ('APROVADO', 'REPROVADO')
                   AND o.empresa_id = %s
                 ORDER BY u.nome ASC
@@ -5117,7 +5210,7 @@ def get_dashboard_summary():
             stats_params.append(actor_company_id)
 
         if selected_vendor_id:
-            vendor_clause = " AND c.vendedor_id = %s"
+            vendor_clause = " AND COALESCE(o.vendedor_id, c.vendedor_id) = %s"
             stats_params.append(selected_vendor_id)
 
         stats_params.extend(role_product_params)
@@ -5155,7 +5248,7 @@ def get_dashboard_summary():
             approved_params.append(actor_company_id)
 
         if selected_vendor_id:
-            approved_vendor_clause = " AND c.vendedor_id = %s"
+            approved_vendor_clause = " AND COALESCE(o.vendedor_id, c.vendedor_id) = %s"
             approved_params.append(selected_vendor_id)
 
         approved_params.extend(role_product_params)
@@ -5193,7 +5286,7 @@ def get_dashboard_summary():
             pipeline_params.append(actor_company_id)
 
         if selected_vendor_id:
-            pipeline_vendor_clause = " AND c.vendedor_id = %s"
+            pipeline_vendor_clause = " AND COALESCE(o.vendedor_id, c.vendedor_id) = %s"
             pipeline_params.append(selected_vendor_id)
 
         pipeline_params.extend(role_product_params)
@@ -5223,7 +5316,7 @@ def get_dashboard_summary():
             series_params.append(actor_company_id)
 
         if selected_vendor_id:
-            series_vendor_clause = " AND c.vendedor_id = %s"
+            series_vendor_clause = " AND COALESCE(o.vendedor_id, c.vendedor_id) = %s"
             series_params.append(selected_vendor_id)
 
         series_params.extend(role_product_params)
@@ -5271,7 +5364,7 @@ def get_dashboard_summary():
             approved_by_product_params.append(actor_company_id)
 
         if selected_vendor_id:
-            approved_by_product_vendor_clause = " AND c.vendedor_id = %s"
+            approved_by_product_vendor_clause = " AND COALESCE(o.vendedor_id, c.vendedor_id) = %s"
             approved_by_product_params.append(selected_vendor_id)
 
         approved_by_product_params.extend(role_product_params)
@@ -5348,8 +5441,7 @@ def get_dashboard_summary():
                         u.id,
                         u.nome
                     FROM usuarios u
-                    JOIN clientes c ON c.vendedor_id = u.id
-                    JOIN operacoes o ON o.cliente_id = c.id
+                    JOIN operacoes o ON COALESCE(o.vendedor_id, 0) = u.id
                     WHERE UPPER(u.role) = 'VENDEDOR'
                       AND o.empresa_id = %s
                       AND UPPER(o.produto) IN ({role_vendor_placeholders})
@@ -5390,7 +5482,7 @@ def get_dashboard_summary():
             vendor_stats_params.append(actor_company_id)
 
         if selected_vendor_id:
-            vendor_stats_clause = f"{vendor_stats_clause} AND c.vendedor_id = %s"
+            vendor_stats_clause = f"{vendor_stats_clause} AND COALESCE(o.vendedor_id, c.vendedor_id) = %s"
             vendor_stats_params.append(selected_vendor_id)
 
         vendor_stats_params.extend(role_product_params)
@@ -5398,7 +5490,7 @@ def get_dashboard_summary():
         cursor.execute(
             f"""
             SELECT
-                c.vendedor_id,
+                COALESCE(o.vendedor_id, c.vendedor_id) AS vendedor_id,
                 COALESCE(u.nome, '-') AS vendedor_nome,
                 COUNT(*) AS generated_operations,
                 SUM(
@@ -5434,12 +5526,12 @@ def get_dashboard_summary():
                 ) AS approved_value
             FROM operacoes o
             JOIN clientes c ON c.id = o.cliente_id
-            LEFT JOIN usuarios u ON u.id = c.vendedor_id
+            LEFT JOIN usuarios u ON u.id = COALESCE(o.vendedor_id, c.vendedor_id)
             WHERE o.criado_em >= %s
               AND o.criado_em < %s
               {vendor_stats_clause}
               {role_product_clause}
-            GROUP BY c.vendedor_id, u.nome
+            GROUP BY COALESCE(o.vendedor_id, c.vendedor_id), u.nome
             ORDER BY u.nome ASC
             """,
             tuple(vendor_stats_params),
@@ -5669,7 +5761,7 @@ def get_sales_board():
         cursor.execute(
             f"""
             SELECT
-                c.vendedor_id,
+                COALESCE(o.vendedor_id, c.vendedor_id) AS vendedor_id,
                 MONTH(COALESCE(o.data_pagamento, o.criado_em)) AS month_num,
                 COUNT(*) AS paid_count,
                 COALESCE(
@@ -5682,7 +5774,7 @@ def get_sales_board():
               AND COALESCE(o.data_pagamento, o.criado_em) >= %s
               AND COALESCE(o.data_pagamento, o.criado_em) < %s
               {approved_scope_clause}
-            GROUP BY c.vendedor_id, MONTH(COALESCE(o.data_pagamento, o.criado_em))
+            GROUP BY COALESCE(o.vendedor_id, c.vendedor_id), MONTH(COALESCE(o.data_pagamento, o.criado_em))
             """,
             tuple(approved_scope_params),
         )
@@ -6229,7 +6321,7 @@ def get_dashboard_notifications():
         apply_company_scope(role, conditions, params, "o.empresa_id")
 
         if vendor_id:
-            conditions.append("c.vendedor_id = %s")
+            conditions.append("COALESCE(o.vendedor_id, c.vendedor_id) = %s")
             params.append(vendor_id)
 
         apply_role_product_scope(role, conditions, params, "o.produto")
