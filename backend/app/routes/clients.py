@@ -4730,96 +4730,111 @@ def get_pipeline():
     if role not in PIPELINE_ALLOWED_ROLES:
         return jsonify({"error": "Acesso restrito"}), 403
 
-    db = get_db()
-    cursor = db.cursor(dictionary=True)
-    ensure_operations_extra_columns(cursor, db)
+    db = None
+    cursor = None
 
-    status_placeholders = ", ".join(["%s"] * len(PIPELINE_ACTIVE_STATUSES_WITH_LEGACY))
-    conditions = [
-        f"o.status IN ({status_placeholders})",
-        """(
-            o.status NOT IN ('PRONTA_DIGITAR', 'PENDENTE')
-            OR o.enviada_esteira_em IS NOT NULL
-        )""",
-    ]
-    params = list(PIPELINE_ACTIVE_STATUSES_WITH_LEGACY)
-    apply_company_scope(role, conditions, params, "o.empresa_id")
-    apply_role_product_scope(role, conditions, params, "o.produto")
+    try:
+        db = get_db()
+        cursor = db.cursor(dictionary=True)
+        ensure_operations_extra_columns(cursor, db)
 
-    if role == ROLE_VENDOR:
-        conditions.append("c.vendedor_id = %s")
-        params.append(user_id)
-    elif is_digitador_role(role) and not has_full_company_operation_scope(role):
-        ready_placeholders = ", ".join(
-            ["%s"] * len(PIPELINE_READY_VISIBLE_STATUSES_WITH_LEGACY)
-        )
-        conditions.append(
-            f"""(
-                UPPER(o.status) IN ({ready_placeholders})
-                OR o.digitador_id = %s
-            )"""
-        )
-        params.extend(PIPELINE_READY_VISIBLE_STATUSES_WITH_LEGACY)
-        params.append(user_id)
+        status_placeholders = ", ".join(["%s"] * len(PIPELINE_ACTIVE_STATUSES_WITH_LEGACY))
+        conditions = [
+            f"o.status IN ({status_placeholders})",
+            """(
+                o.status NOT IN ('PRONTA_DIGITAR', 'PENDENTE')
+                OR o.enviada_esteira_em IS NOT NULL
+            )""",
+        ]
+        params = list(PIPELINE_ACTIVE_STATUSES_WITH_LEGACY)
+        apply_company_scope(role, conditions, params, "o.empresa_id")
+        apply_role_product_scope(role, conditions, params, "o.produto")
 
-    where_clause = " AND ".join(conditions)
+        if role == ROLE_VENDOR:
+            conditions.append("c.vendedor_id = %s")
+            params.append(user_id)
+        elif is_digitador_role(role) and not has_full_company_operation_scope(role):
+            ready_placeholders = ", ".join(
+                ["%s"] * len(PIPELINE_READY_VISIBLE_STATUSES_WITH_LEGACY)
+            )
+            conditions.append(
+                f"""(
+                    UPPER(o.status) IN ({ready_placeholders})
+                    OR o.digitador_id = %s
+                )"""
+            )
+            params.extend(PIPELINE_READY_VISIBLE_STATUSES_WITH_LEGACY)
+            params.append(user_id)
 
-    cursor.execute(f"""
-        SELECT 
-            o.id,
-            o.produto,
-            o.banco_digitacao,
-            o.margem,
-            o.valor_solicitado,
-            o.parcela_solicitada,
-            o.valor_liberado,
-            o.troco,
-            o.parcela_liberada,
-            o.promotora,
-            o.numero_proposta,
-            o.status_andamento,
-            o.enviada_esteira_em,
-            o.link_formalizacao,
-            o.devolvida_em,
-            o.formalizado_em,
-            o.pendencia_tipo,
-            o.pendencia_motivo,
-            o.pendencia_aberta_em,
-            o.pendencia_resposta_vendedor,
-            o.pendencia_respondida_em,
-            o.motivo_reprovacao,
-            o.ficha_portabilidade,
-            o.prazo,
-            o.status,
-            o.digitador_id,
-            o.criado_em,
-            c.id as cliente_id,
-            c.nome,
-            c.cpf,
-            c.numero_beneficio,
-            c.vendedor_id,
-            COALESCE(u.nome, '-') AS vendedor_nome,
-            COALESCE(d.nome, '-') AS digitador_nome
-        FROM operacoes o
-        JOIN clientes c ON c.id = o.cliente_id
-        LEFT JOIN usuarios u ON u.id = c.vendedor_id
-        LEFT JOIN usuarios d ON d.id = o.digitador_id
-        WHERE {where_clause}
-        ORDER BY o.criado_em DESC
-    """, tuple(params))
+        where_clause = " AND ".join(conditions)
 
-    operations = [
-        hydrate_operation_payload(operation)
-        for operation in cursor.fetchall()
-    ]
+        cursor.execute(f"""
+            SELECT 
+                o.id,
+                o.produto,
+                o.banco_digitacao,
+                o.margem,
+                o.valor_solicitado,
+                o.parcela_solicitada,
+                o.valor_liberado,
+                o.troco,
+                o.parcela_liberada,
+                o.promotora,
+                o.numero_proposta,
+                o.status_andamento,
+                o.enviada_esteira_em,
+                o.link_formalizacao,
+                o.devolvida_em,
+                o.formalizado_em,
+                o.pendencia_tipo,
+                o.pendencia_motivo,
+                o.pendencia_aberta_em,
+                o.pendencia_resposta_vendedor,
+                o.pendencia_respondida_em,
+                o.motivo_reprovacao,
+                o.ficha_portabilidade,
+                o.prazo,
+                o.status,
+                o.digitador_id,
+                o.criado_em,
+                c.id as cliente_id,
+                c.nome,
+                c.cpf,
+                c.numero_beneficio,
+                c.vendedor_id,
+                COALESCE(u.nome, '-') AS vendedor_nome,
+                COALESCE(d.nome, '-') AS digitador_nome
+            FROM operacoes o
+            JOIN clientes c ON c.id = o.cliente_id
+            LEFT JOIN usuarios u ON u.id = c.vendedor_id
+            LEFT JOIN usuarios d ON d.id = o.digitador_id
+            WHERE {where_clause}
+            ORDER BY o.criado_em DESC
+        """, tuple(params))
 
-    for operation in operations:
-        operation["status"] = normalize_operation_status(operation.get("status"))
+        operations = [
+            hydrate_operation_payload(operation)
+            for operation in cursor.fetchall()
+        ]
 
-    cursor.close()
-    db.close()
+        for operation in operations:
+            operation["status"] = normalize_operation_status(operation.get("status"))
 
-    return jsonify(operations), 200
+        return jsonify(operations), 200
+    except mysql.connector.Error as exc:
+        if is_transient_db_connection_error(exc):
+            current_app.logger.warning("Falha temporaria ao carregar esteira: %s", exc)
+            return jsonify({"operations": [], "degraded": True}), 200
+        current_app.logger.exception("Erro ao carregar esteira")
+        return jsonify({"error": "Erro ao carregar esteira"}), 500
+    except Exception:
+        current_app.logger.exception("Erro ao carregar esteira")
+        return jsonify({"error": "Erro ao carregar esteira"}), 500
+    finally:
+        if cursor is not None:
+            cursor.close()
+        if db is not None:
+            db.close()
 
 
 # ======================================================
@@ -4869,132 +4884,147 @@ def get_operations_report():
     if parsed_from and parsed_to and parsed_from > parsed_to:
         return jsonify({"error": "date_from nÃƒÂ£o pode ser maior que date_to"}), 400
 
-    db = get_db()
-    cursor = db.cursor(dictionary=True)
-    ensure_operations_extra_columns(cursor, db)
-    ensure_operation_status_history_table(cursor, db)
+    db = None
+    cursor = None
 
-    status_date_expr = """
-        CASE
-            WHEN o.status = 'APROVADO' THEN COALESCE(osh.final_status_at, o.data_pagamento, o.criado_em)
-            ELSE COALESCE(osh.final_status_at, o.criado_em)
-        END
-    """
+    try:
+        db = get_db()
+        cursor = db.cursor(dictionary=True)
+        ensure_operations_extra_columns(cursor, db)
+        ensure_operation_status_history_table(cursor, db)
 
-    conditions = [
-        "o.status IN ('APROVADO', 'REPROVADO')"
-    ]
-    params = []
-    apply_company_scope(role, conditions, params, "o.empresa_id")
+        status_date_expr = """
+            CASE
+                WHEN o.status = 'APROVADO' THEN COALESCE(osh.final_status_at, o.data_pagamento, o.criado_em)
+                ELSE COALESCE(osh.final_status_at, o.criado_em)
+            END
+        """
 
-    if status:
-        conditions.append("o.status = %s")
-        params.append(status)
+        conditions = [
+            "o.status IN ('APROVADO', 'REPROVADO')"
+        ]
+        params = []
+        apply_company_scope(role, conditions, params, "o.empresa_id")
 
-    if vendedor_id:
-        conditions.append("c.vendedor_id = %s")
-        params.append(vendedor_id)
+        if status:
+            conditions.append("o.status = %s")
+            params.append(status)
 
-    apply_role_product_scope(role, conditions, params, "o.produto")
+        if vendedor_id:
+            conditions.append("c.vendedor_id = %s")
+            params.append(vendedor_id)
 
-    if date_from:
-        conditions.append(f"DATE({status_date_expr}) >= %s")
-        params.append(date_from)
+        apply_role_product_scope(role, conditions, params, "o.produto")
 
-    if date_to:
-        conditions.append(f"DATE({status_date_expr}) <= %s")
-        params.append(date_to)
+        if date_from:
+            conditions.append(f"DATE({status_date_expr}) >= %s")
+            params.append(date_from)
 
-    if search:
-        like_term = f"%{search}%"
-        conditions.append(
-            """(
-                c.nome LIKE %s
-                OR c.cpf LIKE %s
-                OR o.produto LIKE %s
-                OR o.banco_digitacao LIKE %s
-                OR u.nome LIKE %s
-            )"""
-        )
-        params.extend([like_term, like_term, like_term, like_term, like_term])
+        if date_to:
+            conditions.append(f"DATE({status_date_expr}) <= %s")
+            params.append(date_to)
 
-    where_clause = " AND ".join(conditions)
+        if search:
+            like_term = f"%{search}%"
+            conditions.append(
+                """(
+                    c.nome LIKE %s
+                    OR c.cpf LIKE %s
+                    OR o.produto LIKE %s
+                    OR o.banco_digitacao LIKE %s
+                    OR u.nome LIKE %s
+                )"""
+            )
+            params.extend([like_term, like_term, like_term, like_term, like_term])
 
-    cursor.execute(
-        f"""
-        SELECT
-            o.id,
-            o.cliente_id,
-            c.nome AS cliente_nome,
-            c.cpf,
-            c.vendedor_id,
-            COALESCE(u.nome, '-') AS vendedor_nome,
-            o.produto,
-            o.banco_digitacao,
-            o.valor_liberado,
-            o.parcela_liberada,
-            o.prazo,
-            o.status,
-            o.criado_em,
-            {status_date_expr} AS status_changed_at
-        FROM operacoes o
-        JOIN clientes c ON c.id = o.cliente_id
-        LEFT JOIN usuarios u ON u.id = c.vendedor_id
-        LEFT JOIN (
+        where_clause = " AND ".join(conditions)
+
+        cursor.execute(
+            f"""
             SELECT
-                operation_id,
-                MAX(created_at) AS final_status_at
-            FROM operation_status_history
-            WHERE next_status IN ('APROVADO', 'REPROVADO')
-            GROUP BY operation_id
-        ) osh ON osh.operation_id = o.id
-        WHERE {where_clause}
-        ORDER BY status_changed_at DESC, o.id DESC
-        """,
-        tuple(params)
-    )
+                o.id,
+                o.cliente_id,
+                c.nome AS cliente_nome,
+                c.cpf,
+                c.vendedor_id,
+                COALESCE(u.nome, '-') AS vendedor_nome,
+                o.produto,
+                o.banco_digitacao,
+                o.valor_liberado,
+                o.parcela_liberada,
+                o.prazo,
+                o.status,
+                o.criado_em,
+                {status_date_expr} AS status_changed_at
+            FROM operacoes o
+            JOIN clientes c ON c.id = o.cliente_id
+            LEFT JOIN usuarios u ON u.id = c.vendedor_id
+            LEFT JOIN (
+                SELECT
+                    operation_id,
+                    MAX(created_at) AS final_status_at
+                FROM operation_status_history
+                WHERE next_status IN ('APROVADO', 'REPROVADO')
+                GROUP BY operation_id
+            ) osh ON osh.operation_id = o.id
+            WHERE {where_clause}
+            ORDER BY status_changed_at DESC, o.id DESC
+            """,
+            tuple(params)
+        )
 
-    operations = cursor.fetchall()
+        operations = cursor.fetchall()
 
-    vendors = []
-    if is_admin_like_role(role):
-        if role == ROLE_GLOBAL:
-            cursor.execute(
-                """
-                SELECT DISTINCT
-                    u.id,
-                    u.nome
-                FROM usuarios u
-                JOIN clientes c ON c.vendedor_id = u.id
-                JOIN operacoes o ON o.cliente_id = c.id
-                WHERE o.status IN ('APROVADO', 'REPROVADO')
-                ORDER BY u.nome ASC
-                """
-            )
-        else:
-            cursor.execute(
-                """
-                SELECT DISTINCT
-                    u.id,
-                    u.nome
-                FROM usuarios u
-                JOIN clientes c ON c.vendedor_id = u.id
-                JOIN operacoes o ON o.cliente_id = c.id
-                WHERE o.status IN ('APROVADO', 'REPROVADO')
-                  AND o.empresa_id = %s
-                ORDER BY u.nome ASC
-                """,
-                (current_user_company_id(),),
-            )
-        vendors = cursor.fetchall()
+        vendors = []
+        if is_admin_like_role(role):
+            if role == ROLE_GLOBAL:
+                cursor.execute(
+                    """
+                    SELECT DISTINCT
+                        u.id,
+                        u.nome
+                    FROM usuarios u
+                    JOIN clientes c ON c.vendedor_id = u.id
+                    JOIN operacoes o ON o.cliente_id = c.id
+                    WHERE o.status IN ('APROVADO', 'REPROVADO')
+                    ORDER BY u.nome ASC
+                    """
+                )
+            else:
+                cursor.execute(
+                    """
+                    SELECT DISTINCT
+                        u.id,
+                        u.nome
+                    FROM usuarios u
+                    JOIN clientes c ON c.vendedor_id = u.id
+                    JOIN operacoes o ON o.cliente_id = c.id
+                    WHERE o.status IN ('APROVADO', 'REPROVADO')
+                      AND o.empresa_id = %s
+                    ORDER BY u.nome ASC
+                    """,
+                    (current_user_company_id(),),
+                )
+            vendors = cursor.fetchall()
 
-    cursor.close()
-    db.close()
-
-    return jsonify({
-        "operations": operations,
-        "vendors": vendors
-    }), 200
+        return jsonify({
+            "operations": operations,
+            "vendors": vendors
+        }), 200
+    except mysql.connector.Error as exc:
+        if is_transient_db_connection_error(exc):
+            current_app.logger.warning("Falha temporaria ao carregar relatorio de operacoes: %s", exc)
+            return jsonify({"operations": [], "vendors": [], "degraded": True}), 200
+        current_app.logger.exception("Erro ao carregar relatorio de operacoes")
+        return jsonify({"error": "Erro ao carregar relatorio de operacoes"}), 500
+    except Exception:
+        current_app.logger.exception("Erro ao carregar relatorio de operacoes")
+        return jsonify({"error": "Erro ao carregar relatorio de operacoes"}), 500
+    finally:
+        if cursor is not None:
+            cursor.close()
+        if db is not None:
+            db.close()
 
 
 # ======================================================

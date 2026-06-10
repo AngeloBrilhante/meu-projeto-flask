@@ -458,12 +458,8 @@ export async function getPipeline() {
     headers: getAuthHeaders(),
   });
 
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.error || "Erro ao buscar pipeline");
-  }
-
-  return parseApiJson(response, "Erro ao excluir documento");
+  const data = await parseApiJson(response, "Erro ao buscar pipeline");
+  return Array.isArray(data) ? data : Array.isArray(data?.operations) ? data.operations : [];
 }
 
 export async function getOperationsReport(filters = {}) {
@@ -484,13 +480,7 @@ export async function getOperationsReport(filters = {}) {
     headers: getAuthHeaders(),
   });
 
-  const data = await response.json();
-
-  if (!response.ok) {
-    throw new Error(data.error || "Erro ao buscar relatorio");
-  }
-
-  return data;
+  return parseApiJson(response, "Erro ao buscar relatorio");
 }
 
 export async function getDashboardSummary(filters = {}) {
