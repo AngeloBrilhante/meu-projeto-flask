@@ -2461,7 +2461,7 @@ def create_operation(client_id):
             ficha_portabilidade,
             status,
             criado_em
-        ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'PRONTA_DIGITAR', NOW())
+        ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s, NOW())
     """, (
         company_id,
         client_id,
@@ -2473,6 +2473,7 @@ def create_operation(client_id):
         data.get("valor_solicitado"),
         data.get("parcela_solicitada"),
         ficha_portabilidade,
+        "PRONTA_DIGITAR",
     ))
 
     operation_id = cursor.lastrowid
