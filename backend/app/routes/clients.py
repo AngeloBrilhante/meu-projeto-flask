@@ -58,6 +58,15 @@ BASE_STORAGE = os.path.join(PRIMARY_STORAGE_ROOT, "clients")
 ALLOWED_EXTENSIONS = {"pdf", "jpg", "jpeg", "png"}
 DOCUMENT_BINARY_ENCODING = "base64"
 DEFAULT_MONTHLY_GOAL = 20000.0
+SCHEMA_ENSURE_CACHE = {
+    "documents_table": False,
+    "dashboard_goals_table": False,
+    "clients_extra_columns": False,
+    "operations_extra_columns": False,
+    "operation_comments_table": False,
+    "operation_status_history_table": False,
+    "operation_notifications_table": False,
+}
 MONTH_LABELS = [
     "Jan",
     "Fev",
@@ -253,6 +262,8 @@ def format_document_uploaded_at(value):
 
 
 def ensure_documents_table(cursor, db):
+    if SCHEMA_ENSURE_CACHE["documents_table"]:
+        return
     cursor.execute(
         """
         CREATE TABLE IF NOT EXISTS documentos (
@@ -363,6 +374,7 @@ def ensure_documents_table(cursor, db):
 
     if changed:
         db.commit()
+    SCHEMA_ENSURE_CACHE["documents_table"] = True
 
 
 def resolve_client_seller_id(cursor, client_id):
@@ -1056,6 +1068,8 @@ def normalize_optional_boolean(value):
 
 
 def ensure_dashboard_goals_table(cursor, db):
+    if SCHEMA_ENSURE_CACHE["dashboard_goals_table"]:
+        return
     ensure_company_scope_columns(cursor, db)
     cursor.execute(
         """
@@ -1072,9 +1086,12 @@ def ensure_dashboard_goals_table(cursor, db):
         """
     )
     db.commit()
+    SCHEMA_ENSURE_CACHE["dashboard_goals_table"] = True
 
 
 def ensure_clients_extra_columns(cursor, db):
+    if SCHEMA_ENSURE_CACHE["clients_extra_columns"]:
+        return
     ensure_company_scope_columns(cursor, db)
     cursor.execute(
         """
@@ -1142,9 +1159,12 @@ def ensure_clients_extra_columns(cursor, db):
 
     if changed:
         db.commit()
+    SCHEMA_ENSURE_CACHE["clients_extra_columns"] = True
 
 
 def ensure_operations_extra_columns(cursor, db):
+    if SCHEMA_ENSURE_CACHE["operations_extra_columns"]:
+        return
     ensure_company_scope_columns(cursor, db)
     cursor.execute(
         """
@@ -1319,9 +1339,12 @@ def ensure_operations_extra_columns(cursor, db):
 
     if changed:
         db.commit()
+    SCHEMA_ENSURE_CACHE["operations_extra_columns"] = True
 
 
 def ensure_operation_comments_table(cursor, db):
+    if SCHEMA_ENSURE_CACHE["operation_comments_table"]:
+        return
     ensure_company_scope_columns(cursor, db)
     cursor.execute(
         """
@@ -1336,9 +1359,12 @@ def ensure_operation_comments_table(cursor, db):
         """
     )
     db.commit()
+    SCHEMA_ENSURE_CACHE["operation_comments_table"] = True
 
 
 def ensure_operation_status_history_table(cursor, db):
+    if SCHEMA_ENSURE_CACHE["operation_status_history_table"]:
+        return
     ensure_company_scope_columns(cursor, db)
     cursor.execute(
         """
@@ -1356,9 +1382,12 @@ def ensure_operation_status_history_table(cursor, db):
         """
     )
     db.commit()
+    SCHEMA_ENSURE_CACHE["operation_status_history_table"] = True
 
 
 def ensure_operation_notifications_table(cursor, db):
+    if SCHEMA_ENSURE_CACHE["operation_notifications_table"]:
+        return
     ensure_company_scope_columns(cursor, db)
     cursor.execute(
         """
@@ -1378,6 +1407,7 @@ def ensure_operation_notifications_table(cursor, db):
         """
     )
     db.commit()
+    SCHEMA_ENSURE_CACHE["operation_notifications_table"] = True
 
 
 def register_operation_status_history(
@@ -5199,13 +5229,14 @@ def get_dashboard_summary():
             role_product_clause = f" AND UPPER(o.produto) IN ({role_product_placeholders})"
             role_product_params = list(allowed_role_products)
 
+        company_scope_id = actor_company_id if actor_company_id > 0 else None
         stats_params = list(sent_statuses) + [period_start, period_end]
         vendor_clause = ""
         company_clause = ""
 
-        if role != ROLE_GLOBAL:
+        if company_scope_id:
             company_clause = " AND o.empresa_id = %s"
-            stats_params.append(actor_company_id)
+            stats_params.append(company_scope_id)
 
         if selected_vendor_id:
             vendor_clause = " AND COALESCE(o.vendedor_id, c.vendedor_id) = %s"
@@ -5242,8 +5273,8 @@ def get_dashboard_summary():
         approved_params = [period_start, period_end]
         approved_vendor_clause = ""
 
-        if role != ROLE_GLOBAL:
-            approved_params.append(actor_company_id)
+        if company_scope_id:
+            approved_params.append(company_scope_id)
 
         if selected_vendor_id:
             approved_vendor_clause = " AND COALESCE(o.vendedor_id, c.vendedor_id) = %s"
@@ -5280,8 +5311,8 @@ def get_dashboard_summary():
         pipeline_params = list(PIPELINE_ACTIVE_STATUSES_WITH_LEGACY)
         pipeline_vendor_clause = ""
 
-        if role != ROLE_GLOBAL:
-            pipeline_params.append(actor_company_id)
+        if company_scope_id:
+            pipeline_params.append(company_scope_id)
 
         if selected_vendor_id:
             pipeline_vendor_clause = " AND COALESCE(o.vendedor_id, c.vendedor_id) = %s"
@@ -5310,8 +5341,8 @@ def get_dashboard_summary():
         series_params = [year]
         series_vendor_clause = ""
 
-        if role != ROLE_GLOBAL:
-            series_params.append(actor_company_id)
+        if company_scope_id:
+            series_params.append(company_scope_id)
 
         if selected_vendor_id:
             series_vendor_clause = " AND COALESCE(o.vendedor_id, c.vendedor_id) = %s"
@@ -5358,8 +5389,8 @@ def get_dashboard_summary():
         approved_by_product_params = [period_start, period_end]
         approved_by_product_vendor_clause = ""
 
-        if role != ROLE_GLOBAL:
-            approved_by_product_params.append(actor_company_id)
+        if company_scope_id:
+            approved_by_product_params.append(company_scope_id)
 
         if selected_vendor_id:
             approved_by_product_vendor_clause = " AND COALESCE(o.vendedor_id, c.vendedor_id) = %s"
@@ -5407,7 +5438,18 @@ def get_dashboard_summary():
 
         vendors = []
         if is_admin_like_role(role):
-            if role == ROLE_GLOBAL:
+            if company_scope_id:
+                cursor.execute(
+                    """
+                    SELECT id, nome
+                    FROM usuarios
+                    WHERE UPPER(role) = 'VENDEDOR'
+                      AND empresa_id = %s
+                    ORDER BY nome ASC
+                    """,
+                    (company_scope_id,),
+                )
+            elif role == ROLE_GLOBAL:
                 cursor.execute(
                     """
                     SELECT id, nome
@@ -5475,9 +5517,9 @@ def get_dashboard_summary():
         ]
         vendor_stats_clause = ""
 
-        if role != ROLE_GLOBAL:
+        if company_scope_id:
             vendor_stats_clause = " AND o.empresa_id = %s"
-            vendor_stats_params.append(actor_company_id)
+            vendor_stats_params.append(company_scope_id)
 
         if selected_vendor_id:
             vendor_stats_clause = f"{vendor_stats_clause} AND COALESCE(o.vendedor_id, c.vendedor_id) = %s"
@@ -5559,7 +5601,11 @@ def get_dashboard_summary():
                   AND (%s = 0 OR empresa_id = %s)
                 LIMIT 1
                 """,
-                (selected_vendor_id, 0 if role == ROLE_GLOBAL else actor_company_id, actor_company_id),
+                (
+                    selected_vendor_id,
+                    company_scope_id or 0,
+                    company_scope_id or 0,
+                ),
             )
             selected_vendor = cursor.fetchone()
             if not selected_vendor:
