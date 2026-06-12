@@ -171,6 +171,10 @@ export default function ClientOperations() {
   const isDigitador = role.startsWith("DIGITADOR");
   const canManageOperations = !isDigitador;
   const formSchema = getOperationSchema(form.produto);
+  const currentEditingOperation = useMemo(
+    () => operations.find((item) => item.id === editingOperationId) || null,
+    [operations, editingOperationId]
+  );
 
   async function loadOperations() {
     try {
@@ -296,13 +300,23 @@ export default function ClientOperations() {
     setLoading(true);
 
     try {
-      const payload = buildOperationPayloadFromFicha(
-        form.produto,
-        form.ficha_portabilidade
+      const normalizedEditingStatus = normalizeStatus(
+        currentEditingOperation?.status
       );
+      const isFinalEditingStatus =
+        normalizedEditingStatus === "APROVADO" ||
+        normalizedEditingStatus === "REPROVADO";
+
+      const payload =
+        editingOperationId && isGlobal && isFinalEditingStatus
+          ? { vendedor_id: Number(selectedVendorId) }
+          : buildOperationPayloadFromFicha(
+              form.produto,
+              form.ficha_portabilidade
+            );
 
       if (editingOperationId) {
-        if (isGlobal && selectedVendorId) {
+        if (!isFinalEditingStatus && isGlobal && selectedVendorId) {
           payload.vendedor_id = Number(selectedVendorId);
         }
         await updateOperation(editingOperationId, payload);
@@ -645,8 +659,13 @@ export default function ClientOperations() {
                 const isReadyToSend =
                   normalizedStatus === "PRONTA_DIGITAR" &&
                   !operation.enviada_esteira_em;
+                const isFinalStatus =
+                  normalizedStatus === "APROVADO" ||
+                  normalizedStatus === "REPROVADO";
                 const canEdit =
-                  isReadyToSend || normalizedStatus === "DEVOLVIDA_VENDEDOR";
+                  isReadyToSend ||
+                  normalizedStatus === "DEVOLVIDA_VENDEDOR" ||
+                  (isGlobal && isFinalStatus);
                 const canSend =
                   isReadyToSend ||
                   normalizedStatus === "AGUARDANDO_FORMALIZACAO" ||
