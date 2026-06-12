@@ -575,7 +575,7 @@ export default function ClientOperations() {
 	                            }
 	                            pattern={
                                   field.decimalFlexible || field.name === "saldo_quitacao"
-                                    ? "[0-9., -]*"
+                                    ? "[0-9.,\\s-]*"
                                     : undefined
                                 }
 	                            placeholder={

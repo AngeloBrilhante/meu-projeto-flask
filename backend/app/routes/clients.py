@@ -2461,7 +2461,7 @@ def create_operation(client_id):
             ficha_portabilidade,
             status,
             criado_em
-        ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,'PRONTA_DIGITAR', NOW())
+        ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'PRONTA_DIGITAR', NOW())
     """, (
         company_id,
         client_id,
