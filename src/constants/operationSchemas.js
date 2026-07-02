@@ -30,7 +30,6 @@ const BANK_LABELS = [
   "BANCO DO BRASIL",
   "CBA CAIXA",
   "INBURSA",
-  "AGIL",
 ];
 
 export const BANK_OPTIONS = BANK_LABELS.map((bank) => ({ value: bank, label: bank }));
