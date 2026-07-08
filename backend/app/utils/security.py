@@ -11,6 +11,8 @@ from urllib.parse import quote
 
 from flask import request
 
+from app.utils.company import ensure_once
+
 ROLE_ADMIN = "ADMIN"
 ROLE_GLOBAL = "GLOBAL"
 
@@ -46,6 +48,7 @@ def json_loads(value):
     return json.loads(text)
 
 
+@ensure_once
 def ensure_audit_logs_table(cursor, db):
     cursor.execute(
         """
@@ -71,6 +74,7 @@ def ensure_audit_logs_table(cursor, db):
     db.commit()
 
 
+@ensure_once
 def ensure_trash_bin_table(cursor, db):
     cursor.execute(
         """
@@ -94,6 +98,7 @@ def ensure_trash_bin_table(cursor, db):
     db.commit()
 
 
+@ensure_once
 def ensure_system_settings_table(cursor, db):
     cursor.execute(
         """
@@ -108,6 +113,7 @@ def ensure_system_settings_table(cursor, db):
     db.commit()
 
 
+@ensure_once
 def ensure_user_security_columns(cursor, db):
     cursor.execute(
         """

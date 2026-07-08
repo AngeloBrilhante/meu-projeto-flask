@@ -12,7 +12,7 @@ from io import BytesIO
 from flask import Blueprint, request, jsonify, send_file, current_app
 from flask_jwt_extended import jwt_required
 from app.database import get_db
-from app.utils.company import current_user_company_id, ensure_company_scope_columns
+from app.utils.company import current_user_company_id, ensure_company_scope_columns, ensure_once
 from app.utils.auth import (
     current_user_id,
     current_user_role,
@@ -252,6 +252,7 @@ def format_document_uploaded_at(value):
     return text
 
 
+@ensure_once
 def ensure_documents_table(cursor, db):
     cursor.execute(
         """
@@ -1055,6 +1056,7 @@ def normalize_optional_boolean(value):
     return text in {"1", "true", "sim", "yes", "on"}
 
 
+@ensure_once
 def ensure_dashboard_goals_table(cursor, db):
     ensure_company_scope_columns(cursor, db)
     cursor.execute(
@@ -1074,6 +1076,7 @@ def ensure_dashboard_goals_table(cursor, db):
     db.commit()
 
 
+@ensure_once
 def ensure_clients_extra_columns(cursor, db):
     ensure_company_scope_columns(cursor, db)
     cursor.execute(
@@ -1144,6 +1147,7 @@ def ensure_clients_extra_columns(cursor, db):
         db.commit()
 
 
+@ensure_once
 def ensure_operations_extra_columns(cursor, db):
     ensure_company_scope_columns(cursor, db)
     cursor.execute(
@@ -1303,6 +1307,7 @@ def ensure_operations_extra_columns(cursor, db):
         db.commit()
 
 
+@ensure_once
 def ensure_operation_comments_table(cursor, db):
     ensure_company_scope_columns(cursor, db)
     cursor.execute(
@@ -1320,6 +1325,7 @@ def ensure_operation_comments_table(cursor, db):
     db.commit()
 
 
+@ensure_once
 def ensure_operation_status_history_table(cursor, db):
     ensure_company_scope_columns(cursor, db)
     cursor.execute(
@@ -1340,6 +1346,7 @@ def ensure_operation_status_history_table(cursor, db):
     db.commit()
 
 
+@ensure_once
 def ensure_operation_notifications_table(cursor, db):
     ensure_company_scope_columns(cursor, db)
     cursor.execute(

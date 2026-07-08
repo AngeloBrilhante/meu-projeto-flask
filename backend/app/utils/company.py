@@ -1,5 +1,6 @@
 import re
 import unicodedata
+from functools import wraps
 
 from flask import g
 from flask_jwt_extended import get_jwt, get_jwt_identity
@@ -8,6 +9,25 @@ from app.database import get_db
 
 DEFAULT_COMPANY_NAME = "JRCRED"
 DEFAULT_COMPANY_SLUG = "jrcred"
+
+_ENSURE_ONCE_DONE = set()
+
+
+def ensure_once(fn):
+    # These functions re-check/migrate table schema via INFORMATION_SCHEMA
+    # and full-table UPDATEs on every call. They're idempotent, so once a
+    # worker process confirms the schema they no longer need to repeat the
+    # checks on every request (this was previously running on every API call
+    # and dominating request latency).
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
+        if fn in _ENSURE_ONCE_DONE:
+            return
+        result = fn(*args, **kwargs)
+        _ENSURE_ONCE_DONE.add(fn)
+        return result
+
+    return wrapper
 
 
 def normalize_company_slug(value):
@@ -83,6 +103,7 @@ def get_or_create_default_company(cursor, db):
     return cursor.fetchone()
 
 
+@ensure_once
 def ensure_company_scope_columns(cursor, db):
     default_company = get_or_create_default_company(cursor, db)
     default_company_id = int((default_company or {}).get("id") or 1)

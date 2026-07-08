@@ -25,6 +25,7 @@ from app.utils.company import (
     column_exists,
     current_user_company_id,
     ensure_company_scope_columns,
+    ensure_once,
     fetch_company_row,
     list_companies,
     normalize_company_slug,
@@ -135,6 +136,7 @@ def build_avatar_url(user_id, avatar_filename):
     return path
 
 
+@ensure_once
 def ensure_user_role_enum(cursor, db):
     cursor.execute(
         """
@@ -174,6 +176,7 @@ def ensure_user_role_enum(cursor, db):
     db.commit()
 
 
+@ensure_once
 def ensure_user_profile_columns(cursor, db):
     cursor.execute(
         """
