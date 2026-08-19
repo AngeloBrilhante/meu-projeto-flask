@@ -12,7 +12,13 @@ from io import BytesIO
 from flask import Blueprint, request, jsonify, send_file, current_app
 from flask_jwt_extended import jwt_required
 from app.database import get_db
-from app.utils.company import current_user_company_id, ensure_company_scope_columns, ensure_once
+from app.utils.company import (
+    current_user_company_id,
+    ensure_company_operations_lock_columns,
+    ensure_company_scope_columns,
+    ensure_once,
+    get_company_operations_lock,
+)
 from app.utils.auth import (
     current_user_id,
     current_user_role,
@@ -2414,6 +2420,7 @@ def create_operation(client_id):
     db = get_db()
     cursor = db.cursor(dictionary=True)
     ensure_company_scope_columns(cursor, db)
+    ensure_company_operations_lock_columns(cursor, db)
     ensure_operations_extra_columns(cursor, db)
     ensure_operation_status_history_table(cursor, db)
     ensure_operation_notifications_table(cursor, db)
@@ -2433,6 +2440,12 @@ def create_operation(client_id):
         cursor.close()
         db.close()
         return jsonify({"error": "Cliente sem empresa vinculada"}), 400
+
+    operations_lock = get_company_operations_lock(cursor, company_id)
+    if operations_lock.get("enabled"):
+        cursor.close()
+        db.close()
+        return jsonify({"error": operations_lock.get("message")}), 423
 
     cursor.execute("""
         INSERT INTO operacoes (

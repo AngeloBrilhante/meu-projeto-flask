@@ -427,6 +427,8 @@ def list_companies(cursor, only_active=False):
             cor_primaria,
             cor_secundaria,
             ativa,
+            operacoes_bloqueadas,
+            operacoes_bloqueadas_mensagem,
             criado_em
         FROM empresas
         {where_clause}
@@ -434,6 +436,93 @@ def list_companies(cursor, only_active=False):
         """
     )
     return cursor.fetchall()
+
+
+DEFAULT_OPERATIONS_LOCK_MESSAGE = (
+    "Criacao de novas operacoes esta temporariamente bloqueada para esta empresa."
+)
+
+
+@ensure_once
+def ensure_company_operations_lock_columns(cursor, db):
+    cursor.execute(
+        """
+        SELECT COLUMN_NAME
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'empresas'
+        """
+    )
+    existing = {row.get("COLUMN_NAME") for row in cursor.fetchall()}
+    changed = False
+
+    if "operacoes_bloqueadas" not in existing:
+        cursor.execute(
+            "ALTER TABLE empresas ADD COLUMN operacoes_bloqueadas TINYINT(1) NOT NULL DEFAULT 0"
+        )
+        changed = True
+
+    if "operacoes_bloqueadas_mensagem" not in existing:
+        cursor.execute(
+            "ALTER TABLE empresas ADD COLUMN operacoes_bloqueadas_mensagem VARCHAR(255) NULL"
+        )
+        changed = True
+
+    if "operacoes_bloqueadas_em" not in existing:
+        cursor.execute(
+            "ALTER TABLE empresas ADD COLUMN operacoes_bloqueadas_em DATETIME NULL"
+        )
+        changed = True
+
+    if "operacoes_bloqueadas_por" not in existing:
+        cursor.execute(
+            "ALTER TABLE empresas ADD COLUMN operacoes_bloqueadas_por INT NULL"
+        )
+        changed = True
+
+    if changed:
+        db.commit()
+
+
+def get_company_operations_lock(cursor, company_id):
+    cursor.execute(
+        """
+        SELECT operacoes_bloqueadas, operacoes_bloqueadas_mensagem
+        FROM empresas
+        WHERE id = %s
+        LIMIT 1
+        """,
+        (int(company_id),),
+    )
+    row = cursor.fetchone() or {}
+    enabled = bool(row.get("operacoes_bloqueadas"))
+    message = str(row.get("operacoes_bloqueadas_mensagem") or "").strip() or DEFAULT_OPERATIONS_LOCK_MESSAGE
+    return {"enabled": enabled, "message": message}
+
+
+def set_company_operations_lock(cursor, db, company_id, enabled, message, updated_by):
+    enabled = bool(enabled)
+    clean_message = str(message or "").strip()[:255] or None
+    timestamp_clause = "NOW()" if enabled else "operacoes_bloqueadas_em"
+
+    cursor.execute(
+        f"""
+        UPDATE empresas
+        SET operacoes_bloqueadas = %s,
+            operacoes_bloqueadas_mensagem = %s,
+            operacoes_bloqueadas_em = {timestamp_clause},
+            operacoes_bloqueadas_por = %s
+        WHERE id = %s
+        """,
+        (
+            1 if enabled else 0,
+            clean_message,
+            updated_by,
+            int(company_id),
+        ),
+    )
+    db.commit()
+    return get_company_operations_lock(cursor, company_id)
 
 
 def table_exists(cursor, table_name):

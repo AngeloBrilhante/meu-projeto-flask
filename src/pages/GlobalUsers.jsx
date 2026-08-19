@@ -6,6 +6,7 @@ import {
   deleteUser,
   listCompanies,
   listUsers,
+  updateCompanyOperationsLock,
   updateUserDigitadorScope,
 } from "../services/api";
 import "./GlobalUsers.css";
@@ -78,6 +79,7 @@ export default function GlobalUsers() {
   const [companySuccess, setCompanySuccess] = useState("");
   const [listError, setListError] = useState("");
   const [scopeLoadingId, setScopeLoadingId] = useState(null);
+  const [lockLoadingId, setLockLoadingId] = useState(null);
 
   useEffect(() => {
     if (!isGlobal) {
@@ -291,6 +293,53 @@ export default function GlobalUsers() {
     }
   }
 
+  async function handleToggleCompanyOperationsLock(company) {
+    const companyId = Number(company?.id);
+    if (!Number.isFinite(companyId) || companyId <= 0) return;
+
+    const willLock = !company?.operacoes_bloqueadas;
+    const companyName = String(company?.nome || "empresa").trim();
+
+    let message = company?.operacoes_bloqueadas_mensagem || "";
+    if (willLock) {
+      const confirmed = window.confirm(
+        `Bloquear a criacao de novas operacoes para ${companyName}? Operacoes ja existentes continuam funcionando normalmente. Essa acao exige o codigo 2FA do authenticator.`
+      );
+      if (!confirmed) return;
+
+      const typedMessage = window.prompt(
+        "Mensagem exibida para os usuarios dessa empresa ao tentar criar uma operacao (opcional):",
+        message || "Criacao de novas operacoes esta temporariamente bloqueada."
+      );
+      if (typedMessage === null) return;
+      message = typedMessage;
+    } else {
+      const confirmed = window.confirm(
+        `Desbloquear a criacao de novas operacoes para ${companyName}? Essa acao exige o codigo 2FA do authenticator.`
+      );
+      if (!confirmed) return;
+    }
+
+    const twofaCode = window.prompt("Digite o codigo 2FA de 6 digitos para confirmar:");
+    if (twofaCode === null) return;
+
+    try {
+      setListError("");
+      setLockLoadingId(companyId);
+      await updateCompanyOperationsLock(companyId, { enabled: willLock, message }, twofaCode);
+      setCompanySuccess(
+        willLock
+          ? `Criacao de operacoes bloqueada para ${companyName}.`
+          : `Criacao de operacoes liberada para ${companyName}.`
+      );
+      await loadCompaniesAndUsers(filters);
+    } catch (requestError) {
+      setListError(requestError.message || "Nao foi possivel atualizar o bloqueio de operacoes.");
+    } finally {
+      setLockLoadingId(null);
+    }
+  }
+
   return (
     <div className="globalUsersPage">
       <div className="globalUsersHead">
@@ -328,6 +377,63 @@ export default function GlobalUsers() {
             {companyLoading ? "Criando empresa..." : "Criar empresa"}
           </button>
         </form>
+
+        <div className="globalUsersTableWrap">
+          <table className="globalUsersTable">
+            <thead>
+              <tr>
+                <th>Empresa</th>
+                <th>Operacoes</th>
+                <th>Acao</th>
+              </tr>
+            </thead>
+            <tbody>
+              {companies.length ? (
+                companies.map((company) => {
+                  const isLocked = Boolean(company.operacoes_bloqueadas);
+                  return (
+                    <tr key={company.id}>
+                      <td>{company.nome || "-"}</td>
+                      <td>
+                        <span
+                          className={`globalUsersScopeBadge ${isLocked ? "locked" : "full"}`}
+                          title={isLocked ? company.operacoes_bloqueadas_mensagem || "" : ""}
+                        >
+                          {isLocked ? "Bloqueadas" : "Liberadas"}
+                        </span>
+                      </td>
+                      <td>
+                        <button
+                          type="button"
+                          className={isLocked ? "secondary" : "danger"}
+                          onClick={() => handleToggleCompanyOperationsLock(company)}
+                          disabled={lockLoadingId === company.id}
+                          title={
+                            isLocked
+                              ? "Voltar a permitir a criacao de novas operacoes"
+                              : "Impedir a criacao de novas operacoes (operacoes existentes continuam funcionando)"
+                          }
+                        >
+                          {lockLoadingId === company.id
+                            ? "Salvando..."
+                            : isLocked
+                            ? "Desbloquear operacoes"
+                            : "Bloquear operacoes"}
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })
+              ) : (
+                <tr>
+                  <td colSpan="3" className="globalUsersEmpty">
+                    Nenhuma empresa cadastrada.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </section>
 
       <section className="globalUsersCard">

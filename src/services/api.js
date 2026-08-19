@@ -841,3 +841,27 @@ export async function deleteUser(userId, twofaCode) {
   return data;
 }
 
+export async function updateCompanyOperationsLock(companyId, { enabled, message }, twofaCode) {
+  const payload = { enabled: Boolean(enabled) };
+  if (message) {
+    payload.message = String(message).trim();
+  }
+  if (twofaCode) {
+    payload.twofa_code = String(twofaCode).trim();
+  }
+
+  const response = await fetch(`${API_URL}/companies/${companyId}/operations-lock`, {
+    method: "PUT",
+    headers: getAuthHeaders(true),
+    body: JSON.stringify(payload),
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.error || "Erro ao atualizar bloqueio de operacoes");
+  }
+
+  return data;
+}
+

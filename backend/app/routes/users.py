@@ -24,11 +24,14 @@ from app.database import get_db
 from app.utils.company import (
     column_exists,
     current_user_company_id,
+    ensure_company_operations_lock_columns,
     ensure_company_scope_columns,
     ensure_once,
     fetch_company_row,
+    get_company_operations_lock,
     list_companies,
     normalize_company_slug,
+    set_company_operations_lock,
     table_exists,
 )
 from app.utils.security import (
@@ -690,12 +693,82 @@ def get_companies():
     cursor = db.cursor(dictionary=True)
     try:
         ensure_company_scope_columns(cursor, db)
+        ensure_company_operations_lock_columns(cursor, db)
         if actor_is_global():
             companies = list_companies(cursor)
         else:
             company = fetch_company_row(cursor, current_user_company_id())
             companies = [company] if company else []
         return jsonify({"companies": companies}), 200
+    finally:
+        cursor.close()
+        db.close()
+
+
+@users_bp.route("/companies/<int:company_id>/operations-lock", methods=["PUT"])
+@jwt_required()
+def update_company_operations_lock(company_id):
+    actor_id = int(get_jwt_identity())
+    actor_role = current_actor_role()
+    if not actor_is_global():
+        return jsonify({"error": "Somente GLOBAL pode bloquear operacoes de uma empresa"}), 403
+
+    data = request.get_json(silent=True) or {}
+    if "enabled" not in data or not isinstance(data.get("enabled"), bool):
+        return jsonify({"error": "enabled deve ser booleano"}), 400
+    enabled = data.get("enabled")
+    message = data.get("message")
+
+    db = get_db()
+    cursor = db.cursor(dictionary=True)
+    try:
+        ensure_company_operations_lock_columns(cursor, db)
+        ensure_audit_logs_table(cursor, db)
+
+        company = fetch_company_row(cursor, company_id)
+        if not company:
+            return jsonify({"error": "Empresa nao encontrada"}), 404
+
+        twofa_error = require_global_twofa(cursor, actor_id)
+        if twofa_error:
+            log_audit(
+                cursor,
+                actor_id=actor_id,
+                actor_role=actor_role,
+                action="SET_COMPANY_OPERATIONS_LOCK",
+                target_type="EMPRESA",
+                target_id=company_id,
+                success=False,
+                reason="2FA invalido",
+            )
+            db.commit()
+            return twofa_error
+
+        state = set_company_operations_lock(
+            cursor,
+            db,
+            company_id=company_id,
+            enabled=enabled,
+            message=message,
+            updated_by=actor_id,
+        )
+        log_audit(
+            cursor,
+            actor_id=actor_id,
+            actor_role=actor_role,
+            action="SET_COMPANY_OPERATIONS_LOCK",
+            target_type="EMPRESA",
+            target_id=company_id,
+            success=True,
+            metadata=state,
+        )
+        db.commit()
+        return jsonify(
+            {
+                "message": "Bloqueio de operacoes atualizado",
+                "operations_lock": state,
+            }
+        ), 200
     finally:
         cursor.close()
         db.close()
