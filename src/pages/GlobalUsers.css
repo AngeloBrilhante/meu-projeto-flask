@@ -205,6 +205,41 @@
   color: var(--accent);
 }
 
+.globalUsersAccess {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.globalUsersAccess small {
+  font-size: 11px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.globalUsersAccessBadge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+  background: var(--surface-strong);
+  color: var(--text-secondary);
+}
+
+.globalUsersAccessBadge.limited {
+  background: var(--brand-gold-soft);
+  color: var(--brand-gold-strong);
+}
+
+.globalUsersAccessBadge.expired {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
 .globalUsersScopeBadge.locked {
   background: color-mix(in srgb, var(--danger) 18%, transparent);
   border-color: color-mix(in srgb, var(--danger) 55%, transparent);

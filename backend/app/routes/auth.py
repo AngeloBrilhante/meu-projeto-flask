@@ -4,6 +4,14 @@ from werkzeug.security import check_password_hash
 
 from app.database import get_db
 from app.utils.company import column_exists, table_exists
+from app.utils.security import (
+    ACCESS_EXPIRED,
+    SESSION_MESSAGES,
+    access_expired,
+    ensure_user_security_columns,
+    is_session_exempt,
+    start_user_session,
+)
 
 auth_bp = Blueprint("auth", __name__)
 
@@ -44,6 +52,7 @@ def fetch_login_user(cursor, email):
             u.email,
             u.senha_hash,
             u.role,
+            u.acesso_expira_em,
             {company_select} AS empresa_id,
             {company_fields}
         FROM usuarios u
@@ -71,22 +80,34 @@ def login():
 
     db = get_db()
     cursor = db.cursor(dictionary=True)
-    user = fetch_login_user(cursor, email)
-    cursor.close()
-    db.close()
+    try:
+        ensure_user_security_columns(cursor, db)
+        user = fetch_login_user(cursor, email)
 
-    if not user:
-        return jsonify({"message": "Credenciais invalidas"}), 401
+        if not user:
+            return jsonify({"message": "Credenciais invalidas"}), 401
 
-    stored_hash = user.get("senha_hash") or ""
-    if not stored_hash or not check_password_hash(stored_hash, senha):
-        return jsonify({"message": "Credenciais invalidas"}), 401
+        stored_hash = user.get("senha_hash") or ""
+        if not stored_hash or not check_password_hash(stored_hash, senha):
+            return jsonify({"message": "Credenciais invalidas"}), 401
+
+        if not is_session_exempt(user.get("role")) and access_expired(
+            user.get("acesso_expira_em")
+        ):
+            message = SESSION_MESSAGES[ACCESS_EXPIRED]
+            return jsonify({"message": message, "error": message, "code": ACCESS_EXPIRED}), 403
+
+        session_id = start_user_session(cursor, db, user["id"])
+    finally:
+        cursor.close()
+        db.close()
 
     token = create_access_token(
         identity=str(user["id"]),
         additional_claims={
             "email": user["email"],
             "role": user["role"],
+            "sid": session_id,
             "empresa_id": user.get("empresa_id"),
             "empresa_nome": user.get("empresa_nome"),
             "empresa_slug": user.get("empresa_slug"),

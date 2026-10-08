@@ -1,4 +1,5 @@
 import { getApiUrl } from "../config/api";
+import { handleSessionRejection } from "../utils/sessionGuard";
 
 const API_URL = getApiUrl();
 
@@ -262,6 +263,8 @@ export function uploadClientAttachment(clientId, file, meta = {}, onProgress) {
 
       if (xhr.status >= 200 && xhr.status < 300) {
         resolve(data);
+      } else if (xhr.status === 401 && handleSessionRejection(data.code)) {
+        reject(new Error(data.error || "Sessao encerrada"));
       } else if (xhr.status === 413) {
         reject(new Error("Arquivo muito grande (limite de 25 MB)."));
       } else {
@@ -692,6 +695,39 @@ export async function updateCurrentUserPassword(payload) {
   }
 
   return data;
+}
+
+/* =======================
+   SESSAO UNICA / VALIDADE
+======================= */
+export function logoutSession() {
+  const token = localStorage.getItem("token");
+  if (!token) return Promise.resolve();
+
+  return fetch(`${API_URL}/logout`, {
+    method: "POST",
+    headers: getAuthHeaders(),
+    keepalive: true,
+  }).catch(() => {});
+}
+
+export async function updateUserAccess(userId, acessoExpiraEm) {
+  const response = await fetch(`${API_URL}/users/${userId}/access`, {
+    method: "PUT",
+    headers: getAuthHeaders(),
+    body: JSON.stringify({ acesso_expira_em: acessoExpiraEm || null }),
+  });
+
+  return parseApiJson(response, "Erro ao atualizar validade de acesso");
+}
+
+export async function endUserSession(userId) {
+  const response = await fetch(`${API_URL}/users/${userId}/end-session`, {
+    method: "POST",
+    headers: getAuthHeaders(),
+  });
+
+  return parseApiJson(response, "Erro ao encerrar sessao do usuario");
 }
 
 export async function createUser(payload) {

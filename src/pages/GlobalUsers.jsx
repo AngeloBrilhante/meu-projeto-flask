@@ -4,9 +4,11 @@ import {
   createCompany,
   createUser,
   deleteUser,
+  endUserSession,
   listCompanies,
   listUsers,
   updateCompanyOperationsLock,
+  updateUserAccess,
   updateUserDigitadorScope,
 } from "../services/api";
 import "./GlobalUsers.css";
@@ -44,6 +46,19 @@ function isDigitadorRole(role) {
   return String(role || "").toUpperCase().startsWith("DIGITADOR");
 }
 
+function formatBrDate(value) {
+  const text = String(value || "");
+  const [datePart, timePart = ""] = text.split(" ");
+  const [year, month, day] = datePart.split("-");
+  if (!year || !month || !day) return text || "-";
+  return timePart ? `${day}/${month}/${year} ${timePart.slice(0, 5)}` : `${day}/${month}/${year}`;
+}
+
+function brToIsoDate(value) {
+  const match = String(value || "").trim().match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  return match ? `${match[3]}-${match[2]}-${match[1]}` : null;
+}
+
 export default function GlobalUsers() {
   const navigate = useNavigate();
   const storedUser = useMemo(() => getStoredUser(), []);
@@ -57,8 +72,10 @@ export default function GlobalUsers() {
     role: "ADMIN",
     empresa_id: "",
     digitador_full_scope: false,
+    acesso_expira_em: "",
   });
   const [confirmSenha, setConfirmSenha] = useState("");
+  const [accessLoadingId, setAccessLoadingId] = useState(null);
   const [companies, setCompanies] = useState([]);
   const [users, setUsers] = useState([]);
   const [filters, setFilters] = useState({
@@ -184,6 +201,7 @@ export default function GlobalUsers() {
         role: roleValue,
         empresa_id: Number(empresaId),
         digitador_full_scope: Boolean(form.digitador_full_scope),
+        acesso_expira_em: form.acesso_expira_em || null,
       });
       const created = result?.user || {};
       setCreateSuccess(
@@ -196,6 +214,7 @@ export default function GlobalUsers() {
         role: "ADMIN",
         empresa_id: empresaId,
         digitador_full_scope: false,
+        acesso_expira_em: "",
       });
       setConfirmSenha("");
       await loadCompaniesAndUsers(filters);
@@ -265,6 +284,60 @@ export default function GlobalUsers() {
       await loadCompaniesAndUsers(filters);
     } catch (requestError) {
       setListError(requestError.message || "Nao foi possivel excluir o usuario.");
+    }
+  }
+
+  async function handleEditAccess(targetUser) {
+    const current = targetUser?.acesso_expira_em
+      ? formatBrDate(String(targetUser.acesso_expira_em).split(" ")[0])
+      : "";
+    const answer = window.prompt(
+      `Acesso de ${targetUser?.nome || "usuario"} valido ate (dd/mm/aaaa).\nDeixe em branco para acesso sem validade.`,
+      current
+    );
+    if (answer === null) return;
+
+    const trimmed = answer.trim();
+    const isoDate = trimmed ? brToIsoDate(trimmed) : null;
+    if (trimmed && !isoDate) {
+      setListError("Data invalida. Use o formato dd/mm/aaaa.");
+      return;
+    }
+
+    try {
+      setListError("");
+      setAccessLoadingId(targetUser.id);
+      const result = await updateUserAccess(targetUser.id, isoDate);
+      const updated = result?.user || {};
+      setCreateSuccess(
+        updated.acesso_expira_em
+          ? `Acesso de ${updated.nome} valido ate ${formatBrDate(updated.acesso_expira_em.split(" ")[0])}.`
+          : `Acesso de ${updated.nome} agora sem validade.`
+      );
+      await loadCompaniesAndUsers(filters);
+    } catch (requestError) {
+      setListError(requestError.message || "Nao foi possivel atualizar a validade.");
+    } finally {
+      setAccessLoadingId(null);
+    }
+  }
+
+  async function handleEndSession(targetUser) {
+    const confirmed = window.confirm(
+      `Encerrar a sessao de ${targetUser?.nome || "usuario"}? Ele sera desconectado e precisara fazer login de novo.`
+    );
+    if (!confirmed) return;
+
+    try {
+      setListError("");
+      setAccessLoadingId(targetUser.id);
+      await endUserSession(targetUser.id);
+      setCreateSuccess(`Sessao de ${targetUser?.nome || "usuario"} encerrada.`);
+      await loadCompaniesAndUsers(filters);
+    } catch (requestError) {
+      setListError(requestError.message || "Nao foi possivel encerrar a sessao.");
+    } finally {
+      setAccessLoadingId(null);
     }
   }
 
@@ -532,6 +605,16 @@ export default function GlobalUsers() {
             />
           </label>
 
+          <label>
+            Acesso valido ate (opcional)
+            <input
+              type="date"
+              value={form.acesso_expira_em}
+              onChange={(event) => handleChange("acesso_expira_em", event.target.value)}
+              title="Para usuarios de teste: depois desta data o acesso e bloqueado"
+            />
+          </label>
+
           <button type="submit" disabled={loading}>
             {loading ? "Criando..." : "Criar usuario"}
           </button>
@@ -615,13 +698,14 @@ export default function GlobalUsers() {
                 <th>Perfil</th>
                 <th>Visao</th>
                 <th>2FA</th>
+                <th>Acesso</th>
                 <th>Acao</th>
               </tr>
             </thead>
             <tbody>
               {usersLoading ? (
                 <tr>
-                  <td colSpan="7" className="globalUsersEmpty">
+                  <td colSpan="8" className="globalUsersEmpty">
                     Carregando usuarios...
                   </td>
                 </tr>
@@ -651,7 +735,51 @@ export default function GlobalUsers() {
                       </td>
                       <td>{item.twofa_enabled ? "Ativo" : "Inativo"}</td>
                       <td>
+                        <div className="globalUsersAccess">
+                          {item.acesso_expirado ? (
+                            <span className="globalUsersAccessBadge expired">Expirado</span>
+                          ) : item.acesso_expira_em ? (
+                            <span className="globalUsersAccessBadge limited">
+                              Ate {formatBrDate(item.acesso_expira_em.split(" ")[0])}
+                            </span>
+                          ) : (
+                            <span className="globalUsersAccessBadge">Sem validade</span>
+                          )}
+                          <small>
+                            {String(item.role).toUpperCase() === "GLOBAL"
+                              ? "Sessoes livres"
+                              : item.sessao_iniciada_em
+                              ? `Online desde ${formatBrDate(item.sessao_iniciada_em)}`
+                              : "Sem sessao ativa"}
+                          </small>
+                        </div>
+                      </td>
+                      <td>
                         <div className="globalUsersActionGroup">
+                          {String(item.role).toUpperCase() !== "GLOBAL" && (
+                            <>
+                              <button
+                                type="button"
+                                className="secondary"
+                                onClick={() => handleEditAccess(item)}
+                                disabled={accessLoadingId === item.id}
+                                title="Definir ou prorrogar a validade do acesso"
+                              >
+                                Validade
+                              </button>
+                              {item.sessao_iniciada_em && !isSelf && (
+                                <button
+                                  type="button"
+                                  className="secondary"
+                                  onClick={() => handleEndSession(item)}
+                                  disabled={accessLoadingId === item.id}
+                                  title="Desconectar o usuario agora"
+                                >
+                                  Encerrar sessao
+                                </button>
+                              )}
+                            </>
+                          )}
                           {isDigitadorRole(item.role) && (
                             <button
                               type="button"
@@ -683,7 +811,7 @@ export default function GlobalUsers() {
                 })
               ) : (
                 <tr>
-                  <td colSpan="7" className="globalUsersEmpty">
+                  <td colSpan="8" className="globalUsersEmpty">
                     Nenhum usuario encontrado com os filtros atuais.
                   </td>
                 </tr>

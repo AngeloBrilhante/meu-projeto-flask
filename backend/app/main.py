@@ -1,7 +1,7 @@
 import os
 
 from dotenv import load_dotenv
-from flask import Flask, jsonify, request
+from flask import Flask, g, jsonify, request
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager, get_jwt, verify_jwt_in_request
 
@@ -14,8 +14,13 @@ from app.routes.users import users_bp
 from app.utils.security import (
     ROLE_ADMIN,
     ROLE_GLOBAL,
+    SESSION_MESSAGES,
+    SESSION_REPLACED,
     ensure_system_settings_table,
+    ensure_user_security_columns,
+    get_session_rejection,
     get_maintenance_state,
+    is_session_exempt,
 )
 
 load_dotenv()
@@ -24,6 +29,7 @@ MAINTENANCE_PUBLIC_PATHS = {
     "/api/health",
     "/api/login",
     "/api/users/login",
+    "/api/logout",
     "/api/system/maintenance/status",
     "/api/uploads/health",
 }
@@ -49,7 +55,45 @@ def create_app():
     # Anexos do cliente aceitam ate 25 MB por arquivo; margem para o multipart.
     app.config["MAX_CONTENT_LENGTH"] = 30 * 1024 * 1024
 
-    JWTManager(app)
+    jwt = JWTManager(app)
+
+    @jwt.token_in_blocklist_loader
+    def check_single_session(jwt_header, jwt_payload):
+        role = jwt_payload.get("role")
+        if is_session_exempt(role):
+            return False
+
+        db = None
+        cursor = None
+        try:
+            db = get_db()
+            cursor = db.cursor(dictionary=True)
+            ensure_user_security_columns(cursor, db)
+            reason = get_session_rejection(
+                cursor,
+                int(jwt_payload.get("sub")),
+                role,
+                jwt_payload.get("sid"),
+            )
+        except Exception:
+            # Falha de banco nao deve derrubar a sessao de todos os usuarios.
+            app.logger.exception("Falha ao validar sessao unica")
+            return False
+        finally:
+            if cursor is not None:
+                cursor.close()
+            if db is not None:
+                db.close()
+
+        if reason:
+            g.session_rejection = reason
+            return True
+        return False
+
+    @jwt.revoked_token_loader
+    def session_rejected(jwt_header, jwt_payload):
+        reason = getattr(g, "session_rejection", SESSION_REPLACED)
+        return jsonify({"error": SESSION_MESSAGES[reason], "code": reason}), 401
 
     cors_origins = parse_cors_origins()
     CORS(

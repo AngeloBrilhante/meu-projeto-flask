@@ -4,7 +4,7 @@ import json
 import secrets
 import struct
 import time
-from datetime import date, datetime
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from hashlib import sha1
 from urllib.parse import quote
@@ -134,8 +134,97 @@ def ensure_user_security_columns(cursor, db):
         cursor.execute("ALTER TABLE usuarios ADD COLUMN twofa_enabled TINYINT(1) NOT NULL DEFAULT 0")
         changed = True
 
+    if "sessao_id" not in columns:
+        cursor.execute("ALTER TABLE usuarios ADD COLUMN sessao_id VARCHAR(64) NULL")
+        changed = True
+
+    if "sessao_iniciada_em" not in columns:
+        cursor.execute("ALTER TABLE usuarios ADD COLUMN sessao_iniciada_em DATETIME NULL")
+        changed = True
+
+    if "acesso_expira_em" not in columns:
+        cursor.execute("ALTER TABLE usuarios ADD COLUMN acesso_expira_em DATETIME NULL")
+        changed = True
+
     if changed:
         db.commit()
+
+
+# ======================================================
+# SESSAO UNICA E VALIDADE DE ACESSO
+# ======================================================
+SESSION_EXEMPT_ROLES = {ROLE_GLOBAL}
+SESSION_REPLACED = "SESSION_REPLACED"
+ACCESS_EXPIRED = "ACCESS_EXPIRED"
+SESSION_MESSAGES = {
+    SESSION_REPLACED: "Sua conta foi acessada em outro computador. Faca login novamente.",
+    ACCESS_EXPIRED: "Periodo de acesso encerrado. Fale com o administrador.",
+}
+
+
+BRAZIL_TZ = timezone(timedelta(hours=-3))
+
+
+def brazil_now():
+    # Validade e gravada como horario de Brasilia (sem fuso), independente do fuso do servidor.
+    return datetime.now(BRAZIL_TZ).replace(tzinfo=None)
+
+
+def is_session_exempt(role):
+    return normalize_role(role) in SESSION_EXEMPT_ROLES
+
+
+def access_expired(expires_at):
+    if not expires_at:
+        return False
+    if isinstance(expires_at, str):
+        try:
+            expires_at = datetime.strptime(expires_at[:19], "%Y-%m-%d %H:%M:%S")
+        except ValueError:
+            return False
+    return expires_at < brazil_now()
+
+
+def start_user_session(cursor, db, user_id):
+    session_id = secrets.token_hex(16)
+    cursor.execute(
+        """
+        UPDATE usuarios
+        SET sessao_id = %s,
+            sessao_iniciada_em = NOW()
+        WHERE id = %s
+        """,
+        (session_id, user_id),
+    )
+    db.commit()
+    return session_id
+
+
+def get_session_rejection(cursor, user_id, role, session_id):
+    """Retorna o codigo do motivo se o token deve ser recusado, senao None."""
+    if is_session_exempt(role):
+        return None
+
+    cursor.execute(
+        """
+        SELECT sessao_id, acesso_expira_em
+        FROM usuarios
+        WHERE id = %s
+        LIMIT 1
+        """,
+        (user_id,),
+    )
+    row = cursor.fetchone()
+    if not row:
+        return SESSION_REPLACED
+
+    if access_expired(row.get("acesso_expira_em")):
+        return ACCESS_EXPIRED
+
+    if not session_id or session_id != row.get("sessao_id"):
+        return SESSION_REPLACED
+
+    return None
 
 
 def get_request_ip():

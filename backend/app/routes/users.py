@@ -1,6 +1,7 @@
 import os
 import re
 import uuid
+from datetime import datetime
 
 from flask import (
     Blueprint,
@@ -35,6 +36,9 @@ from app.utils.company import (
     table_exists,
 )
 from app.utils.security import (
+    ACCESS_EXPIRED,
+    SESSION_MESSAGES,
+    access_expired,
     add_to_trash,
     build_otpauth_uri,
     ensure_audit_logs_table,
@@ -43,8 +47,10 @@ from app.utils.security import (
     generate_totp_secret,
     get_twofa_code_from_request,
     insert_row,
+    is_session_exempt,
     log_audit,
     row_to_insert_dict,
+    start_user_session,
     verify_totp_code,
     verify_user_twofa,
 )
@@ -236,6 +242,24 @@ def ensure_user_profile_columns(cursor, db):
     ensure_user_security_columns(cursor, db)
 
 
+def format_user_datetime(value):
+    if isinstance(value, datetime):
+        return value.strftime("%Y-%m-%d %H:%M:%S")
+    return str(value) if value else None
+
+
+def parse_access_expiration(value):
+    """Converte 'YYYY-MM-DD' no fim do dia (horario de Brasilia). Vazio = sem validade."""
+    text = str(value or "").strip()
+    if not text:
+        return None
+    try:
+        day = datetime.strptime(text[:10], "%Y-%m-%d")
+    except ValueError as exc:
+        raise ValueError("Data de validade invalida (use AAAA-MM-DD)") from exc
+    return day.replace(hour=23, minute=59, second=59)
+
+
 def serialize_user(row):
     if not row:
         return None
@@ -252,6 +276,9 @@ def serialize_user(row):
         "foto_url": build_avatar_url(user_id, row.get("foto_arquivo")),
         "twofa_enabled": bool(row.get("twofa_enabled")),
         "digitador_full_scope": bool(row.get("digitador_full_scope")),
+        "acesso_expira_em": format_user_datetime(row.get("acesso_expira_em")),
+        "acesso_expirado": access_expired(row.get("acesso_expira_em")),
+        "sessao_iniciada_em": format_user_datetime(row.get("sessao_iniciada_em")),
         "empresa_id": company_id or None,
         "empresa": {
             "id": company_id or None,
@@ -272,6 +299,7 @@ def fetch_user_by_email(cursor, email):
     has_foto_arquivo = column_exists(cursor, "usuarios", "foto_arquivo")
     has_twofa_enabled = column_exists(cursor, "usuarios", "twofa_enabled")
     has_digitador_full_scope = column_exists(cursor, "usuarios", "digitador_full_scope")
+    has_access_columns = column_exists(cursor, "usuarios", "acesso_expira_em")
 
     cursor.execute(
         f"""
@@ -286,6 +314,8 @@ def fetch_user_by_email(cursor, email):
             {("u.foto_arquivo" if has_foto_arquivo else "NULL")} AS foto_arquivo,
             {("COALESCE(u.twofa_enabled, 0)" if has_twofa_enabled else "0")} AS twofa_enabled,
             {("COALESCE(u.digitador_full_scope, 0)" if has_digitador_full_scope else "0")} AS digitador_full_scope,
+            {("u.acesso_expira_em" if has_access_columns else "NULL")} AS acesso_expira_em,
+            {("u.sessao_iniciada_em" if has_access_columns else "NULL")} AS sessao_iniciada_em,
             {("u.empresa_id" if has_user_company else "NULL")} AS empresa_id,
             {("e.nome" if has_user_company and has_empresas else "NULL")} AS empresa_nome,
             {("e.slug" if has_user_company and has_empresas else "NULL")} AS empresa_slug,
@@ -311,6 +341,7 @@ def fetch_user_row(cursor, user_id):
     has_twofa_enabled = column_exists(cursor, "usuarios", "twofa_enabled")
     has_twofa_secret = column_exists(cursor, "usuarios", "twofa_secret")
     has_digitador_full_scope = column_exists(cursor, "usuarios", "digitador_full_scope")
+    has_access_columns = column_exists(cursor, "usuarios", "acesso_expira_em")
 
     cursor.execute(
         f"""
@@ -326,6 +357,8 @@ def fetch_user_row(cursor, user_id):
             {("u.twofa_secret" if has_twofa_secret else "NULL")} AS twofa_secret,
             {("COALESCE(u.twofa_enabled, 0)" if has_twofa_enabled else "0")} AS twofa_enabled,
             {("COALESCE(u.digitador_full_scope, 0)" if has_digitador_full_scope else "0")} AS digitador_full_scope,
+            {("u.acesso_expira_em" if has_access_columns else "NULL")} AS acesso_expira_em,
+            {("u.sessao_iniciada_em" if has_access_columns else "NULL")} AS sessao_iniciada_em,
             {("u.empresa_id" if has_user_company else "NULL")} AS empresa_id,
             {("e.nome" if has_user_company and has_empresas else "NULL")} AS empresa_nome,
             {("e.slug" if has_user_company and has_empresas else "NULL")} AS empresa_slug,
@@ -441,6 +474,8 @@ def list_users():
                 u.foto_arquivo,
                 COALESCE(u.twofa_enabled, 0) AS twofa_enabled,
                 COALESCE(u.digitador_full_scope, 0) AS digitador_full_scope,
+                u.acesso_expira_em,
+                u.sessao_iniciada_em,
                 u.empresa_id,
                 e.nome AS empresa_nome,
                 e.slug AS empresa_slug,
@@ -495,6 +530,11 @@ def create_user():
             }
         ), 400
 
+    try:
+        acesso_expira_em = parse_access_expiration(data.get("acesso_expira_em"))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
     senha_hash = generate_password_hash(senha)
 
     db = get_db()
@@ -530,11 +570,12 @@ def create_user():
                 senha_hash,
                 role,
                 empresa_id,
-                digitador_full_scope
+                digitador_full_scope,
+                acesso_expira_em
             )
-            VALUES (%s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
             """,
-            (nome, email, senha_hash, role, empresa_id, digitador_full_scope),
+            (nome, email, senha_hash, role, empresa_id, digitador_full_scope, acesso_expira_em),
         )
         db.commit()
 
@@ -605,6 +646,128 @@ def update_user_digitador_scope(user_id):
         db.close()
 
 
+def load_manageable_user(cursor, user_id):
+    """Busca o usuario alvo respeitando o escopo: ADMIN so gerencia a propria empresa."""
+    row = fetch_user_row(cursor, user_id)
+    if not row:
+        return None, (jsonify({"error": "Usuario nao encontrado"}), 404)
+
+    if not actor_is_global():
+        if normalize_role(row.get("role")) == ROLE_GLOBAL or int(
+            row.get("empresa_id") or 0
+        ) != current_user_company_id():
+            return None, (jsonify({"error": "Acesso nao autorizado"}), 403)
+
+    return row, None
+
+
+@users_bp.route("/logout", methods=["POST"])
+@jwt_required()
+def logout_session():
+    claims = get_jwt() or {}
+    session_id = claims.get("sid")
+    if not session_id:
+        return jsonify({"message": "Sessao encerrada"}), 200
+
+    db = get_db()
+    cursor = db.cursor(dictionary=True)
+    try:
+        cursor.execute(
+            """
+            UPDATE usuarios
+            SET sessao_id = NULL,
+                sessao_iniciada_em = NULL
+            WHERE id = %s
+              AND sessao_id = %s
+            """,
+            (int(get_jwt_identity()), session_id),
+        )
+        db.commit()
+        return jsonify({"message": "Sessao encerrada"}), 200
+    finally:
+        cursor.close()
+        db.close()
+
+
+@users_bp.route("/users/<int:user_id>/access", methods=["PUT"])
+@jwt_required()
+def update_user_access(user_id):
+    if not actor_can_manage_users():
+        return jsonify({"error": "Acesso nao autorizado"}), 403
+
+    data = request.get_json(silent=True) or {}
+    try:
+        acesso_expira_em = parse_access_expiration(data.get("acesso_expira_em"))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    db = get_db()
+    cursor = db.cursor(dictionary=True)
+    try:
+        ensure_user_profile_columns(cursor, db)
+        ensure_audit_logs_table(cursor, db)
+        row, error = load_manageable_user(cursor, user_id)
+        if error:
+            return error
+
+        cursor.execute(
+            "UPDATE usuarios SET acesso_expira_em = %s WHERE id = %s",
+            (acesso_expira_em, user_id),
+        )
+        log_audit(
+            cursor,
+            actor_id=int(get_jwt_identity()),
+            actor_role=current_actor_role(),
+            action="UPDATE_USER_ACCESS",
+            target_type="USUARIO",
+            target_id=user_id,
+            metadata={"acesso_expira_em": format_user_datetime(acesso_expira_em)},
+        )
+        db.commit()
+
+        updated = fetch_user_row(cursor, user_id)
+        return jsonify({"message": "Validade de acesso atualizada", "user": serialize_user(updated)}), 200
+    finally:
+        cursor.close()
+        db.close()
+
+
+@users_bp.route("/users/<int:user_id>/end-session", methods=["POST"])
+@jwt_required()
+def end_user_session(user_id):
+    if not actor_can_manage_users():
+        return jsonify({"error": "Acesso nao autorizado"}), 403
+
+    db = get_db()
+    cursor = db.cursor(dictionary=True)
+    try:
+        ensure_user_profile_columns(cursor, db)
+        ensure_audit_logs_table(cursor, db)
+        row, error = load_manageable_user(cursor, user_id)
+        if error:
+            return error
+
+        cursor.execute(
+            "UPDATE usuarios SET sessao_id = NULL, sessao_iniciada_em = NULL WHERE id = %s",
+            (user_id,),
+        )
+        log_audit(
+            cursor,
+            actor_id=int(get_jwt_identity()),
+            actor_role=current_actor_role(),
+            action="END_USER_SESSION",
+            target_type="USUARIO",
+            target_id=user_id,
+        )
+        db.commit()
+
+        updated = fetch_user_row(cursor, user_id)
+        return jsonify({"message": "Sessao do usuario encerrada", "user": serialize_user(updated)}), 200
+    finally:
+        cursor.close()
+        db.close()
+
+
 @users_bp.route("/users/login", methods=["POST"])
 def login():
     data = request.get_json(silent=True) or {}
@@ -631,9 +794,22 @@ def login():
     if not check_password_hash(user.get("senha_hash") or "", senha):
         return jsonify({"error": "Credenciais invalidas"}), 401
 
+    if not is_session_exempt(user.get("role")) and access_expired(user.get("acesso_expira_em")):
+        message = SESSION_MESSAGES[ACCESS_EXPIRED]
+        return jsonify({"error": message, "message": message, "code": ACCESS_EXPIRED}), 403
+
+    db = get_db()
+    cursor = db.cursor(dictionary=True)
+    try:
+        session_id = start_user_session(cursor, db, user["id"])
+    finally:
+        cursor.close()
+        db.close()
+
     token = create_access_token(
         identity=str(user["id"]),
         additional_claims={
+            "sid": session_id,
             "nome": user.get("nome"),
             "email": user.get("email"),
             "role": normalize_role(user.get("role")),

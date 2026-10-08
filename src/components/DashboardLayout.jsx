@@ -4,6 +4,7 @@ import {
   getCurrentUserProfile,
   searchGlobal,
   getUserNotifications,
+  logoutSession,
   markAllNotificationsAsRead,
   markNotificationAsRead,
 } from "../services/api";
@@ -462,6 +463,7 @@ export default function DashboardLayout() {
   }
 
   function handleLogout() {
+    logoutSession();
     localStorage.removeItem("token");
     localStorage.removeItem("usuario");
     navigate("/");
