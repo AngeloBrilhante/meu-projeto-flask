@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { deleteClient, getOperationStats, listClients } from "../services/api";
+import { CheckCircle2, Clock3, Plus, Search, Trash2, XCircle } from "lucide-react";
 import "./Clients.css";
 
 const LEGACY_STATUS_MAP = {
@@ -141,6 +142,7 @@ export default function Clients() {
             className="clientsPrimaryButton"
             onClick={() => navigate("/clients/new")}
           >
+            <Plus size={16} strokeWidth={2.2} />
             Novo cliente
           </button>
         )}
@@ -157,16 +159,19 @@ export default function Clients() {
         </label>
 
         <article className="clientsStatCard approved">
+          <div className="clientsStatIcon"><CheckCircle2 size={18} /></div>
           <span>Pagas</span>
           <strong>{stats.aprovados || 0}</strong>
         </article>
 
         <article className="clientsStatCard pending">
+          <div className="clientsStatIcon"><Clock3 size={18} /></div>
           <span>Em analise</span>
           <strong>{stats.em_analise || 0}</strong>
         </article>
 
         <article className="clientsStatCard rejected">
+          <div className="clientsStatIcon"><XCircle size={18} /></div>
           <span>Reprovadas</span>
           <strong>{stats.reprovados || 0}</strong>
         </article>
@@ -175,6 +180,7 @@ export default function Clients() {
       <div className="clientsPanel">
         <div className="clientsToolbar">
           <label className="clientsSearch">
+            <Search size={16} />
             <input
               type="text"
               placeholder="Buscar por nome, CPF, beneficio..."
@@ -210,7 +216,20 @@ export default function Clients() {
                     key={client.id}
                     onClick={() => navigate(`/clients/${client.id}/documentos`)}
                   >
-                    <td>{client.nome}</td>
+                    <td>
+                      <div className="clientsNameCell">
+                        <span className="clientsAvatar">
+                          {String(client.nome || "?")
+                            .trim()
+                            .split(/\s+/)
+                            .slice(0, 2)
+                            .map((part) => part.charAt(0))
+                            .join("")
+                            .toUpperCase()}
+                        </span>
+                        <strong>{client.nome}</strong>
+                      </div>
+                    </td>
                     <td>{client.cpf}</td>
                     <td>
                       {Array.isArray(client.beneficios) && client.beneficios.length > 0
@@ -237,6 +256,7 @@ export default function Clients() {
                           disabled={removingClientId === client.id}
                           onClick={(event) => handleDeleteClient(event, client)}
                         >
+                          <Trash2 size={14} />
                           {removingClientId === client.id ? "Excluindo..." : "Excluir"}
                         </button>
                       </td>

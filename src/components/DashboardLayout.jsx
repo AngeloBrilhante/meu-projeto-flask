@@ -7,6 +7,21 @@ import {
   markAllNotificationsAsRead,
   markNotificationAsRead,
 } from "../services/api";
+import {
+  Bell,
+  KanbanSquare,
+  LayoutDashboard,
+  ListChecks,
+  LogOut,
+  Moon,
+  Search,
+  ShieldCheck,
+  Sheet,
+  Sun,
+  TrendingUp,
+  UserCircle,
+  Users,
+} from "lucide-react";
 import "../pages/Dashboard.css";
 import { formatDateTimeDisplayValue } from "../utils/date";
 
@@ -26,28 +41,15 @@ function getStoredTheme() {
 }
 
 function IconTheme({ theme }) {
-  if (theme === "dark") {
-    return (
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M21 12.8A9 9 0 1 1 11.2 3a7.2 7.2 0 0 0 9.8 9.8z" />
-      </svg>
-    );
-  }
-
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <circle cx="12" cy="12" r="4.5" />
-      <path d="M12 2v2.5M12 19.5V22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M2 12h2.5M19.5 12H22M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8" />
-    </svg>
+  return theme === "dark" ? (
+    <Moon size={18} strokeWidth={1.9} />
+  ) : (
+    <Sun size={18} strokeWidth={1.9} />
   );
 }
 
 function IconBell() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M12 22a2.2 2.2 0 0 0 2.1-1.6h-4.2A2.2 2.2 0 0 0 12 22zm7-5.2-1.1-1.8a3.7 3.7 0 0 1-.5-1.9v-2.5A5.4 5.4 0 0 0 13 5.3V4.8a1 1 0 1 0-2 0v.5a5.4 5.4 0 0 0-4.4 5.3v2.5a3.7 3.7 0 0 1-.5 1.9L5 16.8a1.1 1.1 0 0 0 .9 1.7h12.2a1.1 1.1 0 0 0 .9-1.7z" />
-    </svg>
-  );
+  return <Bell size={18} strokeWidth={1.9} />;
 }
 
 function formatCpf(value) {
@@ -126,6 +128,22 @@ export default function DashboardLayout() {
     : isDigitador
     ? "Painel digitador"
     : "Painel vendedor";
+
+  const navItems = [
+    { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+    canAccessSalesBoard && { to: "/sales-dashboard", label: "Dashboard vendas", icon: TrendingUp },
+    { to: "/clients", label: "Clientes", icon: Users },
+    canAccessPipeline && { to: "/pipeline", label: "Esteira", icon: KanbanSquare, end: true },
+    canAccessPipeline &&
+      canAccessReadyPipeline && {
+        to: "/pipeline/prontas",
+        label: "Prontas para digitar",
+        icon: ListChecks,
+      },
+    canAccessReport && { to: "/operations-report", label: "Planilha", icon: Sheet },
+    isGlobal && { to: "/global/users", label: "Usuarios", icon: ShieldCheck },
+    { to: "/profile", label: "Meu perfil", icon: UserCircle },
+  ].filter(Boolean);
 
   const displayName = user?.nome || "Usuario";
   const displayEmail = user?.email || "";
@@ -539,105 +557,37 @@ export default function DashboardLayout() {
   return (
     <div className="appShell">
       <aside className="appSidebar">
-        <div className="brandBlock">
-          <div className="brandLogo">
-            {avatarUrl ? (
-              <img src={avatarUrl} alt={displayName} className="avatarImage" />
-            ) : (
-              displayInitial
-            )}
+        <div>
+          <div className="brandBlock">
+            <div className="brandMark">
+              <img src="/favicon-aureon.svg" alt="" />
+            </div>
+            <div>
+              <h2>{companyName}</h2>
+              <span>{roleLabel}</span>
+            </div>
           </div>
-          <div>
-            <h2>{companyName}</h2>
-            <span>{roleLabel}</span>
-          </div>
-        </div>
 
-        <nav className="sidebarNav">
-	          <NavLink
-	            to="/dashboard"
-	            className={({ isActive }) =>
-	              isActive ? "sidebarLink active" : "sidebarLink"
-	            }
-	          >
-	            Dashboard
-	          </NavLink>
-	          {canAccessSalesBoard && (
-	            <NavLink
-	              to="/sales-dashboard"
-	              className={({ isActive }) =>
-	                isActive ? "sidebarLink active" : "sidebarLink"
-	              }
-	            >
-	              Dashboard vendas
-	            </NavLink>
-	          )}
-	          <NavLink
-	            to="/profile"
-            className={({ isActive }) =>
-              isActive ? "sidebarLink active" : "sidebarLink"
-            }
-          >
-            Meu perfil
-          </NavLink>
-          <NavLink
-            to="/clients"
-            className={({ isActive }) =>
-              isActive ? "sidebarLink active" : "sidebarLink"
-            }
-          >
-            Clientes
-          </NavLink>
-
-          {isGlobal && (
-            <NavLink
-              to="/global/users"
-              className={({ isActive }) =>
-                isActive ? "sidebarLink active" : "sidebarLink"
-              }
-            >
-              Usuarios
-            </NavLink>
-          )}
-
-          {canAccessPipeline && (
-            <>
+          <nav className="sidebarNav">
+            {navItems.map(({ to, label, icon: Icon, end }) => (
               <NavLink
-                to="/pipeline"
-                end
+                key={to}
+                to={to}
+                end={end}
                 className={({ isActive }) =>
                   isActive ? "sidebarLink active" : "sidebarLink"
                 }
               >
-                Esteira
+                <Icon size={18} strokeWidth={1.9} />
+                <span>{label}</span>
               </NavLink>
-              {canAccessReadyPipeline && (
-                <NavLink
-                  to="/pipeline/prontas"
-                  className={({ isActive }) =>
-                    isActive ? "sidebarLink active" : "sidebarLink"
-                  }
-                >
-                  Prontas para digitar
-                </NavLink>
-              )}
-            </>
-          )}
-
-          {canAccessReport && (
-            <NavLink
-              to="/operations-report"
-              className={({ isActive }) =>
-                isActive ? "sidebarLink active" : "sidebarLink"
-              }
-            >
-              Planilha
-            </NavLink>
-          )}
-        </nav>
+            ))}
+          </nav>
+        </div>
 
         <button type="button" className="logoutButton" onClick={handleLogout}>
-          Sair
+          <LogOut size={17} strokeWidth={1.9} />
+          <span>Sair</span>
         </button>
       </aside>
 
@@ -645,9 +595,7 @@ export default function DashboardLayout() {
         <header className="topBar">
           <div className="searchFieldWrap" ref={searchBoxRef}>
             <label className="searchField">
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="m21 21-4.4-4.4M10.8 18a7.2 7.2 0 1 1 0-14.4 7.2 7.2 0 0 1 0 14.4z" />
-              </svg>
+              <Search size={18} strokeWidth={1.9} />
               <input
                 type="text"
                 value={globalSearch}

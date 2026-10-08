@@ -1,5 +1,17 @@
 import { useEffect, useState } from "react";
 import { Outlet, useNavigate, useParams, useLocation } from "react-router-dom";
+import {
+  BadgeInfo,
+  Briefcase,
+  FileText,
+  Home,
+  IdCard,
+  Mail,
+  MapPin,
+  MessagesSquare,
+  Phone,
+  Wallet,
+} from "lucide-react";
 import "./ClientLayout.css";
 import { getApiUrl } from "../../config/api";
 
@@ -41,79 +53,102 @@ export default function ClientLayout() {
     loadClient();
   }, [id]);
 
-  function isActive(tab) {
-    return location.pathname.includes(tab);
-  }
+  const tabs = [
+    { path: "dados", label: "Dados", icon: IdCard },
+    { path: "documentos", label: "Documentos", icon: FileText },
+    { path: "anexos", label: "Conversas e anexos", icon: MessagesSquare },
+    { path: "operacoes", label: "Operacoes", icon: Briefcase },
+  ];
+
+  const currentTab =
+    tabs.find((tab) => location.pathname.split("/").includes(tab.path))?.path ||
+    "documentos";
 
   if (!client) {
     return <p className="clientLoading">Carregando cliente...</p>;
   }
 
+  const initials = String(client.nome || "?")
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part.charAt(0))
+    .join("")
+    .toUpperCase();
+  const cityState = [client.cidade, client.estado].filter(Boolean).join(" / ");
+
   return (
     <div className="clientLayout">
       <header className="clientHeaderCard">
         <div className="clientIdentity">
-          <h1>{client.nome}</h1>
-          <p>CPF: {client.cpf || "-"}</p>
+          <div className="clientAvatar">{initials}</div>
+          <div>
+            <h1>{client.nome}</h1>
+            <p>CPF {client.cpf || "-"}</p>
+          </div>
         </div>
 
         <div className="clientInfoGrid">
           <article>
-            <span>Telefone</span>
-            <strong>{client.telefone || "-"}</strong>
+            <Phone size={16} />
+            <div>
+              <span>Telefone</span>
+              <strong>{client.telefone || "-"}</strong>
+            </div>
           </article>
           <article>
-            <span>E-mail</span>
-            <strong>{client.email || "-"}</strong>
+            <Mail size={16} />
+            <div>
+              <span>E-mail</span>
+              <strong>{client.email || "-"}</strong>
+            </div>
           </article>
           <article>
-            <span>Salario</span>
-            <strong>{formatCurrency(client.salario)}</strong>
+            <Wallet size={16} />
+            <div>
+              <span>Salario</span>
+              <strong>{formatCurrency(client.salario)}</strong>
+            </div>
           </article>
           <article>
-            <span>Especie</span>
-            <strong>{client.especie || "-"}</strong>
+            <BadgeInfo size={16} />
+            <div>
+              <span>Especie</span>
+              <strong>{client.especie || "-"}</strong>
+            </div>
           </article>
           <article>
-            <span>Cidade / Estado</span>
-            <strong>
-              {[client.cidade, client.estado].filter(Boolean).join(" / ") || "-"}
-            </strong>
+            <MapPin size={16} />
+            <div>
+              <span>Cidade / Estado</span>
+              <strong>{cityState || "-"}</strong>
+            </div>
           </article>
           <article className="full">
-            <span>Endereco</span>
-            <strong>
-              {client.rua || "-"}, {client.numero || "-"} - {client.bairro || "-"}
-            </strong>
+            <Home size={16} />
+            <div>
+              <span>Endereco</span>
+              <strong>
+                {client.rua || "-"}, {client.numero || "-"} - {client.bairro || "-"}
+              </strong>
+            </div>
           </article>
         </div>
       </header>
 
-	      <div className="clientTabs">
-	        <button
-	          type="button"
-	          className={isActive("dados") ? "clientTabButton active" : "clientTabButton"}
-	          onClick={() => navigate("dados")}
-	        >
-	          Dados
-	        </button>
-
-	        <button
-	          type="button"
-	          className={isActive("documentos") ? "clientTabButton active" : "clientTabButton"}
-          onClick={() => navigate("documentos")}
-        >
-          Documentos
-        </button>
-
-        <button
-          type="button"
-          className={isActive("operacoes") ? "clientTabButton active" : "clientTabButton"}
-          onClick={() => navigate("operacoes")}
-        >
-          Operacoes
-        </button>
-      </div>
+      <nav className="clientTabs">
+        {tabs.map(({ path, label, icon: Icon }) => (
+          <button
+            key={path}
+            type="button"
+            className={currentTab === path ? "clientTabButton active" : "clientTabButton"}
+            onClick={() => navigate(path)}
+          >
+            <Icon size={16} strokeWidth={1.9} />
+            {label}
+          </button>
+        ))}
+      </nav>
 
       <section className="clientContentCard">
         <Outlet context={{ client, refreshClient: loadClient }} />

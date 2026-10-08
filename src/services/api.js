@@ -223,6 +223,108 @@ export async function uploadDocuments(clientId, files) {
 }
 
 /* =======================
+   CONVERSAS E ANEXOS
+======================= */
+export async function listClientAttachments(clientId) {
+  const response = await fetch(`${API_URL}/clients/${clientId}/attachments`, {
+    headers: getAuthHeaders(),
+  });
+
+  return parseApiJson(response, "Erro ao carregar anexos");
+}
+
+export function uploadClientAttachment(clientId, file, meta = {}, onProgress) {
+  return new Promise((resolve, reject) => {
+    const formData = new FormData();
+    formData.append("files", file, file.name);
+    if (meta.categoria) formData.append("categoria", meta.categoria);
+    if (meta.descricao) formData.append("descricao", meta.descricao);
+
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", `${API_URL}/clients/${clientId}/attachments`);
+
+    const token = localStorage.getItem("token");
+    if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable && onProgress) {
+        onProgress(Math.round((event.loaded / event.total) * 100));
+      }
+    };
+
+    xhr.onload = () => {
+      let data = {};
+      try {
+        data = JSON.parse(xhr.responseText || "{}");
+      } catch {
+        data = {};
+      }
+
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve(data);
+      } else if (xhr.status === 413) {
+        reject(new Error("Arquivo muito grande (limite de 25 MB)."));
+      } else {
+        reject(new Error(data.error || "Erro ao enviar anexo"));
+      }
+    };
+
+    xhr.onerror = () => reject(new Error("Falha de conexao ao enviar anexo"));
+    xhr.send(formData);
+  });
+}
+
+export async function fetchClientAttachmentBlob(clientId, attachmentId, inline = true) {
+  const response = await fetch(
+    `${API_URL}/clients/${clientId}/attachments/${attachmentId}/file${inline ? "?inline=1" : ""}`,
+    { headers: getAuthHeaders(false) }
+  );
+
+  if (!response.ok) {
+    await parseApiJson(response, "Erro ao abrir anexo");
+  }
+
+  return response.blob();
+}
+
+export async function downloadClientAttachment(clientId, attachment) {
+  const blob = await fetchClientAttachmentBlob(clientId, attachment.id, false);
+  const objectUrl = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = objectUrl;
+  anchor.download = attachment.original_name || "anexo";
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(objectUrl);
+}
+
+export async function updateClientAttachment(clientId, attachmentId, payload) {
+  const response = await fetch(
+    `${API_URL}/clients/${clientId}/attachments/${attachmentId}`,
+    {
+      method: "PUT",
+      headers: getAuthHeaders(),
+      body: JSON.stringify(payload),
+    }
+  );
+
+  return parseApiJson(response, "Erro ao atualizar anexo");
+}
+
+export async function deleteClientAttachment(clientId, attachmentId) {
+  const response = await fetch(
+    `${API_URL}/clients/${clientId}/attachments/${attachmentId}`,
+    {
+      method: "DELETE",
+      headers: getAuthHeaders(),
+    }
+  );
+
+  return parseApiJson(response, "Erro ao excluir anexo");
+}
+
+/* =======================
    EXCLUIR DOCUMENTO
 ======================= */
 export async function deleteDocument(clientId, filename) {

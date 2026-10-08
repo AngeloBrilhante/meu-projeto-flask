@@ -1,37 +1,64 @@
 :root {
-  --shell-bg: #f2f5fb;
-  --shell-bg-soft: #f8faff;
-  --sidebar-bg-start: #0f1b35;
-  --sidebar-bg-end: #14244a;
+  --font-sans: "Inter", "Segoe UI", Roboto, Arial, sans-serif;
+  --font-display: "Manrope", "Inter", "Segoe UI", sans-serif;
+
+  --shell-bg: #f4f6fb;
+  --shell-bg-soft: #f9fafe;
+  --sidebar-bg-start: #0b1630;
+  --sidebar-bg-end: #101f42;
   --surface: #ffffff;
-  --surface-strong: #f0f4ff;
-  --surface-soft: #e9eeff;
-  --border-color: #d8e0f4;
-  --text-primary: #0f1c39;
-  --text-secondary: #5e6a85;
-  --accent: #4c6fff;
-  --accent-soft: #dbe3ff;
-  --success: #0ea968;
+  --surface-strong: #f3f6fd;
+  --surface-soft: #e8eefc;
+  --border-color: #e1e7f3;
+  --text-primary: #0f1a33;
+  --text-secondary: #5f6b85;
+  --accent: #4a6cf7;
+  --accent-strong: #3553d9;
+  --accent-soft: #e3e9ff;
+  --success: #0e9f63;
+  --success-soft: #dcf5ea;
+  --warning: #c98a06;
   --danger: #d64242;
-  --shadow: 0 22px 45px rgba(18, 32, 72, 0.08);
+  --danger-soft: #fde6e6;
+  --brand-gold: #d4a84f;
+  --brand-gold-strong: #a87b22;
+  --brand-gold-soft: rgba(212, 168, 79, 0.18);
+
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --shadow-sm: 0 1px 2px rgba(16, 26, 51, 0.06);
+  --shadow-md: 0 8px 20px rgba(16, 26, 51, 0.08);
+  --shadow: 0 18px 40px rgba(16, 26, 51, 0.07);
+  --ring: 0 0 0 3px color-mix(in srgb, var(--accent) 28%, transparent);
 }
 
 :root[data-theme="dark"] {
-  --shell-bg: #061229;
-  --shell-bg-soft: #0a1733;
-  --sidebar-bg-start: #06162f;
-  --sidebar-bg-end: #0b1f42;
-  --surface: #0e1e3f;
-  --surface-strong: #12264d;
-  --surface-soft: #16305f;
-  --border-color: #1f3c73;
-  --text-primary: #ecf2ff;
-  --text-secondary: #9fb3da;
-  --accent: #5a78ff;
-  --accent-soft: #1d3465;
+  --shell-bg: #070f22;
+  --shell-bg-soft: #0a152d;
+  --sidebar-bg-start: #050c1d;
+  --sidebar-bg-end: #0a1834;
+  --surface: #0d1a35;
+  --surface-strong: #112243;
+  --surface-soft: #162b54;
+  --border-color: #1d3360;
+  --text-primary: #eaf0ff;
+  --text-secondary: #98a9cf;
+  --accent: #6383ff;
+  --accent-strong: #8199ff;
+  --accent-soft: #1b2f5e;
   --success: #3ed598;
+  --success-soft: rgba(62, 213, 152, 0.14);
+  --warning: #f2b84b;
   --danger: #ff7e89;
-  --shadow: 0 26px 48px rgba(0, 0, 0, 0.38);
+  --danger-soft: rgba(255, 126, 137, 0.14);
+  --brand-gold: #e0b862;
+  --brand-gold-strong: #e8c67c;
+  --brand-gold-soft: rgba(224, 184, 98, 0.16);
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 10px 24px rgba(0, 0, 0, 0.32);
+  --shadow: 0 22px 44px rgba(0, 0, 0, 0.36);
 }
 
 .appShell {
@@ -48,33 +75,54 @@
 }
 
 .appSidebar {
-  width: 260px;
+  width: 256px;
+  flex-shrink: 0;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
   overflow-y: auto;
   background: linear-gradient(180deg, var(--sidebar-bg-start), var(--sidebar-bg-end));
-  padding: 26px 20px;
-  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 22px 14px;
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .brandBlock {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-bottom: 28px;
+  padding: 0 8px 22px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
   color: #f6f8ff;
 }
 
 .brandBlock h2 {
   margin: 0;
-  font-size: 18px;
-  letter-spacing: 0.3px;
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: 0.2px;
 }
 
 .brandBlock span {
   font-size: 12px;
-  color: rgba(236, 242, 255, 0.76);
+  color: var(--brand-gold);
+  font-weight: 600;
+}
+
+.brandMark {
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 0 0 1px rgba(224, 184, 98, 0.45), 0 6px 16px rgba(0, 0, 0, 0.3);
+}
+
+.brandMark img {
+  width: 100%;
+  height: 100%;
+  display: block;
 }
 
 .brandLogo {
@@ -99,40 +147,74 @@
 .sidebarNav {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 2px;
 }
 
 .sidebarLink {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
   text-decoration: none;
-  color: rgba(229, 237, 255, 0.84);
-  padding: 11px 12px;
+  color: rgba(214, 224, 248, 0.78);
+  font-size: 14px;
+  font-weight: 500;
+  padding: 10px 12px;
   border-radius: 10px;
-  transition: background-color 0.2s ease, color 0.2s ease;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.sidebarLink svg {
+  flex-shrink: 0;
+  opacity: 0.85;
 }
 
 .sidebarLink:hover {
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.06);
   color: #fff;
 }
 
 .sidebarLink.active {
-  background: rgba(90, 120, 255, 0.28);
+  background: linear-gradient(90deg, rgba(99, 131, 255, 0.24), rgba(99, 131, 255, 0.08));
   color: #fff;
   font-weight: 600;
 }
 
+.sidebarLink.active svg {
+  opacity: 1;
+  color: var(--brand-gold);
+}
+
+.sidebarLink.active::before {
+  content: "";
+  position: absolute;
+  left: -14px;
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--brand-gold);
+}
+
 .logoutButton {
   margin-top: 20px;
-  border: 1px solid rgba(255, 255, 255, 0.22);
-  color: #ecf2ff;
-  background: transparent;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: rgba(214, 224, 248, 0.85);
+  background: rgba(255, 255, 255, 0.03);
   border-radius: 10px;
-  padding: 11px 12px;
+  padding: 10px 12px;
+  font: inherit;
+  font-size: 14px;
   cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
 }
 
 .logoutButton:hover {
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 126, 137, 0.12);
+  color: #ffb3ba;
 }
 
 .appMain {
@@ -457,7 +539,7 @@
   width: 34px;
   height: 34px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #5a78ff, #29d3c3);
+  background: linear-gradient(135deg, var(--accent), var(--brand-gold));
   color: #fff;
   display: grid;
   place-items: center;
@@ -508,7 +590,10 @@
 
 .dashboardHead h1 {
   margin: 0;
-  font-size: 28px;
+  font-family: var(--font-display);
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
 }
 
 .dashboardHead p {
@@ -576,24 +661,53 @@
 }
 
 .metricCard {
+  --tone: var(--accent);
+  position: relative;
   background: var(--surface);
   border: 1px solid var(--border-color);
-  border-radius: 16px;
-  padding: 18px 18px 14px;
-  box-shadow: var(--shadow);
+  border-radius: var(--radius-lg);
+  padding: 18px 18px 16px;
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+  transition: box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+.metricCard:hover {
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
+}
+
+.metricCard.tone-gold { --tone: var(--brand-gold); }
+.metricCard.tone-blue { --tone: var(--accent); }
+.metricCard.tone-green { --tone: var(--success); }
+.metricCard.tone-violet { --tone: #8b5cf6; }
+
+.metricIcon {
+  width: 40px;
+  height: 40px;
+  margin-bottom: 14px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  color: var(--tone);
+  background: color-mix(in srgb, var(--tone) 14%, transparent);
 }
 
 .metricCard span {
   display: block;
   font-size: 13px;
+  font-weight: 500;
   color: var(--text-secondary);
 }
 
 .metricCard strong {
-  margin-top: 8px;
+  margin-top: 6px;
   display: block;
+  font-family: var(--font-display);
   font-size: 28px;
-  line-height: 1;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.05;
 }
 
 .metricCard small {
@@ -612,14 +726,17 @@
 .panel {
   background: var(--surface);
   border: 1px solid var(--border-color);
-  border-radius: 16px;
-  padding: 18px;
-  box-shadow: var(--shadow);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  box-shadow: var(--shadow-sm);
 }
 
 .panel h3 {
   margin: 0;
-  font-size: 22px;
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
 }
 
 .panel p {
@@ -1027,6 +1144,11 @@
   .sidebarNav {
     flex-direction: row;
     flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  .sidebarLink.active::before {
+    display: none;
   }
 
   .logoutButton {

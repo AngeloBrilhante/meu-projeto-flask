@@ -321,6 +321,10 @@ def ensure_documents_table(cursor, db):
         "file_size": "ADD COLUMN file_size INT NOT NULL DEFAULT 0",
         "file_data": "ADD COLUMN file_data LONGBLOB NULL",
         "upload_date": "ADD COLUMN upload_date DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP",
+        "secao": "ADD COLUMN secao VARCHAR(20) NOT NULL DEFAULT 'DOCUMENTOS'",
+        "categoria": "ADD COLUMN categoria VARCHAR(40) NULL",
+        "descricao": "ADD COLUMN descricao VARCHAR(500) NULL",
+        "uploaded_by": "ADD COLUMN uploaded_by INT NULL",
     }
 
     for column_name, statement in column_statements.items():
@@ -368,6 +372,12 @@ def ensure_documents_table(cursor, db):
         )
         changed = True
 
+    if "idx_documentos_client_secao" not in indexes:
+        cursor.execute(
+            "CREATE INDEX idx_documentos_client_secao ON documentos (client_id, secao, upload_date)"
+        )
+        changed = True
+
     if changed:
         db.commit()
 
@@ -396,6 +406,7 @@ def list_client_documents_metadata_from_db(cursor, client_id):
             upload_date
         FROM documentos
         WHERE client_id = %s
+          AND COALESCE(secao, 'DOCUMENTOS') = 'DOCUMENTOS'
         ORDER BY upload_date DESC, id DESC
         """,
         (client_id,),
@@ -3952,6 +3963,426 @@ def delete_document(client_id, filename):
     except Exception:
         db.rollback()
         return jsonify({"error": "Nao foi possivel excluir o documento"}), 500
+    finally:
+        cursor.close()
+        db.close()
+
+# ======================================================
+# CONVERSAS E ANEXOS DO CLIENTE
+# ======================================================
+ATTACHMENT_SECTION = "ANEXOS"
+ATTACHMENT_MAX_BYTES = 25 * 1024 * 1024
+ATTACHMENT_CATEGORIES = {
+    "CONVERSA_WHATSAPP",
+    "PRINT",
+    "AUDIO",
+    "DOCUMENTO",
+    "COMPROVANTE",
+    "CONTRATO",
+    "OUTROS",
+}
+ATTACHMENT_IMAGE_EXTENSIONS = {"jpg", "jpeg", "png", "webp", "heic"}
+ATTACHMENT_AUDIO_EXTENSIONS = {"opus", "ogg", "mp3", "m4a", "wav"}
+ATTACHMENT_CHAT_EXTENSIONS = {"txt", "zip"}
+ATTACHMENT_OFFICE_EXTENSIONS = {"doc", "docx", "xls", "xlsx"}
+ATTACHMENT_ALLOWED_EXTENSIONS = (
+    {"pdf"}
+    | ATTACHMENT_IMAGE_EXTENSIONS
+    | ATTACHMENT_AUDIO_EXTENSIONS
+    | ATTACHMENT_CHAT_EXTENSIONS
+    | ATTACHMENT_OFFICE_EXTENSIONS
+)
+ATTACHMENT_MIME_BY_EXT = {
+    "opus": "audio/ogg",
+    "ogg": "audio/ogg",
+    "m4a": "audio/mp4",
+    "heic": "image/heic",
+    "webp": "image/webp",
+    "txt": "text/plain; charset=utf-8",
+}
+
+
+def attachment_extension(filename):
+    name = str(filename or "")
+    if "." not in name:
+        return ""
+    return name.rsplit(".", 1)[1].strip().lower()
+
+
+def suggest_attachment_category(extension):
+    if extension in ATTACHMENT_AUDIO_EXTENSIONS:
+        return "AUDIO"
+    if extension in ATTACHMENT_CHAT_EXTENSIONS:
+        return "CONVERSA_WHATSAPP"
+    if extension in ATTACHMENT_IMAGE_EXTENSIONS:
+        return "PRINT"
+    return "DOCUMENTO"
+
+
+def normalize_attachment_category(value, extension=""):
+    category = str(value or "").strip().upper()
+    if category in ATTACHMENT_CATEGORIES:
+        return category
+    return suggest_attachment_category(extension)
+
+
+def normalize_attachment_description(value):
+    text = str(value or "").strip()
+    return text[:500] or None
+
+
+def serialize_attachment_row(row):
+    original_name = row.get("original_name") or row.get("file_name") or ""
+    return {
+        "id": int(row.get("id")),
+        "filename": row.get("file_name") or "",
+        "original_name": original_name,
+        "category": row.get("categoria")
+        or suggest_attachment_category(attachment_extension(original_name)),
+        "description": row.get("descricao") or "",
+        "content_type": row.get("content_type") or "application/octet-stream",
+        "extension": attachment_extension(original_name),
+        "size": int(row.get("file_size") or 0),
+        "uploaded_at": format_document_uploaded_at(row.get("upload_date")),
+        "uploaded_by": row.get("uploaded_by"),
+        "uploaded_by_name": row.get("uploaded_by_name") or "",
+    }
+
+
+ATTACHMENT_METADATA_COLUMNS = """
+    d.id,
+    d.file_name,
+    d.original_name,
+    d.content_type,
+    d.file_size,
+    d.categoria,
+    d.descricao,
+    d.upload_date,
+    d.uploaded_by,
+    u.nome AS uploaded_by_name
+"""
+
+
+def fetch_client_attachment(cursor, client_id, attachment_id, with_data=False):
+    data_column = ", d.file_data" if with_data else ""
+    cursor.execute(
+        f"""
+        SELECT {ATTACHMENT_METADATA_COLUMNS}{data_column}
+        FROM documentos d
+        LEFT JOIN usuarios u ON u.id = d.uploaded_by
+        WHERE d.client_id = %s
+          AND d.id = %s
+          AND d.secao = %s
+        LIMIT 1
+        """,
+        (client_id, attachment_id, ATTACHMENT_SECTION),
+    )
+    return cursor.fetchone()
+
+
+@clients_bp.route("/clients/<int:client_id>/attachments", methods=["GET"])
+@jwt_required()
+def list_client_attachments(client_id):
+    if not can_access_client_documents(client_id):
+        return jsonify({"error": "Acesso nao autorizado"}), 403
+
+    category = str(request.args.get("categoria") or "").strip().upper()
+    search = str(request.args.get("q") or "").strip()
+
+    conditions = ["d.client_id = %s", "d.secao = %s"]
+    params = [client_id, ATTACHMENT_SECTION]
+    if category in ATTACHMENT_CATEGORIES:
+        conditions.append("d.categoria = %s")
+        params.append(category)
+    if search:
+        conditions.append("(d.original_name LIKE %s OR d.descricao LIKE %s)")
+        like = f"%{search}%"
+        params.extend([like, like])
+
+    where_clause = " AND ".join(conditions)
+
+    db = get_db()
+    cursor = db.cursor(dictionary=True)
+    try:
+        ensure_documents_table(cursor, db)
+        cursor.execute(
+            f"""
+            SELECT {ATTACHMENT_METADATA_COLUMNS}
+            FROM documentos d
+            LEFT JOIN usuarios u ON u.id = d.uploaded_by
+            WHERE {where_clause}
+            ORDER BY d.upload_date DESC, d.id DESC
+            """,
+            tuple(params),
+        )
+        attachments = [serialize_attachment_row(row) for row in cursor.fetchall()]
+        return jsonify({"client_id": client_id, "attachments": attachments}), 200
+    finally:
+        cursor.close()
+        db.close()
+
+
+@clients_bp.route("/clients/<int:client_id>/attachments", methods=["POST"])
+@jwt_required()
+def upload_client_attachments(client_id):
+    if not can_access_client(client_id):
+        return jsonify({"error": "Acesso nao autorizado"}), 403
+
+    files = [item for item in request.files.getlist("files") if item and item.filename]
+    if not files:
+        return jsonify({"error": "Nenhum arquivo enviado"}), 400
+
+    requested_category = request.form.get("categoria")
+    description = normalize_attachment_description(request.form.get("descricao"))
+    actor_id = current_user_id()
+    actor_role = current_user_role()
+
+    prepared = []
+    for file in files:
+        original_name = normalize_document_filename(file.filename) or "arquivo"
+        extension = attachment_extension(original_name)
+        if extension not in ATTACHMENT_ALLOWED_EXTENSIONS:
+            return jsonify({"error": f"Tipo de arquivo nao permitido: {original_name}"}), 400
+
+        file_bytes = file.read()
+        if not file_bytes:
+            return jsonify({"error": f"Arquivo vazio: {original_name}"}), 400
+        if len(file_bytes) > ATTACHMENT_MAX_BYTES:
+            return jsonify({"error": f"Arquivo maior que 25 MB: {original_name}"}), 400
+
+        content_type = (
+            ATTACHMENT_MIME_BY_EXT.get(extension)
+            or file.mimetype
+            or mimetypes.guess_type(original_name)[0]
+            or "application/octet-stream"
+        )
+        prepared.append((original_name, extension, content_type, file_bytes))
+
+    db = get_db()
+    cursor = db.cursor(dictionary=True)
+    try:
+        ensure_documents_table(cursor, db)
+        ensure_audit_logs_table(cursor, db)
+        seller_id = resolve_client_seller_id(cursor, client_id)
+
+        saved_ids = []
+        for original_name, extension, content_type, file_bytes in prepared:
+            category = normalize_attachment_category(requested_category, extension)
+            filename = f"anexo_{uuid.uuid4().hex}.{extension}"
+            cursor.execute(
+                """
+                INSERT INTO documentos (
+                    client_id,
+                    seller_id,
+                    document_type,
+                    file_name,
+                    original_name,
+                    content_type,
+                    file_size,
+                    file_data,
+                    secao,
+                    categoria,
+                    descricao,
+                    uploaded_by
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """,
+                (
+                    client_id,
+                    seller_id,
+                    category,
+                    filename,
+                    original_name,
+                    content_type,
+                    len(file_bytes),
+                    file_bytes,
+                    ATTACHMENT_SECTION,
+                    category,
+                    description,
+                    actor_id,
+                ),
+            )
+            saved_ids.append(cursor.lastrowid)
+
+        log_audit(
+            cursor,
+            actor_id=actor_id,
+            actor_role=actor_role,
+            action="UPLOAD_CLIENT_ATTACHMENT",
+            target_type="CLIENTE",
+            target_id=client_id,
+            metadata={
+                "attachment_ids": saved_ids,
+                "files": [item[0] for item in prepared],
+            },
+        )
+        db.commit()
+
+        attachments = [
+            serialize_attachment_row(fetch_client_attachment(cursor, client_id, item_id))
+            for item_id in saved_ids
+        ]
+        return jsonify({"message": "Anexos salvos com sucesso", "attachments": attachments}), 201
+    except Exception:
+        db.rollback()
+        current_app.logger.exception("Falha ao salvar anexos do cliente %s", client_id)
+        return jsonify({"error": "Nao foi possivel salvar os anexos"}), 500
+    finally:
+        cursor.close()
+        db.close()
+
+
+@clients_bp.route(
+    "/clients/<int:client_id>/attachments/<int:attachment_id>/file",
+    methods=["GET"],
+)
+@jwt_required()
+def download_client_attachment(client_id, attachment_id):
+    if not can_access_client_documents(client_id):
+        return jsonify({"error": "Acesso nao autorizado"}), 403
+
+    inline = str(request.args.get("inline") or "").strip() in {"1", "true"}
+
+    db = get_db()
+    cursor = db.cursor(dictionary=True)
+    try:
+        ensure_documents_table(cursor, db)
+        row = fetch_client_attachment(cursor, client_id, attachment_id, with_data=True)
+    finally:
+        cursor.close()
+        db.close()
+
+    if not row or row.get("file_data") is None:
+        return jsonify({"error": "Anexo nao encontrado"}), 404
+
+    response = send_file(
+        BytesIO(row.get("file_data")),
+        as_attachment=not inline,
+        download_name=row.get("original_name") or row.get("file_name"),
+        mimetype=row.get("content_type") or "application/octet-stream",
+    )
+    response.headers["Cache-Control"] = "private, max-age=300"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    return response
+
+
+@clients_bp.route(
+    "/clients/<int:client_id>/attachments/<int:attachment_id>",
+    methods=["PUT"],
+)
+@jwt_required()
+def update_client_attachment(client_id, attachment_id):
+    if not can_access_client(client_id):
+        return jsonify({"error": "Acesso nao autorizado"}), 403
+
+    data = request.get_json(silent=True) or {}
+
+    db = get_db()
+    cursor = db.cursor(dictionary=True)
+    try:
+        ensure_documents_table(cursor, db)
+        row = fetch_client_attachment(cursor, client_id, attachment_id)
+        if not row:
+            return jsonify({"error": "Anexo nao encontrado"}), 404
+
+        extension = attachment_extension(row.get("original_name"))
+        category = normalize_attachment_category(
+            data.get("categoria", row.get("categoria")),
+            extension,
+        )
+        description = normalize_attachment_description(
+            data.get("descricao", row.get("descricao"))
+        )
+
+        cursor.execute(
+            """
+            UPDATE documentos
+            SET categoria = %s,
+                document_type = %s,
+                descricao = %s
+            WHERE id = %s
+              AND client_id = %s
+              AND secao = %s
+            """,
+            (category, category, description, attachment_id, client_id, ATTACHMENT_SECTION),
+        )
+        db.commit()
+
+        updated = fetch_client_attachment(cursor, client_id, attachment_id)
+        return jsonify({"attachment": serialize_attachment_row(updated)}), 200
+    except Exception:
+        db.rollback()
+        return jsonify({"error": "Nao foi possivel atualizar o anexo"}), 500
+    finally:
+        cursor.close()
+        db.close()
+
+
+@clients_bp.route(
+    "/clients/<int:client_id>/attachments/<int:attachment_id>",
+    methods=["DELETE"],
+)
+@jwt_required()
+def delete_client_attachment(client_id, attachment_id):
+    if not can_access_client(client_id):
+        return jsonify({"error": "Acesso nao autorizado"}), 403
+
+    actor_id = current_user_id()
+    actor_role = current_user_role()
+
+    db = get_db()
+    cursor = db.cursor(dictionary=True)
+    try:
+        ensure_documents_table(cursor, db)
+        ensure_trash_bin_table(cursor, db)
+        ensure_audit_logs_table(cursor, db)
+
+        cursor.execute(
+            """
+            SELECT *
+            FROM documentos
+            WHERE id = %s
+              AND client_id = %s
+              AND secao = %s
+            LIMIT 1
+            """,
+            (attachment_id, client_id, ATTACHMENT_SECTION),
+        )
+        row = cursor.fetchone()
+        if not row:
+            return jsonify({"error": "Anexo nao encontrado"}), 404
+
+        trash_id = add_to_trash(
+            cursor,
+            entity_type="ANEXO",
+            entity_id=attachment_id,
+            payload={"document": serialize_document_row_for_trash(row)},
+            deleted_by=actor_id,
+            deleted_role=actor_role,
+            reason="Exclusao de anexo do cliente",
+        )
+        cursor.execute(
+            "DELETE FROM documentos WHERE id = %s AND client_id = %s",
+            (attachment_id, client_id),
+        )
+        log_audit(
+            cursor,
+            actor_id=actor_id,
+            actor_role=actor_role,
+            action="DELETE_CLIENT_ATTACHMENT",
+            target_type="CLIENTE",
+            target_id=client_id,
+            metadata={
+                "attachment_id": attachment_id,
+                "file": row.get("original_name"),
+                "trash_id": trash_id,
+            },
+        )
+        db.commit()
+        return jsonify({"message": "Anexo movido para a lixeira", "trash_id": trash_id}), 200
+    except Exception:
+        db.rollback()
+        return jsonify({"error": "Nao foi possivel excluir o anexo"}), 500
     finally:
         cursor.close()
         db.close()

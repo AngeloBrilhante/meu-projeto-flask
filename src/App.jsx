@@ -11,6 +11,7 @@ import ClientData from "./pages/clients/ClientData";
 import ClientDocuments from "./pages/clients/ClientDocuments";
 import ClientOperations from "./pages/clients/ClientOperations";
 import ClientComments from "./pages/clients/ClientComments";
+import ClientAttachments from "./pages/clients/ClientAttachments";
 
 import DashboardLayout from "./components/DashboardLayout";
 import Pipeline from "./pages/Pipeline";
@@ -56,6 +57,7 @@ export default function App() {
 
 	            <Route path="dados" element={<ClientData />} />
 	            <Route path="documentos" element={<ClientDocuments />} />
+            <Route path="anexos" element={<ClientAttachments />} />
             <Route path="operacoes" element={<ClientOperations />} />
             <Route path="comentarios" element={<ClientComments />} />
             <Route path="status" element={<Navigate to="../comentarios" replace />} />

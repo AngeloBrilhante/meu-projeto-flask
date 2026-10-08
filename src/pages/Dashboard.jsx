@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { getDashboardSummary, updateDashboardGoal } from "../services/api";
+import { BadgeCheck, FilePlus2, Send, Target } from "lucide-react";
 
 function getStoredRole() {
   try {
@@ -384,25 +385,29 @@ export default function Dashboard() {
       ) : (
         <>
           <section className="metricGrid">
-            <article className="metricCard">
+            <article className="metricCard tone-gold">
+              <div className="metricIcon"><Target size={20} strokeWidth={1.9} /></div>
               <span>Meta mensal em R$</span>
               <strong>{formatCurrency(summary?.goal?.target || 0)}</strong>
               <small>definida pelo admin</small>
             </article>
 
-            <article className="metricCard">
+            <article className="metricCard tone-blue">
+              <div className="metricIcon"><FilePlus2 size={20} strokeWidth={1.9} /></div>
               <span>Operações geradas</span>
               <strong>{operations.generated || 0}</strong>
               <small>no mês selecionado</small>
             </article>
 
-            <article className="metricCard">
+            <article className="metricCard tone-green">
+              <div className="metricIcon"><BadgeCheck size={20} strokeWidth={1.9} /></div>
               <span>Operacoes pagas</span>
               <strong>{operations.approved || 0}</strong>
               <small>quantidade no período</small>
             </article>
 
-            <article className="metricCard">
+            <article className="metricCard tone-violet">
+              <div className="metricIcon"><Send size={20} strokeWidth={1.9} /></div>
               <span>Enviadas para esteira</span>
               <strong>{operations.sent_to_pipeline || 0}</strong>
               <small>em análise + finalizadas</small>

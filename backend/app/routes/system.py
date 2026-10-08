@@ -594,6 +594,24 @@ def restore_client_payload(cursor, db, payload):
     return result
 
 
+def restore_attachment_payload(cursor, db, payload):
+    document = payload.get("document") if isinstance(payload, dict) else None
+    if not isinstance(document, dict):
+        raise ValueError("Payload do anexo invalido")
+
+    row = deserialize_document_row_from_trash(document)
+    row.pop("id", None)
+    client_id = int(row.get("client_id") or 0)
+
+    cursor.execute("SELECT 1 FROM clientes WHERE id = %s LIMIT 1", (client_id,))
+    if not cursor.fetchone():
+        raise ValueError("Cliente do anexo nao existe mais; restaure o cliente primeiro")
+
+    ensure_documents_table(cursor, db)
+    insert_row(cursor, "documentos", row)
+    return {"entity_type": "ANEXO", "entity_id": cursor.lastrowid, "client_id": client_id}
+
+
 def restore_user_payload(cursor, payload):
     user = payload.get("user") if isinstance(payload, dict) else None
     if not isinstance(user, dict):
@@ -859,6 +877,8 @@ def restore_trash_item(trash_id):
             result = restore_operation_payload(cursor, payload)
         elif entity_type == "CLIENTE":
             result = restore_client_payload(cursor, db, payload)
+        elif entity_type == "ANEXO":
+            result = restore_attachment_payload(cursor, db, payload)
         else:
             return jsonify({"error": "Tipo de entidade nao suportado para restauracao"}), 400
 

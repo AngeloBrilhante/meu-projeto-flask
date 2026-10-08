@@ -46,6 +46,8 @@ def create_app():
         app.config["SECRET_KEY"],
     )
     app.config["JWT_ACCESS_TOKEN_EXPIRES"] = False
+    # Anexos do cliente aceitam ate 25 MB por arquivo; margem para o multipart.
+    app.config["MAX_CONTENT_LENGTH"] = 30 * 1024 * 1024
 
     JWTManager(app)
 

@@ -1,7 +1,7 @@
 .clientsView {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 18px;
 }
 
 .clientsHeader {
@@ -13,7 +13,9 @@
 
 .clientsHeader h1 {
   margin: 0;
-  font-size: 28px;
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
   color: var(--text-primary);
 }
 
@@ -23,100 +25,147 @@
 }
 
 .clientsPrimaryButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
   border: none;
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   background: var(--accent);
   color: #fff;
+  font-size: 14px;
   font-weight: 600;
-  padding: 10px 14px;
+  padding: 0 16px;
   cursor: pointer;
+  box-shadow: 0 6px 14px color-mix(in srgb, var(--accent) 28%, transparent);
+  transition: background-color 0.15s;
+}
+
+.clientsPrimaryButton:hover {
+  background: var(--accent-strong);
 }
 
 .clientsStats {
   display: grid;
   grid-template-columns: 1.2fr repeat(3, minmax(0, 1fr));
-  gap: 12px;
+  gap: 14px;
 }
 
 .clientsPeriodFilter {
   background: var(--surface);
   border: 1px solid var(--border-color);
-  border-radius: 14px;
-  padding: 12px;
+  border-radius: var(--radius-lg);
+  padding: 14px;
   display: flex;
   flex-direction: column;
+  justify-content: center;
   gap: 8px;
   font-size: 12px;
+  font-weight: 600;
   color: var(--text-secondary);
-  box-shadow: var(--shadow);
+  box-shadow: var(--shadow-sm);
 }
 
 .clientsPeriodFilter select {
   height: 38px;
   border: 1px solid var(--border-color);
-  border-radius: 10px;
+  border-radius: var(--radius-sm);
   background: var(--surface-strong);
   color: var(--text-primary);
   padding: 0 10px;
 }
 
 .clientsStatCard {
-  border-radius: 14px;
-  padding: 12px;
+  --tone: var(--accent);
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-rows: auto auto;
+  column-gap: 12px;
+  align-items: center;
+  border-radius: var(--radius-lg);
+  padding: 14px 16px;
   border: 1px solid var(--border-color);
   background: var(--surface);
-  box-shadow: var(--shadow);
+  box-shadow: var(--shadow-sm);
+}
+
+.clientsStatIcon {
+  grid-row: span 2;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  color: var(--tone);
+  background: color-mix(in srgb, var(--tone) 14%, transparent);
 }
 
 .clientsStatCard span {
   display: block;
   font-size: 12px;
+  font-weight: 500;
   color: var(--text-secondary);
 }
 
 .clientsStatCard strong {
   display: block;
-  margin-top: 4px;
-  font-size: 28px;
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 800;
+  line-height: 1.1;
   color: var(--text-primary);
 }
 
 .clientsStatCard.approved {
-  border-color: rgba(62, 213, 152, 0.35);
+  --tone: var(--success);
 }
 
 .clientsStatCard.pending {
-  border-color: rgba(90, 120, 255, 0.35);
+  --tone: var(--accent);
 }
 
 .clientsStatCard.rejected {
-  border-color: rgba(255, 126, 137, 0.35);
+  --tone: var(--danger);
 }
 
 .clientsPanel {
   background: var(--surface);
   border: 1px solid var(--border-color);
-  border-radius: 16px;
-  box-shadow: var(--shadow);
-  padding: 14px;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  padding: 16px;
 }
 
 .clientsToolbar {
-  margin-bottom: 10px;
+  margin-bottom: 12px;
 }
 
 .clientsSearch {
   display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 460px;
+  height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--surface-strong);
+  color: var(--text-secondary);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.clientsSearch:focus-within {
+  border-color: var(--accent);
+  box-shadow: var(--ring);
 }
 
 .clientsSearch input {
   width: 100%;
-  border: 1px solid var(--border-color);
-  border-radius: 10px;
-  height: 40px;
-  padding: 0 12px;
-  background: var(--surface-strong);
+  border: 0;
+  outline: none;
+  background: transparent;
   color: var(--text-primary);
+  font-size: 14px;
 }
 
 .clientsTableWrap {
@@ -125,14 +174,25 @@
 
 .clientsTable {
   width: 100%;
+  margin-top: 0;
   border-collapse: collapse;
+  background: transparent;
+  box-shadow: none;
+  border-radius: 0;
+}
+
+.clientsTable thead {
+  background: transparent;
 }
 
 .clientsTable th {
   text-align: left;
-  font-size: 13px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
   color: var(--text-secondary);
-  padding: 12px;
+  padding: 10px 12px;
   border-bottom: 1px solid var(--border-color);
 }
 
@@ -140,54 +200,90 @@
   padding: 12px;
   border-bottom: 1px solid var(--border-color);
   color: var(--text-primary);
+  font-size: 14px;
 }
 
 .clientsTable tbody tr {
   cursor: pointer;
+  transition: background-color 0.12s;
 }
 
 .clientsTable tbody tr:hover {
   background: var(--surface-strong);
 }
 
+.clientsNameCell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.clientsNameCell strong {
+  font-weight: 600;
+}
+
+.clientsAvatar {
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
 .clientsStatusBadge {
+  --badge: #6e7890;
   display: inline-flex;
   align-items: center;
+  gap: 6px;
   border-radius: 999px;
-  padding: 5px 10px;
+  padding: 4px 10px;
   font-size: 11px;
   font-weight: 700;
-  color: #fff;
+  color: var(--badge);
+  background: color-mix(in srgb, var(--badge) 14%, transparent);
+}
+
+.clientsStatusBadge::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
 }
 
 .clientsStatusBadge.PRONTA_DIGITAR {
-  background: #7f8ba5;
+  --badge: #7f8ba5;
 }
 
 .clientsStatusBadge.EM_DIGITACAO,
 .clientsStatusBadge.AGUARDANDO_FORMALIZACAO,
 .clientsStatusBadge.ANALISE_BANCO {
-  background: #4f75ff;
+  --badge: var(--accent);
 }
 
 .clientsStatusBadge.PENDENCIA {
-  background: #2f53cc;
+  --badge: var(--warning);
 }
 
 .clientsStatusBadge.DEVOLVIDA_VENDEDOR {
-  background: #6b55d8;
+  --badge: #8b5cf6;
 }
 
 .clientsStatusBadge.APROVADO {
-  background: #1ca86e;
+  --badge: var(--success);
 }
 
 .clientsStatusBadge.REPROVADO {
-  background: #d25353;
+  --badge: var(--danger);
 }
 
 .clientsStatusBadge.SEM_OPERACAO {
-  background: #6e7890;
+  --badge: #8a93a8;
 }
 
 .clientsOperationSummary {
