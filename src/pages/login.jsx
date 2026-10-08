@@ -1,10 +1,18 @@
 import "./login.css";
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
+
+const SESSION_NOTICES = {
+  SESSION_REPLACED:
+    "Sua conta foi acessada em outro computador. Por seguranca, esta sessao foi encerrada.",
+  ACCESS_EXPIRED: "Seu periodo de acesso terminou. Fale com o administrador para liberar novamente.",
+};
 import { buildApiUrl } from "../config/api";
 
 export default function Login() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const sessionNotice = SESSION_NOTICES[searchParams.get("motivo")] || "";
 
   const [email, setEmail] = useState("");
   const [senha, setSenha] = useState("");
@@ -71,6 +79,8 @@ export default function Login() {
           </div>
 
           <p className="loginIntro">Acesse o sistema com seu usuario corporativo.</p>
+
+          {sessionNotice && !erro && <p className="loginNotice">{sessionNotice}</p>}
 
           <form className="loginForm" onSubmit={handleLogin}>
             <div className="inputGroup">
