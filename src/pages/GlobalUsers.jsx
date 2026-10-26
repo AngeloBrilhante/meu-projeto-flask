@@ -698,6 +698,7 @@ export default function GlobalUsers() {
                 <th>Perfil</th>
                 <th>Visao</th>
                 <th>2FA</th>
+                <th>Ultimo acesso</th>
                 <th>Acesso</th>
                 <th>Acao</th>
               </tr>
@@ -705,7 +706,7 @@ export default function GlobalUsers() {
             <tbody>
               {usersLoading ? (
                 <tr>
-                  <td colSpan="8" className="globalUsersEmpty">
+                  <td colSpan="9" className="globalUsersEmpty">
                     Carregando usuarios...
                   </td>
                 </tr>
@@ -735,6 +736,17 @@ export default function GlobalUsers() {
                       </td>
                       <td>{item.twofa_enabled ? "Ativo" : "Inativo"}</td>
                       <td>
+                        {item.online ? (
+                          <span className="globalUsersOnline">Online agora</span>
+                        ) : item.ultimo_acesso_em ? (
+                          <span className="globalUsersLastSeen">
+                            {formatBrDate(item.ultimo_acesso_em)}
+                          </span>
+                        ) : (
+                          <span className="globalUsersLastSeen never">Nunca acessou</span>
+                        )}
+                      </td>
+                      <td>
                         <div className="globalUsersAccess">
                           {item.acesso_expirado ? (
                             <span className="globalUsersAccessBadge expired">Expirado</span>
@@ -749,7 +761,7 @@ export default function GlobalUsers() {
                             {String(item.role).toUpperCase() === "GLOBAL"
                               ? "Sessoes livres"
                               : item.sessao_iniciada_em
-                              ? `Online desde ${formatBrDate(item.sessao_iniciada_em)}`
+                              ? `Sessao aberta em ${formatBrDate(item.sessao_iniciada_em)}`
                               : "Sem sessao ativa"}
                           </small>
                         </div>
@@ -811,7 +823,7 @@ export default function GlobalUsers() {
                 })
               ) : (
                 <tr>
-                  <td colSpan="8" className="globalUsersEmpty">
+                  <td colSpan="9" className="globalUsersEmpty">
                     Nenhum usuario encontrado com os filtros atuais.
                   </td>
                 </tr>

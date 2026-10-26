@@ -20,7 +20,7 @@ from app.utils.security import (
     ensure_user_security_columns,
     get_session_rejection,
     get_maintenance_state,
-    is_session_exempt,
+    touch_last_seen,
 )
 
 load_dotenv()
@@ -60,8 +60,7 @@ def create_app():
     @jwt.token_in_blocklist_loader
     def check_single_session(jwt_header, jwt_payload):
         role = jwt_payload.get("role")
-        if is_session_exempt(role):
-            return False
+        user_id = int(jwt_payload.get("sub"))
 
         db = None
         cursor = None
@@ -71,10 +70,12 @@ def create_app():
             ensure_user_security_columns(cursor, db)
             reason = get_session_rejection(
                 cursor,
-                int(jwt_payload.get("sub")),
+                user_id,
                 role,
                 jwt_payload.get("sid"),
             )
+            if not reason:
+                touch_last_seen(cursor, db, user_id)
         except Exception:
             # Falha de banco nao deve derrubar a sessao de todos os usuarios.
             app.logger.exception("Falha ao validar sessao unica")

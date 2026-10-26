@@ -1,7 +1,7 @@
 import os
 import re
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from flask import (
     Blueprint,
@@ -40,6 +40,7 @@ from app.utils.security import (
     SESSION_MESSAGES,
     access_expired,
     add_to_trash,
+    brazil_now,
     build_otpauth_uri,
     ensure_audit_logs_table,
     ensure_trash_bin_table,
@@ -248,6 +249,16 @@ def format_user_datetime(value):
     return str(value) if value else None
 
 
+ONLINE_WINDOW = timedelta(minutes=2)
+
+
+def is_recently_active(last_seen):
+    """Online = teve atividade nos ultimos 2 minutos (a tela aberta consulta o servidor a cada 20s)."""
+    if not isinstance(last_seen, datetime):
+        return False
+    return brazil_now() - last_seen <= ONLINE_WINDOW
+
+
 def parse_access_expiration(value):
     """Converte 'YYYY-MM-DD' no fim do dia (horario de Brasilia). Vazio = sem validade."""
     text = str(value or "").strip()
@@ -279,6 +290,8 @@ def serialize_user(row):
         "acesso_expira_em": format_user_datetime(row.get("acesso_expira_em")),
         "acesso_expirado": access_expired(row.get("acesso_expira_em")),
         "sessao_iniciada_em": format_user_datetime(row.get("sessao_iniciada_em")),
+        "ultimo_acesso_em": format_user_datetime(row.get("ultimo_acesso_em")),
+        "online": is_recently_active(row.get("ultimo_acesso_em")),
         "empresa_id": company_id or None,
         "empresa": {
             "id": company_id or None,
@@ -300,6 +313,7 @@ def fetch_user_by_email(cursor, email):
     has_twofa_enabled = column_exists(cursor, "usuarios", "twofa_enabled")
     has_digitador_full_scope = column_exists(cursor, "usuarios", "digitador_full_scope")
     has_access_columns = column_exists(cursor, "usuarios", "acesso_expira_em")
+    has_last_seen = column_exists(cursor, "usuarios", "ultimo_acesso_em")
 
     cursor.execute(
         f"""
@@ -316,6 +330,7 @@ def fetch_user_by_email(cursor, email):
             {("COALESCE(u.digitador_full_scope, 0)" if has_digitador_full_scope else "0")} AS digitador_full_scope,
             {("u.acesso_expira_em" if has_access_columns else "NULL")} AS acesso_expira_em,
             {("u.sessao_iniciada_em" if has_access_columns else "NULL")} AS sessao_iniciada_em,
+            {("u.ultimo_acesso_em" if has_last_seen else "NULL")} AS ultimo_acesso_em,
             {("u.empresa_id" if has_user_company else "NULL")} AS empresa_id,
             {("e.nome" if has_user_company and has_empresas else "NULL")} AS empresa_nome,
             {("e.slug" if has_user_company and has_empresas else "NULL")} AS empresa_slug,
@@ -342,6 +357,7 @@ def fetch_user_row(cursor, user_id):
     has_twofa_secret = column_exists(cursor, "usuarios", "twofa_secret")
     has_digitador_full_scope = column_exists(cursor, "usuarios", "digitador_full_scope")
     has_access_columns = column_exists(cursor, "usuarios", "acesso_expira_em")
+    has_last_seen = column_exists(cursor, "usuarios", "ultimo_acesso_em")
 
     cursor.execute(
         f"""
@@ -359,6 +375,7 @@ def fetch_user_row(cursor, user_id):
             {("COALESCE(u.digitador_full_scope, 0)" if has_digitador_full_scope else "0")} AS digitador_full_scope,
             {("u.acesso_expira_em" if has_access_columns else "NULL")} AS acesso_expira_em,
             {("u.sessao_iniciada_em" if has_access_columns else "NULL")} AS sessao_iniciada_em,
+            {("u.ultimo_acesso_em" if has_last_seen else "NULL")} AS ultimo_acesso_em,
             {("u.empresa_id" if has_user_company else "NULL")} AS empresa_id,
             {("e.nome" if has_user_company and has_empresas else "NULL")} AS empresa_nome,
             {("e.slug" if has_user_company and has_empresas else "NULL")} AS empresa_slug,
@@ -476,6 +493,7 @@ def list_users():
                 COALESCE(u.digitador_full_scope, 0) AS digitador_full_scope,
                 u.acesso_expira_em,
                 u.sessao_iniciada_em,
+                u.ultimo_acesso_em,
                 u.empresa_id,
                 e.nome AS empresa_nome,
                 e.slug AS empresa_slug,

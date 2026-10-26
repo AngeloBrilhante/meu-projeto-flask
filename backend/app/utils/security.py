@@ -146,6 +146,10 @@ def ensure_user_security_columns(cursor, db):
         cursor.execute("ALTER TABLE usuarios ADD COLUMN acesso_expira_em DATETIME NULL")
         changed = True
 
+    if "ultimo_acesso_em" not in columns:
+        cursor.execute("ALTER TABLE usuarios ADD COLUMN ultimo_acesso_em DATETIME NULL")
+        changed = True
+
     if changed:
         db.commit()
 
@@ -187,17 +191,38 @@ def access_expired(expires_at):
 
 def start_user_session(cursor, db, user_id):
     session_id = secrets.token_hex(16)
+    agora = brazil_now()
     cursor.execute(
         """
         UPDATE usuarios
         SET sessao_id = %s,
-            sessao_iniciada_em = NOW()
+            sessao_iniciada_em = %s,
+            ultimo_acesso_em = %s
         WHERE id = %s
         """,
-        (session_id, user_id),
+        (session_id, agora, agora, user_id),
     )
     db.commit()
     return session_id
+
+
+LAST_SEEN_THROTTLE = timedelta(minutes=1)
+
+
+def touch_last_seen(cursor, db, user_id):
+    """Marca a ultima atividade do usuario, no maximo uma escrita por minuto."""
+    agora = brazil_now()
+    cursor.execute(
+        """
+        UPDATE usuarios
+        SET ultimo_acesso_em = %s
+        WHERE id = %s
+          AND (ultimo_acesso_em IS NULL OR ultimo_acesso_em < %s)
+        """,
+        (agora, user_id, agora - LAST_SEEN_THROTTLE),
+    )
+    if cursor.rowcount:
+        db.commit()
 
 
 def get_session_rejection(cursor, user_id, role, session_id):

@@ -205,6 +205,36 @@
   color: var(--accent);
 }
 
+.globalUsersOnline {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--success);
+  white-space: nowrap;
+}
+
+.globalUsersOnline::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--success) 25%, transparent);
+}
+
+.globalUsersLastSeen {
+  font-size: 12px;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+.globalUsersLastSeen.never {
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
 .globalUsersAccess {
   display: flex;
   flex-direction: column;
